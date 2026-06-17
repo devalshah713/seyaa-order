@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   REGIONS,
@@ -13,6 +13,14 @@ import {
 } from "@/lib/formConfig";
 
 type DiamondBlock = { key: number; values: Record<string, string> };
+type PhotoEntry = {
+  id: number;
+  file: File;
+  localUrl: string;
+  blobUrl: string | null;
+  uploading: boolean;
+  failed: boolean;
+};
 type Item = {
   key: number;
   productType: string;
@@ -40,6 +48,8 @@ export default function OrderForm() {
   const [notes, setNotes] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [items, setItems] = useState<Item[]>([blankItem()]);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   function updateItem(key: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
@@ -83,6 +93,48 @@ export default function OrderForm() {
           : it
       )
     );
+  }
+
+  async function uploadPhoto(entry: PhotoEntry) {
+    try {
+      const fd = new FormData();
+      fd.append("files", entry.file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      const url: string = data.urls?.[0] || "";
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === entry.id ? { ...p, blobUrl: url, uploading: false } : p))
+      );
+    } catch {
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === entry.id ? { ...p, uploading: false, failed: true } : p))
+      );
+    }
+  }
+
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newEntries: PhotoEntry[] = files.map((f) => ({
+      id: keyCounter++,
+      file: f,
+      localUrl: URL.createObjectURL(f),
+      blobUrl: null,
+      uploading: true,
+      failed: false,
+    }));
+    setPhotos((prev) => [...prev, ...newEntries]);
+    newEntries.forEach((entry) => uploadPhoto(entry));
+    e.target.value = "";
+  }
+
+  function removePhoto(id: number) {
+    setPhotos((prev) => {
+      const entry = prev.find((p) => p.id === id);
+      if (entry) URL.revokeObjectURL(entry.localUrl);
+      return prev.filter((p) => p.id !== id);
+    });
   }
 
   function renderField(
@@ -144,13 +196,22 @@ export default function OrderForm() {
       }
     }
 
+    const pendingUploads = photos.filter((p) => p.uploading);
+    if (pendingUploads.length) return setError("Please wait for all photos to finish uploading.");
+
+    const failedUploads = photos.filter((p) => p.failed);
+    if (failedUploads.length)
+      return setError("Some photos failed to upload. Remove them or retry before saving.");
+
     setSubmitting(true);
+    const photoUrls = photos.filter((p) => p.blobUrl).map((p) => p.blobUrl!);
     const payload = {
       orderNumber,
       region: regionId,
       customerName,
       manufacturer,
       notes,
+      photos: photoUrls,
       items: items.map((it) => ({
         productType: it.productType,
         quantity: Number(it.quantity) || 1,
@@ -348,6 +409,59 @@ export default function OrderForm() {
             })}
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <h2>Photos</h2>
+        <div
+          className="photo-upload-zone"
+          onClick={() => photoInputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && photoInputRef.current?.click()}
+        >
+          <div style={{ fontSize: 32, lineHeight: 1, marginBottom: 6 }}>📷</div>
+          <div style={{ fontWeight: 600 }}>Click to add photos</div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+            JPG, PNG, HEIC, WebP — any image format
+          </div>
+        </div>
+        <input
+          ref={photoInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handlePhotoSelect}
+        />
+        {photos.length > 0 && (
+          <div className="photo-grid" style={{ marginTop: 14 }}>
+            {photos.map((p) => (
+              <div className="photo-thumb" key={p.id}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.localUrl} alt="order photo" />
+                {p.uploading && (
+                  <div className="photo-overlay">
+                    <span style={{ fontSize: 11 }}>Uploading…</span>
+                  </div>
+                )}
+                {p.failed && (
+                  <div className="photo-overlay" style={{ background: "rgba(220,38,38,0.6)" }}>
+                    <span style={{ fontSize: 11 }}>Failed</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="photo-remove"
+                  onClick={(e) => { e.stopPropagation(); removePhoto(p.id); }}
+                  aria-label="Remove photo"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card">
