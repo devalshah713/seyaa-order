@@ -30,9 +30,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ urls });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Upload failed" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[upload] failed:", message, {
+      hasToken: !!token,
+      hasOidc: !!process.env.VERCEL_OIDC_TOKEN,
+    });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
