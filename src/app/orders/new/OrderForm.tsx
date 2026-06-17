@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type Attr = {
   id: string;
   name: string;
-  inputType: "SELECT" | "NUMBER" | "TEXT";
+  inputType: "SELECT" | "MULTISELECT" | "NUMBER" | "TEXT";
   unit: string | null;
   required: boolean;
   options: string[];
@@ -18,13 +18,12 @@ type Item = {
   key: number;
   productTypeId: string;
   quantity: number;
-  price: string;
-  specs: Record<string, string>; // attributeId -> value
+  specs: Record<string, string>; // attributeId -> value (MULTISELECT stored comma-joined)
 };
 
 let keyCounter = 1;
 function blankItem(): Item {
-  return { key: keyCounter++, productTypeId: "", quantity: 1, price: "", specs: {} };
+  return { key: keyCounter++, productTypeId: "", quantity: 1, specs: {} };
 }
 
 export default function OrderForm() {
@@ -36,9 +35,8 @@ export default function OrderForm() {
   const [error, setError] = useState<string | null>(null);
 
   const [regionId, setRegionId] = useState("");
-  const [salesPerson, setSalesPerson] = useState("");
   const [notes, setNotes] = useState("");
-  const [customer, setCustomer] = useState({ name: "", phone: "", email: "" });
+  const [customerName, setCustomerName] = useState("");
   const [items, setItems] = useState<Item[]>([blankItem()]);
 
   useEffect(() => {
@@ -71,12 +69,28 @@ export default function OrderForm() {
     );
   }
 
+  // Toggle one option for a MULTISELECT attribute (Diamond Shape).
+  function toggleMulti(key: number, attrId: string, option: string) {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        const current = it.specs[attrId]
+          ? it.specs[attrId].split(", ").filter(Boolean)
+          : [];
+        const next = current.includes(option)
+          ? current.filter((o) => o !== option)
+          : [...current, option];
+        return { ...it, specs: { ...it.specs, [attrId]: next.join(", ") } };
+      })
+    );
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     if (!regionId) return setError("Please choose a region.");
-    if (!customer.name.trim()) return setError("Please enter the customer name.");
+    if (!customerName.trim()) return setError("Please enter the customer name.");
     if (items.some((i) => !i.productTypeId))
       return setError("Please choose a product type for every item.");
 
@@ -94,13 +108,11 @@ export default function OrderForm() {
     setSubmitting(true);
     const payload = {
       regionId,
-      salesPerson,
       notes,
-      customer,
+      customer: { name: customerName },
       items: items.map((it) => ({
         productTypeId: it.productTypeId,
         quantity: Number(it.quantity) || 1,
-        price: it.price ? Number(it.price) : null,
         specs: Object.entries(it.specs).map(([attributeId, value]) => ({
           attributeId,
           value,
@@ -154,36 +166,12 @@ export default function OrderForm() {
             </select>
           </div>
           <div className="field">
-            <label>Sales Person</label>
-            <input
-              value={salesPerson}
-              onChange={(e) => setSalesPerson(e.target.value)}
-              placeholder="Who took / sent this order?"
-            />
-          </div>
-        </div>
-        <div className="grid3">
-          <div className="field">
             <label>
               Customer Name <span className="req">*</span>
             </label>
             <input
-              value={customer.name}
-              onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-            />
-          </div>
-          <div className="field">
-            <label>Phone</label>
-            <input
-              value={customer.phone}
-              onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-            />
-          </div>
-          <div className="field">
-            <label>Email</label>
-            <input
-              value={customer.email}
-              onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
             />
           </div>
         </div>
@@ -218,7 +206,7 @@ export default function OrderForm() {
                 )}
               </div>
 
-              <div className="grid3" style={{ marginTop: 12 }}>
+              <div className="grid2" style={{ marginTop: 12 }}>
                 <div className="field">
                   <label>
                     Product Type <span className="req">*</span>
@@ -248,16 +236,6 @@ export default function OrderForm() {
                     }
                   />
                 </div>
-                <div className="field">
-                  <label>Price (per piece)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={it.price}
-                    onChange={(e) => updateItem(it.key, { price: e.target.value })}
-                    placeholder="Optional"
-                  />
-                </div>
               </div>
 
               {pt && (
@@ -271,7 +249,8 @@ export default function OrderForm() {
                           {a.unit ? ` (${a.unit})` : ""}{" "}
                           {a.required && <span className="req">*</span>}
                         </label>
-                        {a.inputType === "SELECT" ? (
+
+                        {a.inputType === "SELECT" && (
                           <select
                             value={it.specs[a.id] || ""}
                             onChange={(e) => setSpec(it.key, a.id, e.target.value)}
@@ -283,7 +262,30 @@ export default function OrderForm() {
                               </option>
                             ))}
                           </select>
-                        ) : (
+                        )}
+
+                        {a.inputType === "MULTISELECT" && (
+                          <div className="checkbox-group">
+                            {a.options.map((o) => {
+                              const selected = (it.specs[a.id] || "")
+                                .split(", ")
+                                .filter(Boolean)
+                                .includes(o);
+                              return (
+                                <label key={o} className="checkbox-item">
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() => toggleMulti(it.key, a.id, o)}
+                                  />
+                                  <span>{o}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {(a.inputType === "NUMBER" || a.inputType === "TEXT") && (
                           <input
                             type={a.inputType === "NUMBER" ? "number" : "text"}
                             step="any"
