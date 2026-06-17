@@ -129,8 +129,10 @@ export async function appendOrder(order: NewOrder): Promise<string> {
     headers: SHEET_HEADERS,
     rows,
   });
-  // Prefer the user-typed number; fall back to whatever the script assigned.
-  return order.orderNumber || data.orderNumber;
+  // Use the number the sheet actually stored (so the redirect always lands
+  // on a real order, even if the script auto-numbered instead of keeping
+  // the typed number). Fall back to the typed number if absent.
+  return data.orderNumber || order.orderNumber;
 }
 
 // Convert raw arrays + headers into row objects.
