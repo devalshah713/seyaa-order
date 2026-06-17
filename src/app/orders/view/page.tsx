@@ -120,6 +120,20 @@ export default async function OrderDetailPage({
         </div>
       ))}
 
+      {order.photos.length > 0 && (
+        <div className="card">
+          <div className="muted" style={{ marginBottom: 12 }}>Photos</div>
+          <div className="photo-grid-view">
+            {order.photos.map((url, i) => (
+              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`Order photo ${i + 1}`} />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {order.notes && (
         <div className="card">
           <div className="muted">Notes</div>

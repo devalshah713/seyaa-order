@@ -74,6 +74,7 @@ export const SHEET_HEADERS = [
   ...PRODUCT_FIELD_NAMES,
   ...DIAMOND_FIELD_NAMES,
   "Notes",
+  "Photos",
 ];
 
 export const ORDER_STATUSES = [
