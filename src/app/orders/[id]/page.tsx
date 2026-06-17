@@ -32,6 +32,9 @@ export default async function OrderDetailPage({
           <h1 style={{ marginTop: 6 }}>{order.orderNumber}</h1>
         </div>
         <div className="row no-print">
+          <Link href={`/orders/${encodeURIComponent(order.orderNumber)}/demand`} className="btn ghost">
+            Diamond Demand PDF
+          </Link>
           <StatusControl orderId={order.orderNumber} current={order.status} />
         </div>
       </div>
@@ -41,6 +44,10 @@ export default async function OrderDetailPage({
           <div>
             <div className="muted">Customer</div>
             <div style={{ fontWeight: 600 }}>{order.customerName}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              Manufacturer
+            </div>
+            <div style={{ fontWeight: 600 }}>{order.manufacturer || "—"}</div>
           </div>
           <div>
             <div className="muted">Region</div>

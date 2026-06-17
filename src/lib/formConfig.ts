@@ -28,6 +28,14 @@ export const REGIONS: { name: string; currency: string }[] = [
 
 export const PRODUCT_TYPES = ["Ring", "Necklace", "Bracelet", "Earrings", "Pendant", "Chain"];
 
+export const MANUFACTURERS = [
+  "Seyaa Factory",
+  "Pratik C6",
+  "Sky Jewels",
+  "Harshit Sky",
+  "Anthem Jewels",
+];
+
 // Filled once per product.
 export const PRODUCT_FIELDS: Field[] = [
   { name: "Gold Color", inputType: "SELECT", required: true, options: ["Yellow", "White", "Rose", "Two-Tone"] },
@@ -60,6 +68,7 @@ export const SHEET_HEADERS = [
   "Status",
   "Region",
   "Customer Name",
+  "Manufacturer",
   "Product Type",
   "Quantity",
   ...PRODUCT_FIELD_NAMES,

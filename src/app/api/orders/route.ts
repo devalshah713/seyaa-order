@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendOrder, isStorageConfigured, NewOrder, ProductInput } from "@/lib/sheetStore";
+import { appendOrder, listOrders, isStorageConfigured, NewOrder, ProductInput } from "@/lib/sheetStore";
 import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS } from "@/lib/formConfig";
 
 type IncomingItem = {
@@ -9,8 +9,10 @@ type IncomingItem = {
   diamonds: Record<string, string>[];
 };
 type IncomingOrder = {
+  orderNumber: string;
   region: string;
   customerName: string;
+  manufacturer?: string;
   notes?: string;
   items: IncomingItem[];
 };
@@ -30,11 +32,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  if (!body.orderNumber?.trim())
+    return NextResponse.json({ error: "Order number is required" }, { status: 400 });
   if (!body.region) return NextResponse.json({ error: "Region is required" }, { status: 400 });
   if (!body.customerName?.trim())
     return NextResponse.json({ error: "Customer name is required" }, { status: 400 });
   if (!body.items?.length)
     return NextResponse.json({ error: "Add at least one product" }, { status: 400 });
+
+  const orderNumber = body.orderNumber.trim();
+
+  // Reject duplicate order numbers so two orders never collide.
+  try {
+    const existing = await listOrders();
+    if (existing.some((o) => o.orderNumber === orderNumber)) {
+      return NextResponse.json(
+        { error: `Order number "${orderNumber}" already exists. Please use a different one.` },
+        { status: 409 }
+      );
+    }
+  } catch {
+    // If the lookup fails, continue — the append will still be attempted.
+  }
 
   const items: ProductInput[] = [];
   for (const it of body.items) {
@@ -72,8 +91,10 @@ export async function POST(req: NextRequest) {
   }
 
   const order: NewOrder = {
+    orderNumber,
     region: body.region,
     customerName: body.customerName.trim(),
+    manufacturer: body.manufacturer || "",
     notes: body.notes || "",
     items,
   };

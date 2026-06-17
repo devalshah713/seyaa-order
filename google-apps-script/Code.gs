@@ -74,22 +74,35 @@ function nextOrderNumber_(sh) {
   return "ORD-" + n;
 }
 
+function isBlank_(v) {
+  return v === null || v === undefined || String(v).trim() === "";
+}
+
 function append_(headers, rows) {
   var sh = getSheet_();
   ensureHeaders_(sh, headers);
-  var orderNumber = nextOrderNumber_(sh);
   var date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
   var oi = headers.indexOf("Order Number");
   var di = headers.indexOf("Date");
   var si = headers.indexOf("Status");
+  var auto = null;
+  var finalOrderNo = "";
   for (var r = 0; r < rows.length; r++) {
     var row = rows[r];
-    if (oi >= 0) row[oi] = orderNumber;
-    if (di >= 0) row[di] = date;
-    if (si >= 0) row[si] = "NEW";
+    // Order Number / Date / Status are filled only when the app left them
+    // blank, so a user-typed order number is preserved.
+    if (oi >= 0) {
+      if (isBlank_(row[oi])) {
+        if (!auto) auto = nextOrderNumber_(sh);
+        row[oi] = auto;
+      }
+      finalOrderNo = row[oi];
+    }
+    if (di >= 0 && isBlank_(row[di])) row[di] = date;
+    if (si >= 0 && isBlank_(row[si])) row[si] = "NEW";
     sh.appendRow(row);
   }
-  return json_({ ok: true, orderNumber: orderNumber });
+  return json_({ ok: true, orderNumber: finalOrderNo });
 }
 
 function list_() {

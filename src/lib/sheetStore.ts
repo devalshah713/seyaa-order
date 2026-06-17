@@ -23,8 +23,10 @@ export type ProductInput = {
   diamonds: DiamondBlock[];
 };
 export type NewOrder = {
+  orderNumber: string;
   region: string;
   customerName: string;
+  manufacturer: string;
   notes: string;
   items: ProductInput[];
 };
@@ -43,6 +45,7 @@ export type Order = {
   status: string;
   region: string;
   customerName: string;
+  manufacturer: string;
   notes: string;
   items: OrderItem[];
 };
@@ -71,7 +74,8 @@ function escapeCell(v: string): string {
 }
 
 // Build one sheet row (array, in SHEET_HEADERS order) for a product line.
-// Order Number / Date / Status are left blank — the script fills them.
+// Order Number is provided by the user; Date / Status are left blank for
+// the script to fill.
 function buildRow(
   order: NewOrder,
   item: ProductInput,
@@ -81,6 +85,7 @@ function buildRow(
   const get = (header: string): string => {
     switch (header) {
       case "Order Number":
+        return order.orderNumber;
       case "Date":
       case "Status":
         return "";
@@ -90,6 +95,8 @@ function buildRow(
         return order.region;
       case "Customer Name":
         return order.customerName;
+      case "Manufacturer":
+        return order.manufacturer;
       case "Product Type":
         return item.productType;
       case "Quantity":
@@ -101,7 +108,9 @@ function buildRow(
     if (DIAMOND_FIELD_NAMES.includes(header)) return diamond ? diamond[header] ?? "" : "";
     return "";
   };
-  return SHEET_HEADERS.map((h) => escapeCell(get(h)));
+  // Escape everything except the Order Number, so the user's typed number
+  // round-trips unchanged for routing/lookup.
+  return SHEET_HEADERS.map((h) => (h === "Order Number" ? get(h) : escapeCell(get(h))));
 }
 
 export async function appendOrder(order: NewOrder): Promise<string> {
@@ -120,7 +129,8 @@ export async function appendOrder(order: NewOrder): Promise<string> {
     headers: SHEET_HEADERS,
     rows,
   });
-  return data.orderNumber;
+  // Prefer the user-typed number; fall back to whatever the script assigned.
+  return order.orderNumber || data.orderNumber;
 }
 
 // Convert raw arrays + headers into row objects.
@@ -146,6 +156,7 @@ function groupOrders(objs: Record<string, string>[]): Order[] {
         status: r["Status"] || "NEW",
         region: r["Region"] || "",
         customerName: r["Customer Name"] || "",
+        manufacturer: r["Manufacturer"] || "",
         notes: r["Notes"] || "",
         items: [],
       });

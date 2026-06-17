@@ -303,6 +303,92 @@ textarea:focus {
   display: none;
 }
 
+/* Diamond demand sheet */
+.demand-sheet {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 28px;
+}
+
+.demand-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.brand-line b {
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+
+.brand-line span {
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 13px;
+  margin-left: 6px;
+}
+
+.demand-meta {
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: right;
+}
+
+.demand-meta span {
+  color: var(--muted);
+}
+
+.demand-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  font-size: 13px;
+}
+
+.demand-table th,
+.demand-table td {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.demand-table th {
+  background: #faf9f7;
+}
+
+.demand-table .num {
+  text-align: right;
+}
+
+.demand-table .total-row td {
+  background: #faf9f7;
+  font-weight: 600;
+  text-align: right;
+}
+
+.demand-notes {
+  margin-top: 16px;
+  font-size: 13px;
+}
+
+.demand-notes span {
+  color: var(--muted);
+}
+
+@media print {
+  .demand-sheet {
+    border: none;
+    padding: 0;
+  }
+}
+
 @media print {
   .topbar,
   .no-print {

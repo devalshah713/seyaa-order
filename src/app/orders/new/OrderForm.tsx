@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   REGIONS,
   PRODUCT_TYPES,
+  MANUFACTURERS,
   PRODUCT_FIELDS,
   DIAMOND_FIELDS,
   DIAMOND_SIZES_BY_SHAPE,
@@ -33,7 +34,9 @@ export default function OrderForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [orderNumber, setOrderNumber] = useState("");
   const [regionId, setRegionId] = useState("");
+  const [manufacturer, setManufacturer] = useState("");
   const [notes, setNotes] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [items, setItems] = useState<Item[]>([blankItem()]);
@@ -115,6 +118,7 @@ export default function OrderForm() {
     e.preventDefault();
     setError(null);
 
+    if (!orderNumber.trim()) return setError("Please enter an order number.");
     if (!regionId) return setError("Please choose a region.");
     if (!customerName.trim()) return setError("Please enter the customer name.");
     if (items.some((i) => !i.productType))
@@ -142,8 +146,10 @@ export default function OrderForm() {
 
     setSubmitting(true);
     const payload = {
+      orderNumber,
       region: regionId,
       customerName,
+      manufacturer,
       notes,
       items: items.map((it) => ({
         productType: it.productType,
@@ -179,8 +185,18 @@ export default function OrderForm() {
       )}
 
       <div className="card">
-        <h2>Customer & Region</h2>
-        <div className="grid2">
+        <h2>Order Details</h2>
+        <div className="grid3">
+          <div className="field">
+            <label>
+              Order Number <span className="req">*</span>
+            </label>
+            <input
+              value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)}
+              placeholder="Your order number"
+            />
+          </div>
           <div className="field">
             <label>
               Region <span className="req">*</span>
@@ -199,6 +215,19 @@ export default function OrderForm() {
               Customer Name <span className="req">*</span>
             </label>
             <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid2">
+          <div className="field">
+            <label>Manufacturer</label>
+            <select value={manufacturer} onChange={(e) => setManufacturer(e.target.value)}>
+              <option value="">Select manufacturer…</option>
+              {MANUFACTURERS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
