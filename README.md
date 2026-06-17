@@ -32,27 +32,32 @@ Dropdowns for specs prevent inconsistent data (`18K` vs `18k` vs `18 karat`).
 ## Tech
 
 - **Next.js 14** (App Router) + TypeScript
-- **Prisma** ORM
-- **PostgreSQL** (a shared cloud database so all 4 regions see the same data)
+- **Google Sheets** as the order store (via a bound Google Apps Script Web App)
+
+## How storage works
+
+- Dropdown/reference data (regions, product types, diamond sizes/shapes,
+  stone types, etc.) lives in code: `src/lib/formConfig.ts`.
+- Orders are written to a Google Sheet — one row per product item, with a
+  fixed column for each field (see `SHEET_HEADERS`).
+- The app reads/writes the sheet through a Google Apps Script Web App
+  (`google-apps-script/Code.gs`). Server-side calls only.
 
 ## How the live site is set up (Vercel)
 
-1. Deploy the project to Vercel.
-2. In the Vercel project, connect a Postgres database (Storage tab) — this
-   provides the `DATABASE_URL` environment variable automatically.
-3. Redeploy. The build runs `prisma db push`, which creates all the tables.
-4. Visit `/api/setup` once to load the jewellery reference data (regions,
-   attributes, product types) and a sample order. It is safe to re-run.
+1. Create a Google Sheet and open Extensions → Apps Script.
+2. Paste `google-apps-script/Code.gs`, set `SECRET`, and Deploy → New
+   deployment → Web app (Execute as: Me, Who has access: Anyone).
+3. In Vercel → Settings → Environment Variables, set:
+   - `SHEETS_WEBAPP_URL` — the Web App URL (ends in `/exec`)
+   - `SHEETS_TOKEN` — the same secret as `SECRET` in the script
+4. Redeploy. Orders now read/write to the Sheet.
 
 ## Run it locally (optional, for developers)
 
-Local dev needs a PostgreSQL database. Point `DATABASE_URL` in `.env` at it,
-then:
-
 ```bash
 npm install
-npm run db:push    # create tables
-npm run db:seed    # load jewellery specs & a sample order
+# set SHEETS_WEBAPP_URL and SHEETS_TOKEN in .env (optional)
 npm run dev        # http://localhost:3000
 ```
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ORDER_STATUSES, STATUS_LABELS } from "@/lib/status";
+import { ORDER_STATUSES, STATUS_LABELS } from "@/lib/formConfig";
 
 export default function StatusControl({
   orderId,

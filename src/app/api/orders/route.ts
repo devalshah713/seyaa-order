@@ -1,90 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { appendOrder, isStorageConfigured, NewOrder, OrderItemInput } from "@/lib/sheetStore";
+import { SPEC_FIELDS } from "@/lib/formConfig";
 
+// The form posts ids that equal the names (see /api/meta), so:
+//   regionId       = region name
+//   productTypeId  = product type name
+//   spec.attributeId = spec field name
 type IncomingSpec = { attributeId: string; value: string };
 type IncomingItem = {
   productTypeId: string;
   quantity: number;
-  price?: number | null;
   specs: IncomingSpec[];
 };
 type IncomingOrder = {
-  customer: { id?: string; name: string; phone?: string; email?: string };
+  customer: { name: string };
   regionId: string;
-  salesPerson?: string;
   notes?: string;
   items: IncomingItem[];
 };
 
-// Generates the next sequential order number, e.g. ORD-0007.
-async function nextOrderNumber(): Promise<string> {
-  const last = await prisma.order.findFirst({
-    orderBy: { createdAt: "desc" },
-    select: { orderNumber: true },
-  });
-  let n = 1;
-  if (last?.orderNumber) {
-    const m = last.orderNumber.match(/(\d+)$/);
-    if (m) n = parseInt(m[1], 10) + 1;
-  }
-  return `ORD-${String(n).padStart(4, "0")}`;
-}
-
 export async function POST(req: NextRequest) {
+  if (!isStorageConfigured()) {
+    return NextResponse.json(
+      { error: "Storage is not connected yet. The Google Sheet still needs to be linked." },
+      { status: 503 }
+    );
+  }
+
   let body: IncomingOrder;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  if (!body.regionId) {
-    return NextResponse.json({ error: "Region is required" }, { status: 400 });
-  }
-  if (!body.customer?.name?.trim()) {
+  if (!body.regionId) return NextResponse.json({ error: "Region is required" }, { status: 400 });
+  if (!body.customer?.name?.trim())
     return NextResponse.json({ error: "Customer name is required" }, { status: 400 });
-  }
-  if (!body.items?.length) {
+  if (!body.items?.length)
     return NextResponse.json({ error: "Add at least one product" }, { status: 400 });
-  }
 
-  // Reuse existing customer if an id was given, else create one.
-  let customerId = body.customer.id;
-  if (!customerId) {
-    const c = await prisma.customer.create({
-      data: {
-        name: body.customer.name.trim(),
-        phone: body.customer.phone || null,
-        email: body.customer.email || null,
-        regionId: body.regionId,
-      },
-    });
-    customerId = c.id;
-  }
+  const validSpecNames = new Set(SPEC_FIELDS.map((f) => f.name));
 
-  const orderNumber = await nextOrderNumber();
-
-  const order = await prisma.order.create({
-    data: {
-      orderNumber,
-      regionId: body.regionId,
-      customerId,
-      salesPerson: body.salesPerson || null,
-      notes: body.notes || null,
-      items: {
-        create: body.items.map((it) => ({
-          productTypeId: it.productTypeId,
-          quantity: it.quantity || 1,
-          price: it.price ?? null,
-          specs: {
-            create: it.specs
-              .filter((s) => s.value !== "" && s.value != null)
-              .map((s) => ({ attributeId: s.attributeId, value: String(s.value) })),
-          },
-        })),
-      },
-    },
+  const items: OrderItemInput[] = body.items.map((it) => {
+    const item: OrderItemInput = {
+      "Product Type": it.productTypeId,
+      Quantity: it.quantity || 1,
+    };
+    for (const s of it.specs) {
+      if (validSpecNames.has(s.attributeId) && s.value !== "" && s.value != null) {
+        item[s.attributeId] = String(s.value);
+      }
+    }
+    return item;
   });
 
-  return NextResponse.json({ id: order.id, orderNumber: order.orderNumber });
+  const order: NewOrder = {
+    region: body.regionId,
+    customerName: body.customer.name.trim(),
+    notes: body.notes || "",
+    items,
+  };
+
+  try {
+    const orderNumber = await appendOrder(order);
+    return NextResponse.json({ id: orderNumber, orderNumber });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to save order" },
+      { status: 500 }
+    );
+  }
 }

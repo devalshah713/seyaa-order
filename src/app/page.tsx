@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { STATUS_LABELS, STATUS_COLORS, ORDER_STATUSES } from "@/lib/status";
+import { listOrders, isStorageConfigured } from "@/lib/sheetStore";
+import { REGIONS, ORDER_STATUSES, STATUS_LABELS, STATUS_COLORS } from "@/lib/formConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -9,31 +9,36 @@ export default async function HomePage({
 }: {
   searchParams: { region?: string; status?: string; q?: string };
 }) {
+  if (!isStorageConfigured()) {
+    return (
+      <main className="container">
+        <h1>Orders</h1>
+        <div className="card" style={{ marginTop: 16 }}>
+          <h2>Google Sheet not connected yet</h2>
+          <p className="muted">
+            The app is ready, but it still needs to be linked to your Google
+            Sheet. Once the connection is added, your orders will appear here.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const { region, status, q } = searchParams;
 
-  const orders = await prisma.order.findMany({
-    where: {
-      regionId: region || undefined,
-      status: status || undefined,
-      ...(q
-        ? {
-            OR: [
-              { orderNumber: { contains: q } },
-              { customer: { is: { name: { contains: q } } } },
-              { salesPerson: { contains: q } },
-            ],
-          }
-        : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    include: {
-      customer: true,
-      region: true,
-      items: { include: { productType: true } },
-    },
-  });
+  let orders = await listOrders();
 
-  const regions = await prisma.region.findMany({ orderBy: { name: "asc" } });
+  // Filters
+  if (region) orders = orders.filter((o) => o.region === region);
+  if (status) orders = orders.filter((o) => o.status === status);
+  if (q) {
+    const needle = q.toLowerCase();
+    orders = orders.filter(
+      (o) =>
+        o.orderNumber.toLowerCase().includes(needle) ||
+        o.customerName.toLowerCase().includes(needle)
+    );
+  }
 
   return (
     <main className="container">
@@ -50,15 +55,11 @@ export default async function HomePage({
       </div>
 
       <form className="filters no-print" method="get">
-        <input
-          name="q"
-          placeholder="Search order #, customer, sales person…"
-          defaultValue={q || ""}
-        />
+        <input name="q" placeholder="Search order # or customer…" defaultValue={q || ""} />
         <select name="region" defaultValue={region || ""}>
           <option value="">All regions</option>
-          {regions.map((r) => (
-            <option key={r.id} value={r.id}>
+          {REGIONS.map((r) => (
+            <option key={r.name} value={r.name}>
               {r.name}
             </option>
           ))}
@@ -81,7 +82,10 @@ export default async function HomePage({
 
       {orders.length === 0 ? (
         <div className="card empty">
-          No orders match. <Link href="/orders/new" style={{ color: "var(--gold)", fontWeight: 600 }}>Create one →</Link>
+          No orders yet.{" "}
+          <Link href="/orders/new" style={{ color: "var(--gold)", fontWeight: 600 }}>
+            Create one →
+          </Link>
         </div>
       ) : (
         <table>
@@ -91,38 +95,33 @@ export default async function HomePage({
               <th>Customer</th>
               <th>Region</th>
               <th>Products</th>
-              <th>Sales Person</th>
               <th>Status</th>
               <th>Date</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((o) => (
-              <tr key={o.id} style={{ cursor: "pointer" }}>
+              <tr key={o.orderNumber}>
                 <td>
-                  <Link href={`/orders/${o.id}`} style={{ fontWeight: 700 }}>
+                  <Link href={`/orders/${encodeURIComponent(o.orderNumber)}`} style={{ fontWeight: 700 }}>
                     {o.orderNumber}
                   </Link>
                 </td>
                 <td>
-                  <Link href={`/orders/${o.id}`}>{o.customer.name}</Link>
+                  <Link href={`/orders/${encodeURIComponent(o.orderNumber)}`}>
+                    {o.customerName}
+                  </Link>
                 </td>
-                <td>{o.region.name}</td>
+                <td>{o.region}</td>
                 <td className="muted">
-                  {o.items.map((i) => i.productType.name).join(", ") || "—"}
+                  {o.items.map((i) => i["Product Type"]).filter(Boolean).join(", ") || "—"}
                 </td>
-                <td className="muted">{o.salesPerson || "—"}</td>
                 <td>
-                  <span
-                    className="badge"
-                    style={{ background: STATUS_COLORS[o.status] }}
-                  >
-                    {STATUS_LABELS[o.status]}
+                  <span className="badge" style={{ background: STATUS_COLORS[o.status] || "#64748b" }}>
+                    {STATUS_LABELS[o.status] || o.status}
                   </span>
                 </td>
-                <td className="muted">
-                  {new Date(o.createdAt).toLocaleDateString()}
-                </td>
+                <td className="muted">{o.date}</td>
               </tr>
             ))}
           </tbody>
