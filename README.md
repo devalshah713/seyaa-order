@@ -33,29 +33,28 @@ Dropdowns for specs prevent inconsistent data (`18K` vs `18k` vs `18 karat`).
 
 - **Next.js 14** (App Router) + TypeScript
 - **Prisma** ORM
-- **SQLite** for the prototype (zero setup)
+- **PostgreSQL** (a shared cloud database so all 4 regions see the same data)
 
-## Run it locally
+## How the live site is set up (Vercel)
+
+1. Deploy the project to Vercel.
+2. In the Vercel project, connect a Postgres database (Storage tab) — this
+   provides the `DATABASE_URL` environment variable automatically.
+3. Redeploy. The build runs `prisma db push`, which creates all the tables.
+4. Visit `/api/setup` once to load the jewellery reference data (regions,
+   attributes, product types) and a sample order. It is safe to re-run.
+
+## Run it locally (optional, for developers)
+
+Local dev needs a PostgreSQL database. Point `DATABASE_URL` in `.env` at it,
+then:
 
 ```bash
 npm install
-npm run db:reset   # creates the SQLite DB + seeds jewellery specs & a sample order
+npm run db:push    # create tables
+npm run db:seed    # load jewellery specs & a sample order
 npm run dev        # http://localhost:3000
 ```
-
-## Going to production (shared cloud DB for all 4 regions)
-
-The prototype uses SQLite so it runs instantly. For a real shared database
-that USA/Dubai/HK/India all use in real time:
-
-1. Provision a cloud Postgres (e.g. Vercel Postgres, Neon, Supabase, RDS).
-2. In `prisma/schema.prisma`, change the datasource `provider` from
-   `"sqlite"` to `"postgresql"`.
-3. Set `DATABASE_URL` to the Postgres connection string.
-4. Run `npm run db:push && npm run db:seed`.
-5. Deploy (Vercel recommended for Next.js).
-
-No application code changes are needed — only the datasource.
 
 ## Ideas for next iterations
 

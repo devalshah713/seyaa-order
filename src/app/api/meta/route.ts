@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // Everything the New Order form needs: regions and product types with
 // their applicable attributes (and dropdown options).
 export async function GET() {

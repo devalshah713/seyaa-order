@@ -12,9 +12,10 @@ generator client {
 }
 
 datasource db {
-  // Prototype: SQLite. For a shared cloud DB across all 4 regions,
-  // change provider to "postgresql" and point DATABASE_URL at it.
-  provider = "sqlite"
+  // Shared cloud database (PostgreSQL) so all 4 regions see the same data.
+  // DATABASE_URL is provided by the hosting platform (Vercel) as an
+  // environment variable — see README for setup.
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
