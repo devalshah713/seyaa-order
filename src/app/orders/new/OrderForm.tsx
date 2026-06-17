@@ -173,7 +173,7 @@ export default function OrderForm() {
       return;
     }
     const d = await res.json();
-    router.push(`/orders/${encodeURIComponent(d.id)}`);
+    router.push(`/orders/view?id=${encodeURIComponent(d.id)}`);
   }
 
   return (

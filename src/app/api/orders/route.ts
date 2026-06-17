@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendOrder, listOrders, isStorageConfigured, NewOrder, ProductInput } from "@/lib/sheetStore";
-import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS } from "@/lib/formConfig";
+import { appendOrder, listOrders, updateStatus, isStorageConfigured, NewOrder, ProductInput } from "@/lib/sheetStore";
+import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS, ORDER_STATUSES } from "@/lib/formConfig";
 
 type IncomingItem = {
   productType: string;
@@ -16,6 +16,28 @@ type IncomingOrder = {
   notes?: string;
   items: IncomingItem[];
 };
+
+// Update an order's status. Order number comes in the body so it works
+// regardless of any spaces/symbols in the number.
+export async function PATCH(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  const orderNumber = (body.orderNumber as string) || "";
+  const status = body.status as string;
+
+  if (!orderNumber) return NextResponse.json({ error: "Order number required" }, { status: 400 });
+  if (!ORDER_STATUSES.includes(status as (typeof ORDER_STATUSES)[number])) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+  try {
+    await updateStatus(orderNumber, status);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to update status" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   if (!isStorageConfigured()) {

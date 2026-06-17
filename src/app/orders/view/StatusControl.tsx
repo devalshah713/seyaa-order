@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { ORDER_STATUSES, STATUS_LABELS } from "@/lib/formConfig";
 
 export default function StatusControl({
-  orderId,
+  orderNumber,
   current,
 }: {
-  orderId: string;
+  orderNumber: string;
   current: string;
 }) {
   const router = useRouter();
@@ -18,10 +18,11 @@ export default function StatusControl({
   async function change(value: string) {
     setStatus(value);
     setSaving(true);
-    await fetch(`/api/orders/${orderId}`, {
+    // Order number is sent in the body (handles spaces/symbols safely).
+    await fetch(`/api/orders`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: value }),
+      body: JSON.stringify({ orderNumber, status: value }),
     });
     setSaving(false);
     router.refresh();

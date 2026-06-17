@@ -14,12 +14,12 @@ import StatusControl from "./StatusControl";
 export const dynamic = "force-dynamic";
 
 export default async function OrderDetailPage({
-  params,
+  searchParams,
 }: {
-  params: { id: string };
+  searchParams: { id?: string };
 }) {
-  const orderNumber = decodeURIComponent(params.id);
-  const order = await getOrder(orderNumber);
+  const orderNumber = searchParams.id || "";
+  const order = orderNumber ? await getOrder(orderNumber) : null;
   if (!order) notFound();
 
   return (
@@ -32,10 +32,10 @@ export default async function OrderDetailPage({
           <h1 style={{ marginTop: 6 }}>{order.orderNumber}</h1>
         </div>
         <div className="row no-print">
-          <Link href={`/orders/${encodeURIComponent(order.orderNumber)}/demand`} className="btn ghost">
+          <Link href={`/orders/demand?id=${encodeURIComponent(order.orderNumber)}`} className="btn ghost">
             Diamond Demand PDF
           </Link>
-          <StatusControl orderId={order.orderNumber} current={order.status} />
+          <StatusControl orderNumber={order.orderNumber} current={order.status} />
         </div>
       </div>
 

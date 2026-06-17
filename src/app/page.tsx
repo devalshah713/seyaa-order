@@ -103,12 +103,12 @@ export default async function HomePage({
             {orders.map((o) => (
               <tr key={o.orderNumber}>
                 <td>
-                  <Link href={`/orders/${encodeURIComponent(o.orderNumber)}`} style={{ fontWeight: 700 }}>
+                  <Link href={`/orders/view?id=${encodeURIComponent(o.orderNumber)}`} style={{ fontWeight: 700 }}>
                     {o.orderNumber}
                   </Link>
                 </td>
                 <td>
-                  <Link href={`/orders/${encodeURIComponent(o.orderNumber)}`}>
+                  <Link href={`/orders/view?id=${encodeURIComponent(o.orderNumber)}`}>
                     {o.customerName}
                   </Link>
                 </td>

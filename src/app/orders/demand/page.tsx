@@ -6,7 +6,6 @@ import PrintButton from "./PrintButton";
 
 export const dynamic = "force-dynamic";
 
-// A diamond-demand line, aggregated across the order.
 type Line = {
   itemNo: string;
   productType: string;
@@ -20,12 +19,12 @@ type Line = {
 };
 
 export default async function DiamondDemandPage({
-  params,
+  searchParams,
 }: {
-  params: { id: string };
+  searchParams: { id?: string };
 }) {
-  const orderNumber = decodeURIComponent(params.id);
-  const order = await getOrder(orderNumber);
+  const orderNumber = searchParams.id || "";
+  const order = orderNumber ? await getOrder(orderNumber) : null;
   if (!order) notFound();
 
   const lines: Line[] = [];
@@ -52,7 +51,7 @@ export default async function DiamondDemandPage({
   return (
     <main className="container demand">
       <div className="row spread no-print" style={{ marginBottom: 16 }}>
-        <Link href={`/orders/${encodeURIComponent(order.orderNumber)}`} className="muted">
+        <Link href={`/orders/view?id=${encodeURIComponent(order.orderNumber)}`} className="muted">
           ← Back to order
         </Link>
         <PrintButton />
