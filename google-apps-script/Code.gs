@@ -1,82 +1,69 @@
 /**
- * Seyaa Order Management — Google Sheet storage backend.
+ * Seyaa Order Management — Google Sheet storage backend (generic).
  *
- * This Apps Script turns a Google Sheet into the storage for the order app.
- * Paste it into Extensions → Apps Script of your Google Sheet, set the
- * SECRET below, then Deploy → New deployment → Web app (Execute as: Me,
- * Who has access: Anyone). Give the resulting Web App URL + the SECRET to
- * the app (Vercel environment variables SHEETS_WEBAPP_URL and SHEETS_TOKEN).
+ * The app sends the column HEADERS and fully-built ROWS; this script fills in
+ * Order Number, Date and Status and appends them. Because it is generic, you
+ * should NOT need to edit/redeploy it again when fields change in the app.
+ *
+ * Setup: paste into Extensions → Apps Script of your Sheet, set SECRET, then
+ * Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).
+ * Put the Web App URL + SECRET into Vercel as SHEETS_WEBAPP_URL / SHEETS_TOKEN.
  */
 
-// IMPORTANT: replace this with the secret token you were given, and use the
-// exact same value for SHEETS_TOKEN in Vercel.
 var SECRET = "PASTE_YOUR_SECRET_TOKEN_HERE";
-
-// Column order of the Orders sheet. Must match the app's configuration.
-var HEADERS = [
-  "Order Number",
-  "Date",
-  "Status",
-  "Region",
-  "Customer Name",
-  "Product Type",
-  "Quantity",
-  "Gold Color",
-  "Gold Karat",
-  "Length",
-  "Diamond Shape",
-  "Diamond Size",
-  "Number of Diamonds",
-  "Stone Type",
-  "Stone Color",
-  "Certificate Number",
-  "Metal Weight (Approx)",
-  "Notes"
-];
 
 function getSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName("Orders");
   if (!sh) sh = ss.insertSheet("Orders");
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(HEADERS);
-    sh.getRange(1, 1, 1, HEADERS.length).setFontWeight("bold");
-    sh.setFrozenRows(1);
-  }
   return sh;
 }
 
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
-    ContentService.MimeType.JSON
-  );
+function ensureHeaders_(sh, headers) {
+  var needsHeader = sh.getLastRow() === 0;
+  if (!needsHeader) {
+    var existing = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    if (existing.join("") !== headers.join("")) needsHeader = true;
+  }
+  if (needsHeader) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+    sh.setFrozenRows(1);
+  }
 }
 
-// Health check (visiting the URL in a browser).
+function colIndex_(sh, name) {
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  return headers.indexOf(name); // 0-based, -1 if missing
+}
+
+function json_(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
 function doGet() {
   return json_({ ok: true, service: "seyaa-order-sheet" });
 }
 
 function doPost(e) {
   try {
-    var body = JSON.parse(e.postData.contents);
-    if (body.token !== SECRET) return json_({ ok: false, error: "unauthorized" });
-
-    if (body.action === "append") return append_(body.order);
-    if (body.action === "list") return list_();
-    if (body.action === "updateStatus") return updateStatus_(body.orderNumber, body.status);
+    var b = JSON.parse(e.postData.contents);
+    if (b.token !== SECRET) return json_({ ok: false, error: "unauthorized" });
+    if (b.action === "append") return append_(b.headers, b.rows);
+    if (b.action === "list") return list_();
+    if (b.action === "updateStatus") return updateStatus_(b.orderNumber, b.status);
     return json_({ ok: false, error: "unknown action" });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
 }
 
-// Next sequential order number, e.g. ORD-0007.
 function nextOrderNumber_(sh) {
+  var oc = colIndex_(sh, "Order Number");
   var last = sh.getLastRow();
   var max = 0;
-  if (last > 1) {
-    var col = sh.getRange(2, 1, last - 1, 1).getValues();
+  if (last > 1 && oc >= 0) {
+    var col = sh.getRange(2, oc + 1, last - 1, 1).getValues();
     for (var i = 0; i < col.length; i++) {
       var m = String(col[i][0]).match(/(\d+)\s*$/);
       if (m) max = Math.max(max, parseInt(m[1], 10));
@@ -87,24 +74,19 @@ function nextOrderNumber_(sh) {
   return "ORD-" + n;
 }
 
-function append_(order) {
+function append_(headers, rows) {
   var sh = getSheet_();
+  ensureHeaders_(sh, headers);
   var orderNumber = nextOrderNumber_(sh);
   var date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
-  var status = "NEW";
-
-  var items = order.items || [];
-  for (var i = 0; i < items.length; i++) {
-    var item = items[i];
-    var row = HEADERS.map(function (h) {
-      if (h === "Order Number") return orderNumber;
-      if (h === "Date") return date;
-      if (h === "Status") return status;
-      if (h === "Region") return order.region || "";
-      if (h === "Customer Name") return order.customerName || "";
-      if (h === "Notes") return order.notes || "";
-      return item[h] != null ? item[h] : ""; // Product Type, Quantity, spec fields
-    });
+  var oi = headers.indexOf("Order Number");
+  var di = headers.indexOf("Date");
+  var si = headers.indexOf("Status");
+  for (var r = 0; r < rows.length; r++) {
+    var row = rows[r];
+    if (oi >= 0) row[oi] = orderNumber;
+    if (di >= 0) row[di] = date;
+    if (si >= 0) row[si] = "NEW";
     sh.appendRow(row);
   }
   return json_({ ok: true, orderNumber: orderNumber });
@@ -113,30 +95,31 @@ function append_(order) {
 function list_() {
   var sh = getSheet_();
   var last = sh.getLastRow();
+  var lastCol = sh.getLastColumn();
+  if (last < 1 || lastCol < 1) return json_({ ok: true, headers: [], rows: [] });
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
   var rows = [];
   if (last > 1) {
-    var values = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    var values = sh.getRange(2, 1, last - 1, lastCol).getValues();
     for (var i = 0; i < values.length; i++) {
-      var obj = {};
-      for (var c = 0; c < HEADERS.length; c++) {
-        obj[HEADERS[c]] = values[i][c] === null ? "" : String(values[i][c]);
-      }
-      rows.push(obj);
+      rows.push(values[i].map(function (v) { return v === null ? "" : String(v); }));
     }
   }
-  return json_({ ok: true, rows: rows });
+  return json_({ ok: true, headers: headers, rows: rows });
 }
 
 function updateStatus_(orderNumber, status) {
   var sh = getSheet_();
   var last = sh.getLastRow();
   if (last < 2) return json_({ ok: true, updated: 0 });
-  var statusCol = HEADERS.indexOf("Status") + 1;
-  var col = sh.getRange(2, 1, last - 1, 1).getValues();
+  var oc = colIndex_(sh, "Order Number");
+  var sc = colIndex_(sh, "Status");
+  if (oc < 0 || sc < 0) return json_({ ok: false, error: "columns missing" });
+  var col = sh.getRange(2, oc + 1, last - 1, 1).getValues();
   var updated = 0;
   for (var i = 0; i < col.length; i++) {
     if (String(col[i][0]) === String(orderNumber)) {
-      sh.getRange(i + 2, statusCol).setValue(status);
+      sh.getRange(i + 2, sc + 1).setValue(status);
       updated++;
     }
   }

@@ -242,6 +242,14 @@ textarea:focus {
   background: #faf9f7;
 }
 
+.diamond-block {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  background: #fff;
+}
+
 .req {
   color: var(--gold);
 }

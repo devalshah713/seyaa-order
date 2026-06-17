@@ -114,7 +114,7 @@ export default async function HomePage({
                 </td>
                 <td>{o.region}</td>
                 <td className="muted">
-                  {o.items.map((i) => i["Product Type"]).filter(Boolean).join(", ") || "—"}
+                  {o.items.map((i) => i.productType).filter(Boolean).join(", ") || "—"}
                 </td>
                 <td>
                   <span className="badge" style={{ background: STATUS_COLORS[o.status] || "#64748b" }}>

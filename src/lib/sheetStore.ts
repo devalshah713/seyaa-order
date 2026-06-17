@@ -1,11 +1,12 @@
-// Talks to the Google Apps Script Web App that is bound to the user's
-// Google Sheet. All calls happen server-side (API routes / server
-// components), so there are no CORS concerns.
-//
-// Configuration (set in Vercel → Settings → Environment Variables):
-//   SHEETS_WEBAPP_URL  - the Apps Script Web App URL (…/exec)
-//   SHEETS_TOKEN       - a shared secret matching the token in the script
-import { SPEC_FIELDS } from "./formConfig";
+// Talks to the Google Apps Script Web App bound to the user's Google Sheet.
+// All calls happen server-side. The script is generic: we send it the column
+// HEADERS plus fully-built rows (it fills Order Number / Date / Status), so
+// future column changes need no script edits.
+import {
+  SHEET_HEADERS,
+  PRODUCT_FIELD_NAMES,
+  DIAMOND_FIELD_NAMES,
+} from "./formConfig";
 
 const WEBAPP_URL = process.env.SHEETS_WEBAPP_URL;
 const TOKEN = process.env.SHEETS_TOKEN || "";
@@ -14,23 +15,28 @@ export function isStorageConfigured(): boolean {
   return !!WEBAPP_URL;
 }
 
-// One product line within an order, keyed by the field display names.
-export type OrderItemInput = {
-  "Product Type": string;
-  Quantity: number;
-} & Record<string, string | number>;
-
+export type DiamondBlock = Record<string, string>; // keyed by DIAMOND_FIELD_NAMES
+export type ProductInput = {
+  productType: string;
+  quantity: number;
+  product: Record<string, string>; // keyed by PRODUCT_FIELD_NAMES
+  diamonds: DiamondBlock[];
+};
 export type NewOrder = {
   region: string;
   customerName: string;
   notes: string;
-  items: OrderItemInput[];
+  items: ProductInput[];
 };
 
-// A row read back from the Sheet, keyed by column header.
-export type SheetRow = Record<string, string>;
-
-// An order reconstructed from one or more sheet rows sharing an order number.
+// Reconstructed order for display.
+export type OrderItem = {
+  itemNo: string;
+  productType: string;
+  quantity: string;
+  product: Record<string, string>;
+  diamonds: DiamondBlock[];
+};
 export type Order = {
   orderNumber: string;
   date: string;
@@ -38,7 +44,7 @@ export type Order = {
   region: string;
   customerName: string;
   notes: string;
-  items: SheetRow[];
+  items: OrderItem[];
 };
 
 async function call<T>(payload: Record<string, unknown>): Promise<T> {
@@ -47,7 +53,6 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: TOKEN, ...payload }),
-    // Always fetch fresh data from the sheet.
     cache: "no-store",
     redirect: "follow",
   });
@@ -57,25 +62,77 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-// Create a new order (one sheet row per product). The Apps Script assigns
-// the sequential order number and timestamp, and returns the order number.
+// Build one sheet row (array, in SHEET_HEADERS order) for a product line.
+// Order Number / Date / Status are left blank — the script fills them.
+function buildRow(
+  order: NewOrder,
+  item: ProductInput,
+  itemNo: number,
+  diamond: DiamondBlock | null
+): string[] {
+  const get = (header: string): string => {
+    switch (header) {
+      case "Order Number":
+      case "Date":
+      case "Status":
+        return "";
+      case "Item No":
+        return String(itemNo);
+      case "Region":
+        return order.region;
+      case "Customer Name":
+        return order.customerName;
+      case "Product Type":
+        return item.productType;
+      case "Quantity":
+        return String(item.quantity);
+      case "Notes":
+        return order.notes;
+    }
+    if (PRODUCT_FIELD_NAMES.includes(header)) return item.product[header] ?? "";
+    if (DIAMOND_FIELD_NAMES.includes(header)) return diamond ? diamond[header] ?? "" : "";
+    return "";
+  };
+  return SHEET_HEADERS.map(get);
+}
+
 export async function appendOrder(order: NewOrder): Promise<string> {
+  const rows: string[][] = [];
+  order.items.forEach((item, i) => {
+    const itemNo = i + 1;
+    if (item.diamonds.length === 0) {
+      rows.push(buildRow(order, item, itemNo, null));
+    } else {
+      for (const d of item.diamonds) rows.push(buildRow(order, item, itemNo, d));
+    }
+  });
+
   const data = await call<{ ok: true; orderNumber: string }>({
     action: "append",
-    order,
-    specFields: SPEC_FIELDS.map((f) => f.name),
+    headers: SHEET_HEADERS,
+    rows,
   });
   return data.orderNumber;
 }
 
-function groupRows(rows: SheetRow[]): Order[] {
-  const byNumber = new Map<string, Order>();
-  // Preserve sheet order but list newest first afterwards.
-  for (const r of rows) {
+// Convert raw arrays + headers into row objects.
+function toObjects(headers: string[], rows: string[][]): Record<string, string>[] {
+  return rows.map((r) => {
+    const o: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      o[h] = r[i] == null ? "" : String(r[i]);
+    });
+    return o;
+  });
+}
+
+function groupOrders(objs: Record<string, string>[]): Order[] {
+  const byOrder = new Map<string, Order>();
+  for (const r of objs) {
     const num = r["Order Number"];
     if (!num) continue;
-    if (!byNumber.has(num)) {
-      byNumber.set(num, {
+    if (!byOrder.has(num)) {
+      byOrder.set(num, {
         orderNumber: num,
         date: r["Date"] || "",
         status: r["Status"] || "NEW",
@@ -85,15 +142,35 @@ function groupRows(rows: SheetRow[]): Order[] {
         items: [],
       });
     }
-    byNumber.get(num)!.items.push(r);
+    const order = byOrder.get(num)!;
+    const itemNo = r["Item No"] || "1";
+    let item = order.items.find((it) => it.itemNo === itemNo);
+    if (!item) {
+      const product: Record<string, string> = {};
+      for (const f of PRODUCT_FIELD_NAMES) product[f] = r[f] || "";
+      item = {
+        itemNo,
+        productType: r["Product Type"] || "",
+        quantity: r["Quantity"] || "",
+        product,
+        diamonds: [],
+      };
+      order.items.push(item);
+    }
+    // A diamond block exists on this row if a shape is filled.
+    if (r["Diamond Shape"]) {
+      const block: DiamondBlock = {};
+      for (const f of DIAMOND_FIELD_NAMES) block[f] = r[f] || "";
+      item.diamonds.push(block);
+    }
   }
-  return Array.from(byNumber.values());
+  return Array.from(byOrder.values());
 }
 
 export async function listOrders(): Promise<Order[]> {
-  const data = await call<{ ok: true; rows: SheetRow[] }>({ action: "list" });
-  const orders = groupRows(data.rows || []);
-  // Newest first (order numbers increase over time).
+  const data = await call<{ ok: true; headers: string[]; rows: string[][] }>({ action: "list" });
+  const objs = toObjects(data.headers || SHEET_HEADERS, data.rows || []);
+  const orders = groupOrders(objs);
   orders.sort((a, b) => b.orderNumber.localeCompare(a.orderNumber));
   return orders;
 }

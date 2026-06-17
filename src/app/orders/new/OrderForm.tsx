@@ -1,36 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  REGIONS,
+  PRODUCT_TYPES,
+  PRODUCT_FIELDS,
+  DIAMOND_FIELDS,
+  DIAMOND_SIZES_BY_SHAPE,
+  Field,
+} from "@/lib/formConfig";
 
-type Attr = {
-  id: string;
-  name: string;
-  inputType: "SELECT" | "MULTISELECT" | "NUMBER" | "TEXT";
-  unit: string | null;
-  required: boolean;
-  options: string[];
-};
-type ProductType = { id: string; name: string; attributes: Attr[] };
-type Region = { id: string; name: string; currency: string };
-
+type DiamondBlock = { key: number; values: Record<string, string> };
 type Item = {
   key: number;
-  productTypeId: string;
+  productType: string;
   quantity: number;
-  specs: Record<string, string>; // attributeId -> value (MULTISELECT stored comma-joined)
+  product: Record<string, string>; // product-level field values
+  diamonds: DiamondBlock[];
 };
 
 let keyCounter = 1;
+function blankDiamond(): DiamondBlock {
+  return { key: keyCounter++, values: {} };
+}
 function blankItem(): Item {
-  return { key: keyCounter++, productTypeId: "", quantity: 1, specs: {} };
+  return { key: keyCounter++, productType: "", quantity: 1, product: {}, diamonds: [blankDiamond()] };
 }
 
 export default function OrderForm() {
   const router = useRouter();
-  const [regions, setRegions] = useState<Region[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,49 +38,76 @@ export default function OrderForm() {
   const [customerName, setCustomerName] = useState("");
   const [items, setItems] = useState<Item[]>([blankItem()]);
 
-  useEffect(() => {
-    fetch("/api/meta")
-      .then((r) => r.json())
-      .then((d) => {
-        setRegions(d.regions);
-        setProductTypes(d.productTypes);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load form data.");
-        setLoading(false);
-      });
-  }, []);
-
-  function ptById(id: string) {
-    return productTypes.find((p) => p.id === id);
-  }
-
   function updateItem(key: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
   }
-
-  function setSpec(key: number, attrId: string, value: string) {
+  function setProductField(key: number, field: string, value: string) {
     setItems((prev) =>
       prev.map((it) =>
-        it.key === key ? { ...it, specs: { ...it.specs, [attrId]: value } } : it
+        it.key === key ? { ...it, product: { ...it.product, [field]: value } } : it
+      )
+    );
+  }
+  function setDiamondField(itemKey: number, dKey: number, field: string, value: string) {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== itemKey) return it;
+        return {
+          ...it,
+          diamonds: it.diamonds.map((d) => {
+            if (d.key !== dKey) return d;
+            const values = { ...d.values, [field]: value };
+            // Changing the shape resets the (shape-specific) size.
+            if (field === "Diamond Shape") values["Diamond Size"] = "";
+            return { ...d, values };
+          }),
+        };
+      })
+    );
+  }
+  function addDiamond(itemKey: number) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.key === itemKey ? { ...it, diamonds: [...it.diamonds, blankDiamond()] } : it
+      )
+    );
+  }
+  function removeDiamond(itemKey: number, dKey: number) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.key === itemKey
+          ? { ...it, diamonds: it.diamonds.filter((d) => d.key !== dKey) }
+          : it
       )
     );
   }
 
-  // Toggle one option for a MULTISELECT attribute (Diamond Shape).
-  function toggleMulti(key: number, attrId: string, option: string) {
-    setItems((prev) =>
-      prev.map((it) => {
-        if (it.key !== key) return it;
-        const current = it.specs[attrId]
-          ? it.specs[attrId].split(", ").filter(Boolean)
-          : [];
-        const next = current.includes(option)
-          ? current.filter((o) => o !== option)
-          : [...current, option];
-        return { ...it, specs: { ...it.specs, [attrId]: next.join(", ") } };
-      })
+  function renderField(
+    f: Field,
+    value: string,
+    onChange: (v: string) => void,
+    sizeOptions?: string[]
+  ) {
+    const options = f.optionsByShape ? sizeOptions || [] : f.options || [];
+    if (f.inputType === "SELECT") {
+      return (
+        <select value={value || ""} onChange={(e) => onChange(e.target.value)}>
+          <option value="">—</option>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <input
+        type={f.inputType === "NUMBER" ? "number" : "text"}
+        step="any"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
     );
   }
 
@@ -91,32 +117,41 @@ export default function OrderForm() {
 
     if (!regionId) return setError("Please choose a region.");
     if (!customerName.trim()) return setError("Please enter the customer name.");
-    if (items.some((i) => !i.productTypeId))
+    if (items.some((i) => !i.productType))
       return setError("Please choose a product type for every item.");
 
-    // required spec check
+    // Required product fields.
     for (const it of items) {
-      const pt = ptById(it.productTypeId);
-      if (!pt) continue;
-      for (const a of pt.attributes) {
-        if (a.required && !(it.specs[a.id] && it.specs[a.id].trim())) {
-          return setError(`"${a.name}" is required for ${pt.name}.`);
+      for (const f of PRODUCT_FIELDS) {
+        if (f.required && !(it.product[f.name] && it.product[f.name].trim())) {
+          return setError(`"${f.name}" is required for ${it.productType || "the product"}.`);
+        }
+      }
+      // Diamond blocks: a block with a shape must have all fields filled.
+      for (const d of it.diamonds) {
+        const hasShape = !!d.values["Diamond Shape"];
+        const hasAny = Object.values(d.values).some((v) => v && v.trim());
+        if (!hasShape && !hasAny) continue; // empty block ignored
+        for (const f of DIAMOND_FIELDS) {
+          if (f.required && !(d.values[f.name] && d.values[f.name].trim())) {
+            return setError(`"${f.name}" is required for each diamond shape you add.`);
+          }
         }
       }
     }
 
     setSubmitting(true);
     const payload = {
-      regionId,
+      region: regionId,
+      customerName,
       notes,
-      customer: { name: customerName },
       items: items.map((it) => ({
-        productTypeId: it.productTypeId,
+        productType: it.productType,
         quantity: Number(it.quantity) || 1,
-        specs: Object.entries(it.specs).map(([attributeId, value]) => ({
-          attributeId,
-          value,
-        })),
+        product: it.product,
+        diamonds: it.diamonds
+          .filter((d) => d.values["Diamond Shape"])
+          .map((d) => d.values),
       })),
     };
 
@@ -125,7 +160,6 @@ export default function OrderForm() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       setError(d.error || "Failed to create order.");
@@ -133,18 +167,13 @@ export default function OrderForm() {
       return;
     }
     const d = await res.json();
-    router.push(`/orders/${d.id}`);
+    router.push(`/orders/${encodeURIComponent(d.id)}`);
   }
-
-  if (loading) return <div className="card">Loading…</div>;
 
   return (
     <form onSubmit={submit}>
       {error && (
-        <div
-          className="card"
-          style={{ borderColor: "#dc2626", color: "#dc2626", background: "#fef2f2" }}
-        >
+        <div className="card" style={{ borderColor: "#dc2626", color: "#dc2626", background: "#fef2f2" }}>
           {error}
         </div>
       )}
@@ -158,8 +187,8 @@ export default function OrderForm() {
             </label>
             <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
               <option value="">Select region…</option>
-              {regions.map((r) => (
-                <option key={r.id} value={r.id}>
+              {REGIONS.map((r) => (
+                <option key={r.name} value={r.name}>
                   {r.name} ({r.currency})
                 </option>
               ))}
@@ -169,10 +198,7 @@ export default function OrderForm() {
             <label>
               Customer Name <span className="req">*</span>
             </label>
-            <input
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-            />
+            <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
           </div>
         </div>
       </div>
@@ -180,127 +206,119 @@ export default function OrderForm() {
       <div className="card">
         <div className="row spread">
           <h2>Products</h2>
-          <button
-            type="button"
-            className="btn ghost small"
-            onClick={() => setItems([...items, blankItem()])}
-          >
+          <button type="button" className="btn ghost small" onClick={() => setItems([...items, blankItem()])}>
             + Add product
           </button>
         </div>
 
-        {items.map((it, idx) => {
-          const pt = ptById(it.productTypeId);
-          return (
-            <div className="item-block" key={it.key}>
-              <div className="row spread">
-                <strong>Item {idx + 1}</strong>
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    className="btn ghost small"
-                    onClick={() => setItems(items.filter((x) => x.key !== it.key))}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+        {items.map((it, idx) => (
+          <div className="item-block" key={it.key}>
+            <div className="row spread">
+              <strong>Item {idx + 1}</strong>
+              {items.length > 1 && (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => setItems(items.filter((x) => x.key !== it.key))}
+                >
+                  Remove item
+                </button>
+              )}
+            </div>
 
-              <div className="grid2" style={{ marginTop: 12 }}>
-                <div className="field">
+            <div className="grid3" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>
+                  Product Type <span className="req">*</span>
+                </label>
+                <select
+                  value={it.productType}
+                  onChange={(e) => updateItem(it.key, { productType: e.target.value })}
+                >
+                  <option value="">Select…</option>
+                  {PRODUCT_TYPES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={it.quantity}
+                  onChange={(e) => updateItem(it.key, { quantity: Number(e.target.value) })}
+                />
+              </div>
+              {PRODUCT_FIELDS.map((f) => (
+                <div className="field" key={f.name}>
                   <label>
-                    Product Type <span className="req">*</span>
+                    {f.name}
+                    {f.unit ? ` (${f.unit})` : ""} {f.required && <span className="req">*</span>}
                   </label>
-                  <select
-                    value={it.productTypeId}
-                    onChange={(e) =>
-                      updateItem(it.key, { productTypeId: e.target.value, specs: {} })
-                    }
-                  >
-                    <option value="">Select…</option>
-                    {productTypes.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                  {renderField(f, it.product[f.name] || "", (v) => setProductField(it.key, f.name, v))}
                 </div>
-                <div className="field">
-                  <label>Quantity</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={it.quantity}
-                    onChange={(e) =>
-                      updateItem(it.key, { quantity: Number(e.target.value) })
-                    }
-                  />
-                </div>
-              </div>
+              ))}
+            </div>
 
-              {pt && (
-                <>
-                  <label style={{ marginTop: 8 }}>Specifications</label>
-                  <div className="grid3">
-                    {pt.attributes.map((a) => (
-                      <div className="field" key={a.id}>
+            {/* Diamond blocks */}
+            <div className="row spread" style={{ marginTop: 8 }}>
+              <label style={{ margin: 0 }}>Diamond details</label>
+              <button type="button" className="btn ghost small" onClick={() => addDiamond(it.key)}>
+                + Add diamond shape
+              </button>
+            </div>
+
+            {it.diamonds.map((d, di) => {
+              const shape = d.values["Diamond Shape"] || "";
+              const sizeOptions = DIAMOND_SIZES_BY_SHAPE[shape] || [];
+              return (
+                <div className="diamond-block" key={d.key}>
+                  <div className="row spread">
+                    <span className="muted" style={{ fontSize: 13, fontWeight: 600 }}>
+                      Diamond shape {di + 1}
+                    </span>
+                    {it.diamonds.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        onClick={() => removeDiamond(it.key, d.key)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid3" style={{ marginTop: 10 }}>
+                    {DIAMOND_FIELDS.map((f) => (
+                      <div className="field" key={f.name}>
                         <label>
-                          {a.name}
-                          {a.unit ? ` (${a.unit})` : ""}{" "}
-                          {a.required && <span className="req">*</span>}
+                          {f.name} {f.required && <span className="req">*</span>}
+                          {f.name === "Diamond Size" && shape ? (
+                            <span className="muted"> · {shape}</span>
+                          ) : null}
                         </label>
-
-                        {a.inputType === "SELECT" && (
-                          <select
-                            value={it.specs[a.id] || ""}
-                            onChange={(e) => setSpec(it.key, a.id, e.target.value)}
-                          >
-                            <option value="">—</option>
-                            {a.options.map((o) => (
-                              <option key={o} value={o}>
-                                {o}
-                              </option>
-                            ))}
+                        {f.optionsByShape && !shape ? (
+                          <select disabled>
+                            <option>Pick a shape first…</option>
                           </select>
-                        )}
-
-                        {a.inputType === "MULTISELECT" && (
-                          <div className="checkbox-group">
-                            {a.options.map((o) => {
-                              const selected = (it.specs[a.id] || "")
-                                .split(", ")
-                                .filter(Boolean)
-                                .includes(o);
-                              return (
-                                <label key={o} className="checkbox-item">
-                                  <input
-                                    type="checkbox"
-                                    checked={selected}
-                                    onChange={() => toggleMulti(it.key, a.id, o)}
-                                  />
-                                  <span>{o}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {(a.inputType === "NUMBER" || a.inputType === "TEXT") && (
-                          <input
-                            type={a.inputType === "NUMBER" ? "number" : "text"}
-                            step="any"
-                            value={it.specs[a.id] || ""}
-                            onChange={(e) => setSpec(it.key, a.id, e.target.value)}
-                          />
+                        ) : (
+                          renderField(
+                            f,
+                            d.values[f.name] || "",
+                            (v) => setDiamondField(it.key, d.key, f.name, v),
+                            sizeOptions
+                          )
                         )}
                       </div>
                     ))}
                   </div>
-                </>
-              )}
-            </div>
-          );
-        })}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       <div className="card">
@@ -319,11 +337,7 @@ export default function OrderForm() {
         <button className="btn gold" type="submit" disabled={submitting}>
           {submitting ? "Saving…" : "Create Order"}
         </button>
-        <button
-          type="button"
-          className="btn ghost"
-          onClick={() => router.push("/")}
-        >
+        <button type="button" className="btn ghost" onClick={() => router.push("/")}>
           Cancel
         </button>
       </div>

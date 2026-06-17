@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrder } from "@/lib/sheetStore";
-import { SPEC_FIELDS, STATUS_LABELS, STATUS_COLORS, currencyForRegion } from "@/lib/formConfig";
+import {
+  PRODUCT_FIELDS,
+  DIAMOND_FIELDS,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  currencyForRegion,
+} from "@/lib/formConfig";
 import StatusControl from "./StatusControl";
 
 export const dynamic = "force-dynamic";
@@ -55,16 +61,17 @@ export default async function OrderDetailPage({
       </div>
 
       <h2 style={{ marginTop: 8 }}>Items</h2>
-      {order.items.map((it, idx) => (
-        <div className="card" key={idx}>
+      {order.items.map((it) => (
+        <div className="card" key={it.itemNo}>
           <div className="row spread">
             <strong>
-              {idx + 1}. {it["Product Type"] || "Product"} &times; {it["Quantity"] || 1}
+              {it.itemNo}. {it.productType || "Product"} &times; {it.quantity || 1}
             </strong>
           </div>
+
           <div className="spec-grid" style={{ marginTop: 12 }}>
-            {SPEC_FIELDS.map((f) => {
-              const value = it[f.name];
+            {PRODUCT_FIELDS.map((f) => {
+              const value = it.product[f.name];
               if (!value) return null;
               return (
                 <div key={f.name} className="row" style={{ justifyContent: "space-between" }}>
@@ -77,6 +84,31 @@ export default async function OrderDetailPage({
               );
             })}
           </div>
+
+          {it.diamonds.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              {it.diamonds.map((d, di) => (
+                <div className="diamond-block" key={di}>
+                  <div className="muted" style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                    Diamond {di + 1}
+                    {d["Diamond Shape"] ? ` — ${d["Diamond Shape"]}` : ""}
+                  </div>
+                  <div className="spec-grid">
+                    {DIAMOND_FIELDS.filter((f) => f.name !== "Diamond Shape").map((f) => {
+                      const value = d[f.name];
+                      if (!value) return null;
+                      return (
+                        <div key={f.name} className="row" style={{ justifyContent: "space-between" }}>
+                          <span className="k">{f.name}</span>
+                          <span className="v">{value}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
 
