@@ -28,7 +28,6 @@ export type NewOrder = {
   customerName: string;
   manufacturer: string;
   notes: string;
-  photos: string[];
   items: ProductInput[];
 };
 
@@ -48,7 +47,6 @@ export type Order = {
   customerName: string;
   manufacturer: string;
   notes: string;
-  photos: string[];
   items: OrderItem[];
 };
 
@@ -77,14 +75,12 @@ function escapeCell(v: string): string {
 
 // Build one sheet row (array, in SHEET_HEADERS order) for a product line.
 // Order Number is provided by the user; Date / Status are left blank for
-// the script to fill. Photos are stored only on the first row of an order
-// (as a comma-separated URL list) to avoid duplication.
+// the script to fill.
 function buildRow(
   order: NewOrder,
   item: ProductInput,
   itemNo: number,
-  diamond: DiamondBlock | null,
-  isFirstRow: boolean
+  diamond: DiamondBlock | null
 ): string[] {
   const get = (header: string): string => {
     switch (header) {
@@ -107,8 +103,6 @@ function buildRow(
         return String(item.quantity);
       case "Notes":
         return order.notes;
-      case "Photos":
-        return isFirstRow ? (order.photos || []).join(",") : "";
     }
     if (PRODUCT_FIELD_NAMES.includes(header)) return item.product[header] ?? "";
     if (DIAMOND_FIELD_NAMES.includes(header)) return diamond ? diamond[header] ?? "" : "";
@@ -124,11 +118,9 @@ export async function appendOrder(order: NewOrder): Promise<string> {
   order.items.forEach((item, i) => {
     const itemNo = i + 1;
     if (item.diamonds.length === 0) {
-      rows.push(buildRow(order, item, itemNo, null, i === 0));
+      rows.push(buildRow(order, item, itemNo, null));
     } else {
-      item.diamonds.forEach((d, di) => {
-        rows.push(buildRow(order, item, itemNo, d, i === 0 && di === 0));
-      });
+      for (const d of item.diamonds) rows.push(buildRow(order, item, itemNo, d));
     }
   });
 
@@ -168,15 +160,10 @@ function groupOrders(objs: Record<string, string>[]): Order[] {
         customerName: r["Customer Name"] || "",
         manufacturer: r["Manufacturer"] || "",
         notes: r["Notes"] || "",
-        photos: [],
         items: [],
       });
     }
     const order = byOrder.get(num)!;
-    // Photos are stored only on the first row; pick them up whenever present.
-    if (!order.photos.length && r["Photos"]) {
-      order.photos = r["Photos"].split(",").map((u: string) => u.trim()).filter(Boolean);
-    }
     const itemNo = r["Item No"] || "1";
     let item = order.items.find((it) => it.itemNo === itemNo);
     if (!item) {

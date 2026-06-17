@@ -14,7 +14,6 @@ type IncomingOrder = {
   customerName: string;
   manufacturer?: string;
   notes?: string;
-  photos?: string[];
   items: IncomingItem[];
 };
 
@@ -119,7 +118,6 @@ export async function POST(req: NextRequest) {
     customerName: body.customerName.trim(),
     manufacturer: body.manufacturer || "",
     notes: body.notes || "",
-    photos: Array.isArray(body.photos) ? body.photos.filter(Boolean) : [],
     items,
   };
 
