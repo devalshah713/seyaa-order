@@ -7,6 +7,7 @@ import {
   STATUS_LABELS,
   STATUS_COLORS,
   currencyForRegion,
+  formatDate,
 } from "@/lib/formConfig";
 import StatusControl from "./StatusControl";
 
@@ -55,7 +56,7 @@ export default async function OrderDetailPage({
             <div className="muted" style={{ marginTop: 8 }}>
               Date
             </div>
-            <div style={{ fontWeight: 600 }}>{order.date || "—"}</div>
+            <div style={{ fontWeight: 600 }}>{formatDate(order.date) || "—"}</div>
           </div>
         </div>
       </div>

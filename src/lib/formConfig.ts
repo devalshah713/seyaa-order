@@ -100,3 +100,12 @@ export const STATUS_COLORS: Record<string, string> = {
 export function currencyForRegion(region: string): string {
   return REGIONS.find((r) => r.name === region)?.currency || "";
 }
+
+// The Sheet may return the date as a long Date string ("Wed Jun 17 2026
+// 16:29:00 GMT+0530 (India Standard Time)"). Trim the timezone tail so the
+// displayed wall-clock time stays correct and readable.
+export function formatDate(s: string): string {
+  if (!s) return "";
+  const i = s.indexOf(" GMT");
+  return i >= 0 ? s.slice(0, i) : s;
+}

@@ -62,6 +62,14 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+// Google Sheets treats a cell value starting with = + - @ as a formula,
+// which breaks values like the round sieve sizes ("+1-1.5 · 1.15 MM …").
+// A leading apostrophe forces Sheets to store it as plain text (the
+// apostrophe itself is not stored or shown).
+function escapeCell(v: string): string {
+  return /^[=+\-@]/.test(v) ? "'" + v : v;
+}
+
 // Build one sheet row (array, in SHEET_HEADERS order) for a product line.
 // Order Number / Date / Status are left blank — the script fills them.
 function buildRow(
@@ -93,7 +101,7 @@ function buildRow(
     if (DIAMOND_FIELD_NAMES.includes(header)) return diamond ? diamond[header] ?? "" : "";
     return "";
   };
-  return SHEET_HEADERS.map(get);
+  return SHEET_HEADERS.map((h) => escapeCell(get(h)));
 }
 
 export async function appendOrder(order: NewOrder): Promise<string> {

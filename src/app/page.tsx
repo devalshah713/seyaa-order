@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listOrders, isStorageConfigured } from "@/lib/sheetStore";
-import { REGIONS, ORDER_STATUSES, STATUS_LABELS, STATUS_COLORS } from "@/lib/formConfig";
+import { REGIONS, ORDER_STATUSES, STATUS_LABELS, STATUS_COLORS, formatDate } from "@/lib/formConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +121,7 @@ export default async function HomePage({
                     {STATUS_LABELS[o.status] || o.status}
                   </span>
                 </td>
-                <td className="muted">{o.date}</td>
+                <td className="muted">{formatDate(o.date)}</td>
               </tr>
             ))}
           </tbody>
