@@ -1,12 +1,11 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { put } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 
-// Photos are uploaded directly from the browser to Vercel Blob (client
-// upload). The file never passes through this function, so it is not subject
-// to Vercel's 4.5 MB serverless request-body limit — important because phone
-// photos are routinely larger than that. This route only authorises the
-// upload and hands back a short-lived client token, signed with the static
-// BLOB_READ_WRITE_TOKEN.
+// Photos are uploaded through this route to Vercel Blob using the static
+// BLOB_READ_WRITE_TOKEN. Images are compressed in the browser first, so they
+// stay well under Vercel's 4.5 MB request limit. Doing the put() server-side
+// (rather than a client direct-upload) means every upload is observable in
+// the runtime logs, which makes failures diagnosable.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
@@ -19,30 +18,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const body = (await req.json()) as HandleUploadBody;
-
   try {
-    const result = await handleUpload({
-      body,
-      request: req,
-      token,
-      onBeforeGenerateToken: async () => ({
-        // Allow any image format (jpg, png, heic, webp, …).
-        allowedContentTypes: ["image/*"],
+    const formData = await req.formData();
+    const files = formData.getAll("files") as File[];
+    if (!files.length || !files[0]?.size) {
+      return NextResponse.json({ error: "No files provided" }, { status: 400 });
+    }
+
+    const urls: string[] = [];
+    for (const file of files) {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const filename = `orders/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const blob = await put(filename, file, {
+        access: "public",
+        token,
         addRandomSuffix: true,
-        maximumSizeInBytes: 50 * 1024 * 1024, // 50 MB per photo
-      }),
-      // NOTE: onUploadCompleted is intentionally omitted. Defining it makes
-      // Vercel Blob attach a callbackUrl and hold the upload "pending" until
-      // it can call that callback server-to-server; if the callback can't be
-      // reached (e.g. deployment protection) the browser hangs on
-      // "Uploading…". We don't need it — the client receives the blob URL
-      // directly from upload() and we store it with the order.
-    });
-    return NextResponse.json(result);
+      });
+      urls.push(blob.url);
+    }
+
+    return NextResponse.json({ urls });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[upload] failed:", message);
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// Self-test: GET /api/upload?selftest=1 writes a tiny blob and returns its
+// URL, proving the token + storage work without needing a browser upload.
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  if (req.nextUrl.searchParams.get("selftest") !== "1") {
+    return NextResponse.json({ ok: true, route: "upload" });
+  }
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) {
+    return NextResponse.json(
+      { ok: false, error: "BLOB_READ_WRITE_TOKEN missing" },
+      { status: 503 }
+    );
+  }
+  try {
+    const blob = await put(
+      `selftest/${Date.now()}.txt`,
+      `ok ${new Date().toISOString()}`,
+      { access: "public", token, addRandomSuffix: true, contentType: "text/plain" }
+    );
+    return NextResponse.json({ ok: true, url: blob.url });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

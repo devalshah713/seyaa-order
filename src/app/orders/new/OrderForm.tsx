@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
 import {
   REGIONS,
   PRODUCT_TYPES,
@@ -182,18 +181,50 @@ export default function OrderForm() {
     );
   }
 
+  // Shrinks/recompresses an image in the browser so it uploads quickly and
+  // stays far under Vercel's 4.5 MB request limit. Falls back to the original
+  // file if the browser can't decode it (e.g. some HEIC files).
+  async function compressImage(file: File): Promise<{ blob: Blob; ext: string }> {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const maxDim = 1600;
+      let { width, height } = bitmap;
+      if (width > maxDim || height > maxDim) {
+        const scale = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return { blob: file, ext: file.name.split(".").pop()?.toLowerCase() || "jpg" };
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob: Blob | null = await new Promise((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/jpeg", 0.82)
+      );
+      if (blob && blob.size > 0) return { blob, ext: "jpg" };
+    } catch {
+      // fall through to original
+    }
+    return { blob: file, ext: file.name.split(".").pop()?.toLowerCase() || "jpg" };
+  }
+
   async function uploadPhoto(entry: PhotoEntry) {
     try {
-      const ext = entry.file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const filename = `orders/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      // Direct browser → Blob upload (no 4.5 MB serverless body limit).
-      const blob = await upload(filename, entry.file, {
-        access: "public",
-        handleUploadUrl: "/api/upload",
-        contentType: entry.file.type || "image/jpeg",
-      });
+      const { blob, ext } = await compressImage(entry.file);
+      const fd = new FormData();
+      fd.append("files", blob, `photo.${ext}`);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Upload failed (${res.status})`);
+      }
+      const data = await res.json();
+      const url: string = data.urls?.[0] || "";
+      if (!url) throw new Error("No URL returned from server");
       setPhotos((prev) =>
-        prev.map((p) => (p.id === entry.id ? { ...p, blobUrl: blob.url, uploading: false } : p))
+        prev.map((p) => (p.id === entry.id ? { ...p, blobUrl: url, uploading: false } : p))
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
