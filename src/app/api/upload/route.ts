@@ -44,29 +44,3 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-// Self-test: GET /api/upload?selftest=1 writes a tiny blob and returns its
-// URL, proving the token + storage work without needing a browser upload.
-export async function GET(req: NextRequest): Promise<NextResponse> {
-  if (req.nextUrl.searchParams.get("selftest") !== "1") {
-    return NextResponse.json({ ok: true, route: "upload" });
-  }
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    return NextResponse.json(
-      { ok: false, error: "BLOB_READ_WRITE_TOKEN missing" },
-      { status: 503 }
-    );
-  }
-  try {
-    const blob = await put(
-      `selftest/${Date.now()}.txt`,
-      `ok ${new Date().toISOString()}`,
-      { access: "private", token, addRandomSuffix: true, contentType: "text/plain" }
-    );
-    return NextResponse.json({ ok: true, url: blob.url });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
-}
