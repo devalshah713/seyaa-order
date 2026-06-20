@@ -32,8 +32,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         addRandomSuffix: true,
         maximumSizeInBytes: 50 * 1024 * 1024, // 50 MB per photo
       }),
-      // Required by the type; nothing to do on completion for our flow.
-      onUploadCompleted: async () => {},
+      // NOTE: onUploadCompleted is intentionally omitted. Defining it makes
+      // Vercel Blob attach a callbackUrl and hold the upload "pending" until
+      // it can call that callback server-to-server; if the callback can't be
+      // reached (e.g. deployment protection) the browser hangs on
+      // "Uploading…". We don't need it — the client receives the blob URL
+      // directly from upload() and we store it with the order.
     });
     return NextResponse.json(result);
   } catch (err) {
