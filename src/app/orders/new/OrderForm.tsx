@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   REGIONS,
@@ -50,6 +50,60 @@ export default function OrderForm() {
   const [items, setItems] = useState<Item[]>([blankItem()]);
   const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Staff-added sizes, keyed by shape; loaded once and merged into the
+  // built-in size list so they appear in the dropdown.
+  const [customSizes, setCustomSizes] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    fetch("/api/sizes")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.sizes) setCustomSizes(d.sizes);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Built-in sizes for a shape plus any custom ones (no duplicates).
+  function sizesForShape(shape: string): string[] {
+    const base = DIAMOND_SIZES_BY_SHAPE[shape] || [];
+    const extra = (customSizes[shape] || []).filter((s) => !base.includes(s));
+    return [...base, ...extra];
+  }
+
+  async function addCustomSizeForShape(itemKey: number, dKey: number, shape: string) {
+    const input = window.prompt(
+      `Add a new ${shape} diamond size.\nType it exactly how you want it to appear (e.g. "1.30 MM · 0.010 ct"):`
+    );
+    if (input === null) return; // cancelled
+    const size = input.trim();
+    if (!size) return;
+
+    // Show it immediately and select it.
+    setCustomSizes((prev) => {
+      const list = prev[shape] || [];
+      if (list.some((s) => s.toLowerCase() === size.toLowerCase())) return prev;
+      return { ...prev, [shape]: [...list, size] };
+    });
+    setDiamondField(itemKey, dKey, "Diamond Size", size);
+
+    // Persist so it's there next time, on every device.
+    try {
+      const res = await fetch("/api/sizes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shape, size }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.sizes) setCustomSizes(data.sizes);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error || "Could not save the new size permanently (it's still usable for this order).");
+      }
+    } catch {
+      setError("Could not save the new size permanently (it's still usable for this order).");
+    }
+  }
 
   function updateItem(key: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
@@ -363,7 +417,7 @@ export default function OrderForm() {
 
             {it.diamonds.map((d, di) => {
               const shape = d.values["Diamond Shape"] || "";
-              const sizeOptions = DIAMOND_SIZES_BY_SHAPE[shape] || [];
+              const sizeOptions = sizesForShape(shape);
               return (
                 <div className="diamond-block" key={d.key}>
                   <div className="row spread">
@@ -381,28 +435,48 @@ export default function OrderForm() {
                     )}
                   </div>
                   <div className="grid3" style={{ marginTop: 10 }}>
-                    {DIAMOND_FIELDS.map((f) => (
-                      <div className="field" key={f.name}>
-                        <label>
-                          {f.name} {f.required && <span className="req">*</span>}
-                          {f.name === "Diamond Size" && shape ? (
-                            <span className="muted"> · {shape}</span>
-                          ) : null}
-                        </label>
-                        {f.optionsByShape && !shape ? (
-                          <select disabled>
-                            <option>Pick a shape first…</option>
-                          </select>
-                        ) : (
-                          renderField(
-                            f,
-                            d.values[f.name] || "",
-                            (v) => setDiamondField(it.key, d.key, f.name, v),
-                            sizeOptions
-                          )
-                        )}
-                      </div>
-                    ))}
+                    {DIAMOND_FIELDS.map((f) => {
+                      const isSize = f.name === "Diamond Size";
+                      return (
+                        <div className="field" key={f.name}>
+                          <label>
+                            {f.name} {f.required && <span className="req">*</span>}
+                            {isSize && shape ? <span className="muted"> · {shape}</span> : null}
+                          </label>
+                          {f.optionsByShape && !shape ? (
+                            <select disabled>
+                              <option>Pick a shape first…</option>
+                            </select>
+                          ) : isSize ? (
+                            <select
+                              value={d.values["Diamond Size"] || ""}
+                              onChange={(e) => {
+                                if (e.target.value === "__add_custom__") {
+                                  addCustomSizeForShape(it.key, d.key, shape);
+                                } else {
+                                  setDiamondField(it.key, d.key, "Diamond Size", e.target.value);
+                                }
+                              }}
+                            >
+                              <option value="">—</option>
+                              {sizeOptions.map((o) => (
+                                <option key={o} value={o}>
+                                  {o}
+                                </option>
+                              ))}
+                              <option value="__add_custom__">➕ Add a new size…</option>
+                            </select>
+                          ) : (
+                            renderField(
+                              f,
+                              d.values[f.name] || "",
+                              (v) => setDiamondField(it.key, d.key, f.name, v),
+                              sizeOptions
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
