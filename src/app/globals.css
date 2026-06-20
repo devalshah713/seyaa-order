@@ -484,6 +484,63 @@ textarea:focus {
   opacity: 0.82;
 }
 
+/* Inline "add a new diamond size" panel */
+.size-add-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg, #faf9f7);
+}
+
+.size-add-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.size-add-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.field.mini {
+  margin-bottom: 0;
+}
+
+.field.mini label {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.field.mini input {
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.size-add-preview {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.size-add-hint {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.size-add-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 640px) {
+  .size-add-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media print {
   .topbar,
   .no-print {

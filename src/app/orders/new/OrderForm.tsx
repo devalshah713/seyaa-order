@@ -53,6 +53,16 @@ export default function OrderForm() {
   // Staff-added sizes, keyed by shape; loaded once and merged into the
   // built-in size list so they appear in the dropdown.
   const [customSizes, setCustomSizes] = useState<Record<string, string[]>>({});
+  // When set, an inline "add a new size" panel is open for one diamond block.
+  const [sizeForm, setSizeForm] = useState<{
+    itemKey: number;
+    dKey: number;
+    shape: string;
+    sieve: string;
+    mm: string;
+    pointers: string;
+  } | null>(null);
+  const [savingSize, setSavingSize] = useState(false);
 
   useEffect(() => {
     fetch("/api/sizes")
@@ -70,23 +80,43 @@ export default function OrderForm() {
     return [...base, ...extra];
   }
 
-  async function addCustomSizeForShape(itemKey: number, dKey: number, shape: string) {
-    const input = window.prompt(
-      `Add a new ${shape} diamond size.\nType it exactly how you want it to appear (e.g. "1.30 MM · 0.010 ct"):`
-    );
-    if (input === null) return; // cancelled
-    const size = input.trim();
-    if (!size) return;
+  // Builds the size label from the inline fields in the same style as the
+  // built-in list, e.g. "+1-1.5 · 1.15 MM · 0.07 ct". Empty fields are skipped.
+  function composeSizeLabel(sieve: string, mm: string, pointers: string): string {
+    const parts: string[] = [];
+    const s = sieve.trim();
+    const m = mm.trim();
+    const p = pointers.trim();
+    if (s) parts.push(s);
+    if (m) parts.push(`${m} MM`);
+    if (p) {
+      const ct = parseFloat(p) / 100;
+      if (!isNaN(ct)) parts.push(`${parseFloat(ct.toFixed(4))} ct`);
+    }
+    return parts.join(" · ");
+  }
 
-    // Show it immediately and select it.
+  async function submitCustomSize() {
+    if (!sizeForm) return;
+    const { itemKey, dKey, shape } = sizeForm;
+    const size = composeSizeLabel(sizeForm.sieve, sizeForm.mm, sizeForm.pointers);
+    if (!size) {
+      setError("Enter at least the MM size for the new diamond size.");
+      return;
+    }
+
+    // Show it immediately, select it, and close the panel.
     setCustomSizes((prev) => {
       const list = prev[shape] || [];
       if (list.some((s) => s.toLowerCase() === size.toLowerCase())) return prev;
       return { ...prev, [shape]: [...list, size] };
     });
     setDiamondField(itemKey, dKey, "Diamond Size", size);
+    setSizeForm(null);
+    setError(null);
 
     // Persist so it's there next time, on every device.
+    setSavingSize(true);
     try {
       const res = await fetch("/api/sizes", {
         method: "POST",
@@ -102,6 +132,8 @@ export default function OrderForm() {
       }
     } catch {
       setError("Could not save the new size permanently (it's still usable for this order).");
+    } finally {
+      setSavingSize(false);
     }
   }
 
@@ -448,24 +480,106 @@ export default function OrderForm() {
                               <option>Pick a shape first…</option>
                             </select>
                           ) : isSize ? (
-                            <select
-                              value={d.values["Diamond Size"] || ""}
-                              onChange={(e) => {
-                                if (e.target.value === "__add_custom__") {
-                                  addCustomSizeForShape(it.key, d.key, shape);
-                                } else {
-                                  setDiamondField(it.key, d.key, "Diamond Size", e.target.value);
-                                }
-                              }}
-                            >
-                              <option value="">—</option>
-                              {sizeOptions.map((o) => (
-                                <option key={o} value={o}>
-                                  {o}
-                                </option>
-                              ))}
-                              <option value="__add_custom__">➕ Add a new size…</option>
-                            </select>
+                            <>
+                              <select
+                                value={d.values["Diamond Size"] || ""}
+                                onChange={(e) => {
+                                  if (e.target.value === "__add_custom__") {
+                                    setError(null);
+                                    setSizeForm({
+                                      itemKey: it.key,
+                                      dKey: d.key,
+                                      shape,
+                                      sieve: "",
+                                      mm: "",
+                                      pointers: "",
+                                    });
+                                  } else {
+                                    setDiamondField(it.key, d.key, "Diamond Size", e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">—</option>
+                                {sizeOptions.map((o) => (
+                                  <option key={o} value={o}>
+                                    {o}
+                                  </option>
+                                ))}
+                                <option value="__add_custom__">➕ Add a new size…</option>
+                              </select>
+                              {sizeForm && sizeForm.itemKey === it.key && sizeForm.dKey === d.key && (
+                                <div className="size-add-panel">
+                                  <div className="size-add-title">
+                                    Add a new {shape} size
+                                  </div>
+                                  <div className="size-add-row">
+                                    <div className="field mini">
+                                      <label>Sieve size</label>
+                                      <input
+                                        value={sizeForm.sieve}
+                                        placeholder="+1-1.5"
+                                        onChange={(e) =>
+                                          setSizeForm((f) => (f ? { ...f, sieve: e.target.value } : f))
+                                        }
+                                      />
+                                    </div>
+                                    <div className="field mini">
+                                      <label>MM</label>
+                                      <input
+                                        value={sizeForm.mm}
+                                        placeholder="1.15 or 4.5*3.5"
+                                        onChange={(e) =>
+                                          setSizeForm((f) => (f ? { ...f, mm: e.target.value } : f))
+                                        }
+                                      />
+                                    </div>
+                                    <div className="field mini">
+                                      <label>Pointers</label>
+                                      <input
+                                        value={sizeForm.pointers}
+                                        placeholder="7"
+                                        inputMode="decimal"
+                                        onChange={(e) =>
+                                          setSizeForm((f) => (f ? { ...f, pointers: e.target.value } : f))
+                                        }
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="size-add-preview">
+                                    {composeSizeLabel(sizeForm.sieve, sizeForm.mm, sizeForm.pointers) ? (
+                                      <>
+                                        Will add:{" "}
+                                        <strong>
+                                          {composeSizeLabel(sizeForm.sieve, sizeForm.mm, sizeForm.pointers)}
+                                        </strong>
+                                      </>
+                                    ) : (
+                                      "Fill in the fields above"
+                                    )}
+                                  </div>
+                                  <div className="size-add-hint muted">
+                                    Sieve is only for Round (leave blank otherwise). Pointers: 7 = 0.07 ct.
+                                  </div>
+                                  <div className="size-add-actions">
+                                    <button
+                                      type="button"
+                                      className="btn gold small"
+                                      onClick={submitCustomSize}
+                                      disabled={savingSize}
+                                    >
+                                      Add size
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn ghost small"
+                                      onClick={() => setSizeForm(null)}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           ) : (
                             renderField(
                               f,
