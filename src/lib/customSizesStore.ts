@@ -14,7 +14,11 @@ export async function getCustomSizes(): Promise<CustomSizes> {
     const { blobs } = await list({ prefix: BLOB_PATH, token, limit: 100 });
     const blob = blobs.find((b) => b.pathname === BLOB_PATH) || blobs[0];
     if (!blob) return {};
-    const res = await fetch(blob.url, { cache: "no-store" });
+    // The store is private, so reading the blob needs the token.
+    const res = await fetch(blob.url, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!res.ok) return {};
     const data = await res.json();
     return data && typeof data === "object" ? (data as CustomSizes) : {};
@@ -34,7 +38,7 @@ export async function addCustomSize(shape: string, size: string): Promise<Custom
   }
 
   await put(BLOB_PATH, JSON.stringify(current), {
-    access: "public",
+    access: "private",
     token,
     contentType: "application/json",
     addRandomSuffix: false,

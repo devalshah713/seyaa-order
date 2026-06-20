@@ -30,7 +30,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
       const filename = `orders/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const blob = await put(filename, file, {
-        access: "public",
+        access: "private",
         token,
         addRandomSuffix: true,
       });
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const blob = await put(
       `selftest/${Date.now()}.txt`,
       `ok ${new Date().toISOString()}`,
-      { access: "public", token, addRandomSuffix: true, contentType: "text/plain" }
+      { access: "private", token, addRandomSuffix: true, contentType: "text/plain" }
     );
     return NextResponse.json({ ok: true, url: blob.url });
   } catch (err) {

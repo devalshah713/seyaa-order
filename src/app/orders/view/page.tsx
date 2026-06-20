@@ -124,12 +124,17 @@ export default async function OrderDetailPage({
         <div className="card">
           <div className="muted" style={{ marginBottom: 12 }}>Photos</div>
           <div className="photo-grid-view">
-            {order.photos.map((url, i) => (
-              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`Order photo ${i + 1}`} />
-              </a>
-            ))}
+            {order.photos.map((url, i) => {
+              // Photos live in a private Blob store; serve them via the proxy
+              // route so the browser can load them without the token.
+              const src = `/api/photo?u=${encodeURIComponent(url)}`;
+              return (
+                <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`Order photo ${i + 1}`} />
+                </a>
+              );
+            })}
           </div>
         </div>
       )}
