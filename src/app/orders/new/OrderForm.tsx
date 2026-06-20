@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import {
   REGIONS,
   PRODUCT_TYPES,
@@ -183,16 +184,20 @@ export default function OrderForm() {
 
   async function uploadPhoto(entry: PhotoEntry) {
     try {
-      const fd = new FormData();
-      fd.append("files", entry.file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      const url: string = data.urls?.[0] || "";
+      const ext = entry.file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const filename = `orders/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      // Direct browser → Blob upload (no 4.5 MB serverless body limit).
+      const blob = await upload(filename, entry.file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+        contentType: entry.file.type || "image/jpeg",
+      });
       setPhotos((prev) =>
-        prev.map((p) => (p.id === entry.id ? { ...p, blobUrl: url, uploading: false } : p))
+        prev.map((p) => (p.id === entry.id ? { ...p, blobUrl: blob.url, uploading: false } : p))
       );
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setError(`Photo upload failed: ${message}`);
       setPhotos((prev) =>
         prev.map((p) => (p.id === entry.id ? { ...p, uploading: false, failed: true } : p))
       );

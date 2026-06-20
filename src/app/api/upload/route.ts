@@ -1,10 +1,13 @@
-import { put } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextRequest, NextResponse } from "next/server";
 
-// Photos are stored in Vercel Blob using a static read-write token supplied
-// via the BLOB_READ_WRITE_TOKEN environment variable. We pass the token to
-// put() explicitly so this works regardless of how the store is connected.
-export async function POST(req: NextRequest) {
+// Photos are uploaded directly from the browser to Vercel Blob (client
+// upload). The file never passes through this function, so it is not subject
+// to Vercel's 4.5 MB serverless request-body limit — important because phone
+// photos are routinely larger than that. This route only authorises the
+// upload and hands back a short-lived client token, signed with the static
+// BLOB_READ_WRITE_TOKEN.
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
     return NextResponse.json(
@@ -16,26 +19,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const body = (await req.json()) as HandleUploadBody;
+
   try {
-    const formData = await req.formData();
-    const files = formData.getAll("files") as File[];
-
-    if (!files.length || !files[0]?.size) {
-      return NextResponse.json({ error: "No files provided" }, { status: 400 });
-    }
-
-    const urls: string[] = [];
-    for (const file of files) {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const filename = `orders/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const blob = await put(filename, file, { access: "public", token });
-      urls.push(blob.url);
-    }
-
-    return NextResponse.json({ urls });
+    const result = await handleUpload({
+      body,
+      request: req,
+      token,
+      onBeforeGenerateToken: async () => ({
+        // Allow any image format (jpg, png, heic, webp, …).
+        allowedContentTypes: ["image/*"],
+        addRandomSuffix: true,
+        maximumSizeInBytes: 50 * 1024 * 1024, // 50 MB per photo
+      }),
+      // Required by the type; nothing to do on completion for our flow.
+      onUploadCompleted: async () => {},
+    });
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[upload] failed:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }
