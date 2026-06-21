@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isStorageConfigured, logActivity } from "@/lib/sheetStore";
 import {
   createIssue,
+  getIssue,
   listIssues,
   reconcileIssue,
   NewIssue,
@@ -36,12 +37,15 @@ export async function PATCH(req: NextRequest) {
     });
     const actor = await getCurrentUser();
     if (actor) {
+      // Group under the design (order) number so reconciliations show up in
+      // the order's Audit Trail; keep the memo in the details.
+      const updated = await getIssue(memoNo).catch(() => null);
       logActivity({
         user: actor.username,
         role: actor.role,
         action: "Updated diamond issue",
-        order: memoNo,
-        details: `status ${status}`,
+        order: updated?.designNumber || memoNo,
+        details: `Memo ${memoNo} · status ${status}`,
       });
     }
     return NextResponse.json({ ok: true });
@@ -127,8 +131,11 @@ export async function POST(req: NextRequest) {
         user: actor.username,
         role: actor.role,
         action: "Created diamond issue",
-        order: memoNo,
-        details: `${issue.designNumber} · ${lines.length} line(s)`,
+        // Reference the design (order) number so the order-scoped Audit Trail
+        // shows every diamond issue made against that order. The memo lives
+        // in the details for traceability.
+        order: issue.designNumber,
+        details: `Memo ${memoNo} · ${lines.length} line(s)`,
       });
     }
     return NextResponse.json({ id: memoNo, memoNo });

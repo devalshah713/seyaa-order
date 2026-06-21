@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Field } from "@/lib/formConfig";
 import OrderCombobox, { OrderOption } from "./OrderCombobox";
 import {
@@ -270,7 +271,18 @@ export default function DiamondIssueForm() {
       )}
 
       <div className="card">
-        <h2>Issue Details</h2>
+        <div className="row spread">
+          <h2>Issue Details</h2>
+          {designNumber && (
+            <Link
+              href={`/audit?order=${encodeURIComponent(designNumber)}`}
+              target="_blank"
+              className="btn ghost small"
+            >
+              Audit Trail for {designNumber}
+            </Link>
+          )}
+        </div>
         <div className="grid3">
           <div className="field">
             <label>

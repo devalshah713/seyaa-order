@@ -25,7 +25,10 @@ export default async function IssueDetailPage({
           <h1 style={{ marginTop: 6 }}>Memo {issue.memoNo}</h1>
         </div>
         <div className="row no-print" style={{ alignItems: "center" }}>
-          <Link href={`/audit?order=${encodeURIComponent(issue.memoNo)}`} className="btn ghost">
+          <Link
+            href={`/audit?order=${encodeURIComponent(issue.designNumber || issue.memoNo)}`}
+            className="btn ghost"
+          >
             Audit Trail
           </Link>
           <span className="badge" style={{ background: ISSUE_STATUS_COLORS[issue.status] || "#64748b" }}>
