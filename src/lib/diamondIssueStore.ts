@@ -63,6 +63,22 @@ function escapeCell(v: string): string {
   return /^[=+\-@]/.test(v) ? "'" + v : v;
 }
 
+// Identifier columns that must round-trip EXACTLY. Google Sheets auto-converts
+// a purely-numeric string like "001" into the number 1 (dropping the leading
+// zeros), which then no longer matches the memo/design key on read-back and
+// causes 404s. A leading apostrophe forces Sheets to keep it as text (the
+// apostrophe itself is not stored). Non-numeric values fall back to the normal
+// formula-escape.
+const TEXT_ID_HEADERS = new Set<string>([
+  "Memo No.",
+  "Design Number",
+  "Sub Design No",
+  "Certi No.",
+]);
+function escapeIdCell(v: string): string {
+  return /^\d+$/.test(v) ? "'" + v : escapeCell(v);
+}
+
 // Build the full set of sheet rows for one issue, computing every derived
 // column. `date`/`status`/`receivedDate` are memo-level and repeated on each
 // row; Addition/Average sit on the first row only (a per-memo subtotal).
@@ -133,7 +149,9 @@ function buildRows(issue: {
       return "";
     };
 
-    return DIAMOND_ISSUE_HEADERS.map((h) => escapeCell(get(h)));
+    return DIAMOND_ISSUE_HEADERS.map((h) =>
+      TEXT_ID_HEADERS.has(h) ? escapeIdCell(get(h)) : escapeCell(get(h))
+    );
   });
 }
 
