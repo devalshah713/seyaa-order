@@ -217,3 +217,46 @@ export async function getOrder(orderNumber: string): Promise<Order | null> {
 export async function updateStatus(orderNumber: string, status: string): Promise<void> {
   await call({ action: "updateStatus", orderNumber, status });
 }
+
+// Column order for the "Activity Log" tab in the Google Sheet.
+export const ACTIVITY_LOG_HEADERS = [
+  "Timestamp",
+  "User",
+  "Role",
+  "Action",
+  "Order",
+  "Details",
+] as const;
+
+export type ActivityEntry = {
+  user: string;
+  role: string;
+  action: string;
+  order?: string;
+  details?: string;
+};
+
+// Append one row to the "Activity Log" tab. This must NEVER block or break a
+// user action, so all failures are swallowed and only logged to the console.
+// The Google Apps Script needs to support the "log" action (see setup notes).
+export async function logActivity(entry: ActivityEntry): Promise<void> {
+  if (!WEBAPP_URL) return;
+  const row = [
+    new Date().toISOString(),
+    entry.user || "unknown",
+    entry.role || "",
+    entry.action || "",
+    entry.order || "",
+    entry.details || "",
+  ];
+  try {
+    await call({
+      action: "log",
+      tab: "Activity Log",
+      headers: ACTIVITY_LOG_HEADERS,
+      row,
+    });
+  } catch (e) {
+    console.error("[activity] failed to record:", e instanceof Error ? e.message : e);
+  }
+}

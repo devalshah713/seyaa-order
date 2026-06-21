@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendOrder, listOrders, updateStatus, isStorageConfigured, NewOrder, ProductInput } from "@/lib/sheetStore";
+import { appendOrder, listOrders, updateStatus, isStorageConfigured, logActivity, NewOrder, ProductInput } from "@/lib/sheetStore";
 import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS, ORDER_STATUSES } from "@/lib/formConfig";
+import { getCurrentUser } from "@/lib/currentUser";
 
 type IncomingItem = {
   productType: string;
@@ -31,6 +32,16 @@ export async function PATCH(req: NextRequest) {
   }
   try {
     await updateStatus(orderNumber, status);
+    const actor = await getCurrentUser();
+    if (actor) {
+      logActivity({
+        user: actor.username,
+        role: actor.role,
+        action: "Changed status",
+        order: orderNumber,
+        details: `to ${status}`,
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(
@@ -125,6 +136,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const orderNumber = await appendOrder(order);
+    const actor = await getCurrentUser();
+    if (actor) {
+      logActivity({
+        user: actor.username,
+        role: actor.role,
+        action: "Created order",
+        order: orderNumber,
+        details: `${order.customerName} · ${order.items.length} item(s)`,
+      });
+    }
     return NextResponse.json({ id: orderNumber, orderNumber });
   } catch (e) {
     return NextResponse.json(

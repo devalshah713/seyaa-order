@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomSizes, addCustomSize } from "@/lib/customSizesStore";
 import { SHAPE_OPTIONS } from "@/lib/formConfig";
+import { getCurrentUser } from "@/lib/currentUser";
+import { logActivity } from "@/lib/sheetStore";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const sizes = await addCustomSize(shape, size);
+    const actor = await getCurrentUser();
+    if (actor) {
+      logActivity({
+        user: actor.username,
+        role: actor.role,
+        action: "Added diamond size",
+        details: `${shape}: ${size}`,
+      });
+    }
     return NextResponse.json({ sizes });
   } catch (e) {
     return NextResponse.json(

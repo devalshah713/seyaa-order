@@ -553,3 +553,108 @@ textarea:focus {
     background: #fff;
   }
 }
+
+/* ---------- Login page ---------- */
+.login-wrap {
+  min-height: calc(100vh - 56px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 32px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+.login-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.login-brand b {
+  color: var(--gold);
+  letter-spacing: 2px;
+  font-size: 20px;
+}
+.login-brand span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.login-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ---------- Topbar user chip ---------- */
+.user-chip {
+  color: #fff;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.user-role {
+  background: #3f3f46;
+  color: #d4d4d8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+/* ---------- Team page ---------- */
+.team-table {
+  display: flex;
+  flex-direction: column;
+}
+.team-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr 0.8fr 1.6fr;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.team-row.team-head {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.badge-admin {
+  background: var(--gold);
+  color: #fff;
+}
+.badge-staff {
+  background: #e7e5e4;
+  color: #44403c;
+}
+@media (max-width: 640px) {
+  .team-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .team-row.team-head {
+    display: none;
+  }
+}

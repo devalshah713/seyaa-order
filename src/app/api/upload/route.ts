@@ -1,5 +1,7 @@
 import { put } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/currentUser";
+import { logActivity } from "@/lib/sheetStore";
 
 // Photos are uploaded through this route to Vercel Blob using the static
 // BLOB_READ_WRITE_TOKEN. Images are compressed in the browser first, so they
@@ -35,6 +37,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         addRandomSuffix: true,
       });
       urls.push(blob.url);
+    }
+
+    const actor = await getCurrentUser();
+    if (actor) {
+      logActivity({
+        user: actor.username,
+        role: actor.role,
+        action: "Uploaded photo",
+        details: `${urls.length} photo(s)`,
+      });
     }
 
     return NextResponse.json({ urls });
