@@ -46,9 +46,14 @@ export default async function IssuesPage({
             {issues.length} memo{issues.length === 1 ? "" : "s"}
           </p>
         </div>
-        <Link href="/issues/new" className="btn gold">
-          + New Issue
-        </Link>
+        <div className="row">
+          <Link href="/audit?module=Diamond%20Issue" className="btn ghost">
+            Audit Trail
+          </Link>
+          <Link href="/issues/new" className="btn gold">
+            + New Issue
+          </Link>
+        </div>
       </div>
 
       <form className="filters no-print" method="get">

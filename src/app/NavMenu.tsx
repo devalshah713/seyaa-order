@@ -11,6 +11,7 @@ const MODULES: Module[] = [
   { label: "New Order", href: "/orders/new" },
   { label: "Diamond Issue", href: "/issues" },
   { label: "New Diamond Issue", href: "/issues/new" },
+  { label: "Audit Trail", href: "/audit" },
   { label: "Team", href: "/admin/team", adminOnly: true },
 ];
 

@@ -32,6 +32,9 @@ export default async function OrderDetailPage({
           <h1 style={{ marginTop: 6 }}>{order.orderNumber}</h1>
         </div>
         <div className="row no-print">
+          <Link href={`/audit?order=${encodeURIComponent(order.orderNumber)}`} className="btn ghost">
+            Audit Trail
+          </Link>
           <Link href={`/orders/demand?id=${encodeURIComponent(order.orderNumber)}`} className="btn ghost">
             Diamond Demand PDF
           </Link>

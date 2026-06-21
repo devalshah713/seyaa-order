@@ -49,9 +49,14 @@ export default async function HomePage({
             {orders.length} order{orders.length === 1 ? "" : "s"}
           </p>
         </div>
-        <Link href="/orders/new" className="btn gold">
-          + New Order
-        </Link>
+        <div className="row">
+          <Link href="/audit?module=Orders" className="btn ghost">
+            Audit Trail
+          </Link>
+          <Link href="/orders/new" className="btn gold">
+            + New Order
+          </Link>
+        </div>
       </div>
 
       <form className="filters no-print" method="get">

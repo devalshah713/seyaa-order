@@ -280,3 +280,40 @@ export async function logActivity(entry: ActivityEntry): Promise<void> {
     console.error("[activity] failed to record:", e instanceof Error ? e.message : e);
   }
 }
+
+export type AuditEntry = {
+  timestamp: string;
+  user: string;
+  role: string;
+  action: string;
+  order: string;
+  details: string;
+};
+
+// Read the whole Activity Log (newest first) for the Audit Trail screen.
+export async function listActivity(): Promise<AuditEntry[]> {
+  if (!WEBAPP_URL) return [];
+  try {
+    const data = await call<{ ok: true; headers: string[]; rows: string[][] }>({
+      action: "listTab",
+      tab: "Activity Log",
+    });
+    const headers = data.headers || [];
+    const at = (name: string) => headers.indexOf(name);
+    const ti = at("Timestamp"), ui = at("User"), ri = at("Role"),
+      ai = at("Action"), oi = at("Order"), di = at("Details");
+    const rows = (data.rows || []).map((r) => ({
+      timestamp: ti >= 0 ? r[ti] || "" : "",
+      user: ui >= 0 ? r[ui] || "" : "",
+      role: ri >= 0 ? r[ri] || "" : "",
+      action: ai >= 0 ? r[ai] || "" : "",
+      order: oi >= 0 ? r[oi] || "" : "",
+      details: di >= 0 ? r[di] || "" : "",
+    }));
+    rows.reverse(); // newest first
+    return rows;
+  } catch (e) {
+    console.error("[activity] failed to list:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
