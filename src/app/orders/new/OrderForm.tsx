@@ -43,6 +43,7 @@ export default function OrderForm() {
   const [error, setError] = useState<string | null>(null);
 
   const [orderNumber, setOrderNumber] = useState("");
+  const [subDesignNo, setSubDesignNo] = useState("");
   const [regionId, setRegionId] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [notes, setNotes] = useState("");
@@ -292,7 +293,7 @@ export default function OrderForm() {
     e.preventDefault();
     setError(null);
 
-    if (!orderNumber.trim()) return setError("Please enter an order number.");
+    if (!orderNumber.trim()) return setError("Please enter a design number.");
     if (!regionId) return setError("Please choose a region.");
     if (!customerName.trim()) return setError("Please enter the customer name.");
     if (items.some((i) => !i.productType))
@@ -329,6 +330,7 @@ export default function OrderForm() {
     const photoUrls = photos.filter((p) => p.blobUrl).map((p) => p.blobUrl!);
     const payload = {
       orderNumber,
+      subDesignNo,
       region: regionId,
       customerName,
       manufacturer,
@@ -372,12 +374,20 @@ export default function OrderForm() {
         <div className="grid3">
           <div className="field">
             <label>
-              Order Number <span className="req">*</span>
+              Design Number <span className="req">*</span>
             </label>
             <input
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
-              placeholder="Your order number"
+              placeholder="Your design number"
+            />
+          </div>
+          <div className="field">
+            <label>Sub Design No</label>
+            <input
+              value={subDesignNo}
+              onChange={(e) => setSubDesignNo(e.target.value)}
+              placeholder="Optional"
             />
           </div>
           <div className="field">

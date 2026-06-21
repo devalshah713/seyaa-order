@@ -11,6 +11,7 @@ type IncomingItem = {
 };
 type IncomingOrder = {
   orderNumber: string;
+  subDesignNo?: string;
   region: string;
   customerName: string;
   manufacturer?: string;
@@ -54,7 +55,12 @@ export async function GET(req: NextRequest) {
         }
       }
       return NextResponse.json({
-        order: { orderNumber: order.orderNumber, manufacturer: order.manufacturer || "", demandLines },
+        order: {
+          orderNumber: order.orderNumber,
+          subDesignNo: order.subDesignNo || "",
+          manufacturer: order.manufacturer || "",
+          demandLines,
+        },
       });
     }
     const orders = await listOrders();
@@ -177,6 +183,7 @@ export async function POST(req: NextRequest) {
 
   const order: NewOrder = {
     orderNumber,
+    subDesignNo: (body.subDesignNo || "").trim(),
     region: body.region,
     customerName: body.customerName.trim(),
     manufacturer: body.manufacturer || "",

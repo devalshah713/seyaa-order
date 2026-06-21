@@ -24,6 +24,7 @@ export type ProductInput = {
 };
 export type NewOrder = {
   orderNumber: string;
+  subDesignNo: string;
   region: string;
   customerName: string;
   manufacturer: string;
@@ -42,6 +43,7 @@ export type OrderItem = {
 };
 export type Order = {
   orderNumber: string;
+  subDesignNo: string;
   date: string;
   status: string;
   region: string;
@@ -96,6 +98,8 @@ function buildRow(
     switch (header) {
       case "Order Number":
         return order.orderNumber;
+      case "Sub Design No":
+        return order.subDesignNo;
       case "Date":
       case "Status":
         return "";
@@ -168,6 +172,7 @@ function groupOrders(objs: Record<string, string>[]): Order[] {
     if (!byOrder.has(num)) {
       byOrder.set(num, {
         orderNumber: num,
+        subDesignNo: r["Sub Design No"] || "",
         date: r["Date"] || "",
         status: r["Status"] || "NEW",
         region: r["Region"] || "",

@@ -58,6 +58,7 @@ export default function DiamondIssueForm() {
       const res = await fetch(`/api/orders?id=${encodeURIComponent(orderNumber)}`);
       const data = res.ok ? await res.json() : null;
       if (data?.order?.manufacturer) setFactory(data.order.manufacturer);
+      if (data?.order?.subDesignNo) setSubDesignNo(data.order.subDesignNo);
       const demand: Array<{
         product: string;
         shape: string;

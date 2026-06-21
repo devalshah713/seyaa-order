@@ -61,6 +61,9 @@ export const DIAMOND_FIELD_NAMES = DIAMOND_FIELDS.map((f) => f.name);
 // Google Sheet column order. One row per diamond block; products without
 // diamonds get a single row with the diamond columns left blank. "Item No"
 // distinguishes separate products within the same order.
+// "Order Number" stays the underlying key (auto-numbering, status updates and
+// the Diamond Issue link all reference it); the UI labels it "Design Number".
+// "Sub Design No" is appended at the end so existing rows stay aligned.
 export const SHEET_HEADERS = [
   "Order Number",
   "Item No",
@@ -75,6 +78,7 @@ export const SHEET_HEADERS = [
   ...DIAMOND_FIELD_NAMES,
   "Notes",
   "Photos",
+  "Sub Design No",
 ];
 
 export const ORDER_STATUSES = [

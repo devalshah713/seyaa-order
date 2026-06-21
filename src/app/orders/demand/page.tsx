@@ -65,7 +65,7 @@ export default async function DiamondDemandPage({
             </div>
           </div>
           <div className="demand-meta">
-            <div><span>Order No:</span> <b>{order.orderNumber}</b></div>
+            <div><span>Design No:</span> <b>{order.orderNumber}</b></div>
             <div><span>Date:</span> {formatDate(order.date) || "—"}</div>
             <div><span>Manufacturer:</span> <b>{order.manufacturer || "—"}</b></div>
             <div><span>Customer:</span> {order.customerName}</div>

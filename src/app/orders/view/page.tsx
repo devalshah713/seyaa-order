@@ -45,6 +45,10 @@ export default async function OrderDetailPage({
             <div className="muted">Customer</div>
             <div style={{ fontWeight: 600 }}>{order.customerName}</div>
             <div className="muted" style={{ marginTop: 8 }}>
+              Sub Design No
+            </div>
+            <div style={{ fontWeight: 600 }}>{order.subDesignNo || "—"}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
               Manufacturer
             </div>
             <div style={{ fontWeight: 600 }}>{order.manufacturer || "—"}</div>

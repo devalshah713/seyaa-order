@@ -55,7 +55,7 @@ export default async function HomePage({
       </div>
 
       <form className="filters no-print" method="get">
-        <input name="q" placeholder="Search order # or customer…" defaultValue={q || ""} />
+        <input name="q" placeholder="Search design # or customer…" defaultValue={q || ""} />
         <select name="region" defaultValue={region || ""}>
           <option value="">All regions</option>
           {REGIONS.map((r) => (
@@ -91,7 +91,7 @@ export default async function HomePage({
         <table>
           <thead>
             <tr>
-              <th>Order #</th>
+              <th>Design #</th>
               <th>Customer</th>
               <th>Region</th>
               <th>Products</th>
