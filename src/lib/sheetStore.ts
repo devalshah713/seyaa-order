@@ -25,6 +25,7 @@ export type ProductInput = {
 export type NewOrder = {
   orderNumber: string;
   subDesignNo: string;
+  date: string; // order date as picked (yyyy-mm-dd); blank = auto-stamped now
   region: string;
   customerName: string;
   manufacturer: string;
@@ -101,6 +102,9 @@ function buildRow(
       case "Sub Design No":
         return order.subDesignNo;
       case "Date":
+        // If the user picked a date, keep it; otherwise leave blank so the
+        // Apps Script auto-stamps the current date/time.
+        return order.date || "";
       case "Status":
         return "";
       case "Item No":

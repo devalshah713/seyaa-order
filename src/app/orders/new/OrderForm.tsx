@@ -44,6 +44,7 @@ export default function OrderForm() {
 
   const [orderNumber, setOrderNumber] = useState("");
   const [subDesignNo, setSubDesignNo] = useState("");
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [regionId, setRegionId] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [notes, setNotes] = useState("");
@@ -331,6 +332,7 @@ export default function OrderForm() {
     const payload = {
       orderNumber,
       subDesignNo,
+      date: orderDate,
       region: regionId,
       customerName,
       manufacturer,
@@ -389,6 +391,10 @@ export default function OrderForm() {
               onChange={(e) => setSubDesignNo(e.target.value)}
               placeholder="Optional"
             />
+          </div>
+          <div className="field">
+            <label>Order Date</label>
+            <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
           </div>
           <div className="field">
             <label>

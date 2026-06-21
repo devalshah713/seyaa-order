@@ -12,6 +12,7 @@ type IncomingItem = {
 type IncomingOrder = {
   orderNumber: string;
   subDesignNo?: string;
+  date?: string;
   region: string;
   customerName: string;
   manufacturer?: string;
@@ -184,6 +185,7 @@ export async function POST(req: NextRequest) {
   const order: NewOrder = {
     orderNumber,
     subDesignNo: (body.subDesignNo || "").trim(),
+    date: (body.date || "").trim(),
     region: body.region,
     customerName: body.customerName.trim(),
     manufacturer: body.manufacturer || "",
