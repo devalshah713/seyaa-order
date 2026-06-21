@@ -28,6 +28,7 @@ export async function PATCH(req: NextRequest) {
       memoNo,
       status,
       receivedDate,
+      comments: body.comments != null ? String(body.comments) : undefined,
       used: used.map((u: { ctsUsed?: string; pcsUsed?: string }) => ({
         ctsUsed: String(u?.ctsUsed ?? ""),
         pcsUsed: String(u?.pcsUsed ?? ""),
@@ -113,6 +114,8 @@ export async function POST(req: NextRequest) {
     designNumber: String(body.designNumber).trim(),
     subDesignNo: String(body.subDesignNo || "").trim(),
     factory: String(body.factory || ""),
+    date: String(body.date || ""),
+    comments: String(body.comments || ""),
     lines,
   };
 

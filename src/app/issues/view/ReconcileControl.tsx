@@ -15,11 +15,13 @@ export default function ReconcileControl({
   memoNo,
   currentStatus,
   receivedDate,
+  comments,
   lines,
 }: {
   memoNo: string;
   currentStatus: string;
   receivedDate: string;
+  comments: string;
   lines: LineInput[];
 }) {
   const router = useRouter();
@@ -29,6 +31,7 @@ export default function ReconcileControl({
 
   const [status, setStatus] = useState(currentStatus === "ISSUED" ? "RECEIVED" : currentStatus);
   const [received, setReceived] = useState(receivedDate || "");
+  const [note, setNote] = useState(comments || "");
   const [used, setUsed] = useState(
     lines.map((ln) => ({ ctsUsed: ln.diaCtsUsed, pcsUsed: ln.diaPcsUsed }))
   );
@@ -43,7 +46,7 @@ export default function ReconcileControl({
     const res = await fetch("/api/issues", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ memoNo, status, receivedDate: received, used }),
+      body: JSON.stringify({ memoNo, status, receivedDate: received, comments: note, used }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -136,6 +139,16 @@ export default function ReconcileControl({
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="field" style={{ marginTop: 12 }}>
+        <label>Comments</label>
+        <textarea
+          rows={3}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Any notes about the return — variances, remarks, etc."
+        />
       </div>
 
       <div className="row" style={{ marginTop: 12 }}>

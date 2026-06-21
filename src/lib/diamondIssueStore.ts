@@ -25,6 +25,8 @@ export type NewIssue = {
   designNumber: string;
   subDesignNo: string;
   factory: string;
+  date: string; // issue date as picked (yyyy-mm-dd); blank = today
+  comments: string;
   lines: IssueLine[]; // each line's values may include "Product"
 };
 
@@ -45,6 +47,7 @@ export type Issue = {
   status: string;
   receivedDate: string;
   factory: string;
+  comments: string;
   additionOfTotalPrice: string;
   averagePrice: string;
   lines: IssueLineView[];
@@ -67,6 +70,7 @@ function buildRows(issue: {
   designNumber: string;
   subDesignNo: string;
   factory: string;
+  comments: string;
   status: string;
   receivedDate: string;
   lines: IssueLine[];
@@ -120,6 +124,8 @@ function buildRows(issue: {
           return issue.receivedDate;
         case "Factory":
           return issue.factory;
+        case "Comments":
+          return i === 0 ? issue.comments : "";
       }
       if (ISSUE_LINE_FIELD_NAMES.includes(header)) return ln.values[header] ?? "";
       return "";
@@ -129,15 +135,22 @@ function buildRows(issue: {
   });
 }
 
-// Create a brand-new issue (status ISSUED, date = today).
+// Format the picked issue date (yyyy-mm-dd) as dd/mm/yyyy; blank = today.
+function formatIssueDate(d: string): string {
+  if (!d) return new Date().toLocaleDateString("en-GB");
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : d;
+}
+
+// Create a brand-new issue (status ISSUED).
 export async function createIssue(issue: NewIssue): Promise<string> {
-  const today = new Date().toLocaleDateString("en-GB"); // dd/mm/yyyy
   const rows = buildRows({
     memoNo: issue.memoNo,
-    date: today,
+    date: formatIssueDate(issue.date),
     designNumber: issue.designNumber,
     subDesignNo: issue.subDesignNo,
     factory: issue.factory,
+    comments: issue.comments,
     status: "ISSUED",
     receivedDate: "",
     lines: issue.lines,
@@ -179,12 +192,14 @@ function groupIssues(objs: Record<string, string>[]): Issue[] {
         status: r["Status"] || "ISSUED",
         receivedDate: r["Received date"] || "",
         factory: r["Factory"] || "",
+        comments: "",
         additionOfTotalPrice: "",
         averagePrice: "",
         lines: [],
       });
     }
     const issue = byMemo.get(memo)!;
+    if (!issue.comments && r["Comments"]) issue.comments = r["Comments"];
     // Product is per row; show the distinct set on the memo header.
     if (r["Product"] && !issue.product.split(", ").includes(r["Product"])) {
       issue.product = issue.product ? `${issue.product}, ${r["Product"]}` : r["Product"];
@@ -232,6 +247,7 @@ export type ReconcileInput = {
   memoNo: string;
   status: string;
   receivedDate: string;
+  comments?: string;
   used: { ctsUsed: string; pcsUsed: string }[]; // aligned to line order
 };
 
@@ -251,6 +267,7 @@ export async function reconcileIssue(input: ReconcileInput): Promise<void> {
     designNumber: existing.designNumber,
     subDesignNo: existing.subDesignNo,
     factory: existing.factory,
+    comments: input.comments ?? existing.comments,
     status: input.status,
     receivedDate: input.receivedDate,
     lines,

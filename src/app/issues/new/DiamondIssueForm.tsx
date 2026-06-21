@@ -24,10 +24,13 @@ export default function DiamondIssueForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const today = new Date().toISOString().slice(0, 10); // yyyy-mm-dd
   const [designNumber, setDesignNumber] = useState("");
   const [subDesignNo, setSubDesignNo] = useState("");
   const [memoNo, setMemoNo] = useState("");
   const [factory, setFactory] = useState("");
+  const [issueDate, setIssueDate] = useState(today);
+  const [comments, setComments] = useState("");
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [loadingDemand, setLoadingDemand] = useState(false);
 
@@ -237,6 +240,8 @@ export default function DiamondIssueForm() {
       designNumber,
       subDesignNo,
       factory,
+      date: issueDate,
+      comments,
       lines: filled.map((ln) => ({ values: ln.values })),
     };
 
@@ -302,6 +307,10 @@ export default function DiamondIssueForm() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="field">
+            <label>Issue Date</label>
+            <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
           </div>
         </div>
       </div>
@@ -451,6 +460,18 @@ export default function DiamondIssueForm() {
         <div className="row spread" style={{ marginTop: 4 }}>
           <span className="muted">Average Price (per carat)</span>
           <span className="muted">{averagePrice || 0}</span>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="field">
+          <label>Comments</label>
+          <textarea
+            rows={3}
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
+            placeholder="Any notes about this issue — special instructions, remarks, etc."
+          />
         </div>
       </div>
 

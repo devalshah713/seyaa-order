@@ -101,10 +101,18 @@ export default async function IssueDetailPage({
         </table>
       </div>
 
+      {issue.comments && (
+        <div className="card">
+          <div className="muted">Comments</div>
+          <div style={{ whiteSpace: "pre-wrap" }}>{issue.comments}</div>
+        </div>
+      )}
+
       <ReconcileControl
         memoNo={issue.memoNo}
         currentStatus={issue.status}
         receivedDate={issue.receivedDate}
+        comments={issue.comments}
         lines={issue.lines.map((ln) => ({
           label:
             (ln.values["Diamond Shape"] || "Line") +

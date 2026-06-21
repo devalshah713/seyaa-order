@@ -34,6 +34,7 @@ export const DIAMOND_ISSUE_HEADERS = [
   "Status",
   "Received date",
   "Factory",
+  "Comments",
 ] as const;
 
 export const CVD_HPHT_OPTIONS = ["CVD", "HPHT"];
