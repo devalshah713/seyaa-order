@@ -67,6 +67,12 @@ async function call<T>(payload: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+// Shared so other stores (e.g. the Diamond Issue tracker) can talk to the same
+// Apps Script Web App without duplicating the fetch/token plumbing.
+export async function sheetCall<T>(payload: Record<string, unknown>): Promise<T> {
+  return call<T>(payload);
+}
+
 // Google Sheets treats a cell value starting with = + - @ as a formula,
 // which breaks values like the round sieve sizes ("+1-1.5 · 1.15 MM …").
 // A leading apostrophe forces Sheets to store it as plain text (the
