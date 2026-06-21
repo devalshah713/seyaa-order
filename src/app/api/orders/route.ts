@@ -13,6 +13,7 @@ type IncomingOrder = {
   orderNumber: string;
   subDesignNo?: string;
   date?: string;
+  productionFinishDate?: string;
   region: string;
   customerName: string;
   manufacturer?: string;
@@ -186,6 +187,7 @@ export async function POST(req: NextRequest) {
     orderNumber,
     subDesignNo: (body.subDesignNo || "").trim(),
     date: (body.date || "").trim(),
+    productionFinishDate: (body.productionFinishDate || "").trim(),
     region: body.region,
     customerName: body.customerName.trim(),
     manufacturer: body.manufacturer || "",

@@ -26,6 +26,7 @@ export type NewOrder = {
   orderNumber: string;
   subDesignNo: string;
   date: string; // order date as picked (yyyy-mm-dd); blank = auto-stamped now
+  productionFinishDate: string;
   region: string;
   customerName: string;
   manufacturer: string;
@@ -46,6 +47,7 @@ export type Order = {
   orderNumber: string;
   subDesignNo: string;
   date: string;
+  productionFinishDate: string;
   status: string;
   region: string;
   customerName: string;
@@ -101,6 +103,8 @@ function buildRow(
         return order.orderNumber;
       case "Sub Design No":
         return order.subDesignNo;
+      case "Production Finish Date":
+        return order.productionFinishDate;
       case "Date":
         // If the user picked a date, keep it; otherwise leave blank so the
         // Apps Script auto-stamps the current date/time.
@@ -178,6 +182,7 @@ function groupOrders(objs: Record<string, string>[]): Order[] {
         orderNumber: num,
         subDesignNo: r["Sub Design No"] || "",
         date: r["Date"] || "",
+        productionFinishDate: r["Production Finish Date"] || "",
         status: r["Status"] || "NEW",
         region: r["Region"] || "",
         customerName: r["Customer Name"] || "",

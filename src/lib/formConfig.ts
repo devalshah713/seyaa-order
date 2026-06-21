@@ -79,6 +79,7 @@ export const SHEET_HEADERS = [
   "Notes",
   "Photos",
   "Sub Design No",
+  "Production Finish Date",
 ];
 
 export const ORDER_STATUSES = [

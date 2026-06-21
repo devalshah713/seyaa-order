@@ -45,6 +45,7 @@ export default function OrderForm() {
   const [orderNumber, setOrderNumber] = useState("");
   const [subDesignNo, setSubDesignNo] = useState("");
   const [orderDate, setOrderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [productionFinishDate, setProductionFinishDate] = useState("");
   const [regionId, setRegionId] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [notes, setNotes] = useState("");
@@ -333,6 +334,7 @@ export default function OrderForm() {
       orderNumber,
       subDesignNo,
       date: orderDate,
+      productionFinishDate,
       region: regionId,
       customerName,
       manufacturer,
@@ -395,6 +397,14 @@ export default function OrderForm() {
           <div className="field">
             <label>Order Date</label>
             <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Production Finish Date</label>
+            <input
+              type="date"
+              value={productionFinishDate}
+              onChange={(e) => setProductionFinishDate(e.target.value)}
+            />
           </div>
           <div className="field">
             <label>

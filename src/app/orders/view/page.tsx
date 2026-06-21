@@ -68,6 +68,10 @@ export default async function OrderDetailPage({
               Date
             </div>
             <div style={{ fontWeight: 600 }}>{formatDate(order.date) || "—"}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              Production Finish Date
+            </div>
+            <div style={{ fontWeight: 600 }}>{formatDate(order.productionFinishDate) || "—"}</div>
           </div>
         </div>
       </div>
