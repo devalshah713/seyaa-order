@@ -30,6 +30,26 @@ export default function DiamondIssueForm() {
   const [memoNo, setMemoNo] = useState("");
   const [lines, setLines] = useState<Line[]>([blankLine()]);
 
+  // Existing orders. The Order Number doubles as the Design Number, so picking
+  // an order here links the whole journey and auto-fills the product.
+  type OrderOption = { orderNumber: string; customerName: string; product: string };
+  const [orders, setOrders] = useState<OrderOption[]>([]);
+
+  useEffect(() => {
+    fetch("/api/orders")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d?.orders)) setOrders(d.orders);
+      })
+      .catch(() => {});
+  }, []);
+
+  function pickOrder(orderNumber: string) {
+    setDesignNumber(orderNumber);
+    const o = orders.find((x) => x.orderNumber === orderNumber);
+    if (o && o.product) setProduct(o.product);
+  }
+
   // Staff-added sizes, keyed by shape (shared with the order form's list).
   const [customSizes, setCustomSizes] = useState<Record<string, string[]>>({});
   const [sizeForm, setSizeForm] = useState<{
@@ -162,7 +182,7 @@ export default function DiamondIssueForm() {
     setError(null);
 
     if (!memoNo.trim()) return setError("Please enter a Memo No.");
-    if (!designNumber.trim()) return setError("Please enter a Design Number.");
+    if (!designNumber.trim()) return setError("Please select the order / design number.");
 
     const filled = lines.filter((ln) => ln.values["Diamond Shape"]);
     if (!filled.length) return setError("Add at least one diamond line with a shape.");
@@ -217,9 +237,22 @@ export default function DiamondIssueForm() {
           </div>
           <div className="field">
             <label>
-              Design Number <span className="req">*</span>
+              Design Number (Order) <span className="req">*</span>
             </label>
-            <input value={designNumber} onChange={(e) => setDesignNumber(e.target.value)} />
+            <select value={designNumber} onChange={(e) => pickOrder(e.target.value)}>
+              <option value="">
+                {orders.length ? "Select an order…" : "Loading orders…"}
+              </option>
+              {orders.map((o) => (
+                <option key={o.orderNumber} value={o.orderNumber}>
+                  {o.orderNumber}
+                  {o.customerName ? ` — ${o.customerName}` : ""}
+                </option>
+              ))}
+            </select>
+            <span className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              The order number is the design number for the whole journey.
+            </span>
           </div>
           <div className="field">
             <label>Sub Design No</label>

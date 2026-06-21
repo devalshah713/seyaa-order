@@ -19,6 +19,25 @@ type IncomingOrder = {
   items: IncomingItem[];
 };
 
+export const dynamic = "force-dynamic";
+
+// Slim list of existing orders, used to populate the "pick an order" dropdown
+// on the Diamond Issue form (Order Number doubles as the Design Number).
+export async function GET() {
+  try {
+    const orders = await listOrders();
+    return NextResponse.json({
+      orders: orders.map((o) => ({
+        orderNumber: o.orderNumber,
+        customerName: o.customerName,
+        product: o.items.map((i) => i.productType).filter(Boolean)[0] || "",
+      })),
+    });
+  } catch {
+    return NextResponse.json({ orders: [] });
+  }
+}
+
 // Update an order's status. Order number comes in the body so it works
 // regardless of any spaces/symbols in the number.
 export async function PATCH(req: NextRequest) {
