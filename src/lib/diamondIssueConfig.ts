@@ -39,6 +39,49 @@ export const DIAMOND_ISSUE_HEADERS = [
 
 export const CVD_HPHT_OPTIONS = ["CVD", "HPHT"];
 
+// Exact column order of the owner-supplied export template
+// ("Diamond Issue to Manufacturer.xlsx"). This is the first 21 columns of
+// DIAMOND_ISSUE_HEADERS — the app-only "Factory" / "Comments" columns are
+// intentionally NOT part of the export template. Kept as its own constant so
+// the export never shifts if more internal columns are appended later.
+export const DIAMOND_ISSUE_EXPORT_HEADERS = [
+  "Date",
+  "Design Number",
+  "Sub Design No",
+  "Product",
+  "Diamond Shape",
+  "SETTING",
+  "Certi No.",
+  "Diamond Size",
+  "Diamond Pcs",
+  "Diamond Carats",
+  "Cvd/Hpht",
+  "Price",
+  "Memo No.",
+  "Dia Cts Used",
+  "Dia Pcs Used",
+  "Difference Dia Used",
+  "Total Price",
+  "Addition of Total Price",
+  "Average Price",
+  "Status",
+  "Received date",
+] as const;
+
+// Columns in the export that should be written as numbers (not text) when the
+// stored value is a clean number, so the spreadsheet stays usable for sums.
+export const DIAMOND_ISSUE_EXPORT_NUMERIC = new Set<string>([
+  "Diamond Pcs",
+  "Diamond Carats",
+  "Price",
+  "Dia Cts Used",
+  "Dia Pcs Used",
+  "Difference Dia Used",
+  "Total Price",
+  "Addition of Total Price",
+  "Average Price",
+]);
+
 // Fields entered once per memo (the "issue" header).
 export const ISSUE_HEADER_FIELDS: Field[] = [
   { name: "Design Number", inputType: "TEXT", required: true },

@@ -47,6 +47,9 @@ export default async function IssuesPage({
           </p>
         </div>
         <div className="row">
+          <Link href="/issues/export" className="btn ghost">
+            Export to Excel
+          </Link>
           <Link href="/audit?module=Diamond%20Issue" className="btn ghost">
             Audit Trail
           </Link>

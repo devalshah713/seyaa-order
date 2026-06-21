@@ -8,6 +8,8 @@ import { sheetCall } from "./sheetStore";
 import {
   DIAMOND_ISSUE_TAB,
   DIAMOND_ISSUE_HEADERS,
+  DIAMOND_ISSUE_EXPORT_HEADERS,
+  DIAMOND_ISSUE_EXPORT_NUMERIC,
   ISSUE_LINE_FIELD_NAMES,
   parseNum,
   round2,
@@ -239,6 +241,82 @@ export async function listIssues(): Promise<Issue[]> {
 export async function getIssue(memoNo: string): Promise<Issue | null> {
   const all = await listIssues();
   return all.find((i) => i.memoNo === memoNo) || null;
+}
+
+// Distinct design numbers that actually have diamond issues, each with a count
+// of memos and diamond lines — used to populate the export picker.
+export type DesignSummary = { designNumber: string; memos: number; lines: number };
+export async function listIssuedDesigns(): Promise<DesignSummary[]> {
+  const issues = await listIssues();
+  const byDesign = new Map<string, DesignSummary>();
+  for (const i of issues) {
+    const d = i.designNumber || "(no design)";
+    const s = byDesign.get(d) || { designNumber: d, memos: 0, lines: 0 };
+    s.memos += 1;
+    s.lines += i.lines.length;
+    byDesign.set(d, s);
+  }
+  return Array.from(byDesign.values()).sort((a, b) =>
+    a.designNumber.localeCompare(b.designNumber, undefined, { numeric: true })
+  );
+}
+
+// Build the export rows (one per diamond line) in the fixed template column
+// order for the selected design numbers. Memo-level totals (Addition / Average)
+// sit on each memo's first row only, exactly as in the sheet. Each value is a
+// string or, for the numeric columns, a number when it is a clean number.
+export async function buildExportRows(
+  designNumbers: string[]
+): Promise<(string | number | null)[][]> {
+  const want = new Set(designNumbers);
+  const issues = await listIssues();
+  const selected = issues
+    .filter((i) => want.has(i.designNumber || "(no design)"))
+    // Group output by design, then by memo, for a tidy, readable export.
+    .sort((a, b) => {
+      const d = (a.designNumber || "").localeCompare(b.designNumber || "", undefined, { numeric: true });
+      return d !== 0 ? d : a.memoNo.localeCompare(b.memoNo, undefined, { numeric: true });
+    });
+
+  const num = (v: string): string | number | null => {
+    if (v == null || v === "") return null;
+    return /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v;
+  };
+
+  const rows: (string | number | null)[][] = [];
+  for (const issue of selected) {
+    issue.lines.forEach((ln, i) => {
+      const cell: Record<string, string> = {
+        "Date": issue.date,
+        "Design Number": issue.designNumber,
+        "Sub Design No": issue.subDesignNo,
+        "Product": ln.values["Product"] || "",
+        "Diamond Shape": ln.values["Diamond Shape"] || "",
+        "SETTING": ln.values["SETTING"] || "",
+        "Certi No.": ln.values["Certi No."] || "",
+        "Diamond Size": ln.values["Diamond Size"] || "",
+        "Diamond Pcs": ln.values["Diamond Pcs"] || "",
+        "Diamond Carats": ln.values["Diamond Carats"] || "",
+        "Cvd/Hpht": ln.values["Cvd/Hpht"] || "",
+        "Price": ln.values["Price"] || "",
+        "Memo No.": issue.memoNo,
+        "Dia Cts Used": ln.diaCtsUsed || "",
+        "Dia Pcs Used": ln.diaPcsUsed || "",
+        "Difference Dia Used": ln.differenceDiaUsed || "",
+        "Total Price": ln.totalPrice || "",
+        "Addition of Total Price": i === 0 ? issue.additionOfTotalPrice : "",
+        "Average Price": i === 0 ? issue.averagePrice : "",
+        "Status": issue.status,
+        "Received date": issue.receivedDate,
+      };
+      rows.push(
+        DIAMOND_ISSUE_EXPORT_HEADERS.map((h) =>
+          DIAMOND_ISSUE_EXPORT_NUMERIC.has(h) ? num(cell[h]) : cell[h] || null
+        )
+      );
+    });
+  }
+  return rows;
 }
 
 // Apply reconciliation (used carats/pcs per line + status + received date) and
