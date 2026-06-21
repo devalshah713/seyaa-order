@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
         }
       }
       return NextResponse.json({
-        order: { orderNumber: order.orderNumber, demandLines },
+        order: { orderNumber: order.orderNumber, manufacturer: order.manufacturer || "", demandLines },
       });
     }
     const orders = await listOrders();

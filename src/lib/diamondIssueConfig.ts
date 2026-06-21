@@ -3,9 +3,9 @@
 // Google Sheet. One issue = one Memo No., which can have several diamond
 // lines (like an order with several items). Each diamond line becomes one
 // row; memo-level totals are written on the memo's first row only.
-import { SHAPE_OPTIONS, DIAMOND_SIZES_BY_SHAPE, Field, PRODUCT_TYPES } from "./formConfig";
+import { SHAPE_OPTIONS, DIAMOND_SIZES_BY_SHAPE, Field, PRODUCT_TYPES, MANUFACTURERS } from "./formConfig";
 
-export { SHAPE_OPTIONS, DIAMOND_SIZES_BY_SHAPE, PRODUCT_TYPES };
+export { SHAPE_OPTIONS, DIAMOND_SIZES_BY_SHAPE, PRODUCT_TYPES, MANUFACTURERS };
 
 // Sheet tab name (must match the Apps Script / Google Sheet tab).
 export const DIAMOND_ISSUE_TAB = "Diamond Issue";
@@ -33,6 +33,7 @@ export const DIAMOND_ISSUE_HEADERS = [
   "Average Price",
   "Status",
   "Received date",
+  "Factory",
 ] as const;
 
 export const CVD_HPHT_OPTIONS = ["CVD", "HPHT"];

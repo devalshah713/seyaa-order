@@ -7,6 +7,7 @@ import OrderCombobox, { OrderOption } from "./OrderCombobox";
 import {
   ISSUE_LINE_FIELDS,
   DIAMOND_SIZES_BY_SHAPE,
+  MANUFACTURERS,
   parseNum,
   round2,
 } from "@/lib/diamondIssueConfig";
@@ -26,6 +27,7 @@ export default function DiamondIssueForm() {
   const [designNumber, setDesignNumber] = useState("");
   const [subDesignNo, setSubDesignNo] = useState("");
   const [memoNo, setMemoNo] = useState("");
+  const [factory, setFactory] = useState("");
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [loadingDemand, setLoadingDemand] = useState(false);
 
@@ -52,6 +54,7 @@ export default function DiamondIssueForm() {
     try {
       const res = await fetch(`/api/orders?id=${encodeURIComponent(orderNumber)}`);
       const data = res.ok ? await res.json() : null;
+      if (data?.order?.manufacturer) setFactory(data.order.manufacturer);
       const demand: Array<{
         product: string;
         shape: string;
@@ -233,6 +236,7 @@ export default function DiamondIssueForm() {
       memoNo,
       designNumber,
       subDesignNo,
+      factory,
       lines: filled.map((ln) => ({ values: ln.values })),
     };
 
@@ -287,6 +291,17 @@ export default function DiamondIssueForm() {
           <div className="field">
             <label>Sub Design No</label>
             <input value={subDesignNo} onChange={(e) => setSubDesignNo(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Factory (issued to)</label>
+            <select value={factory} onChange={(e) => setFactory(e.target.value)}>
+              <option value="">Select factory…</option>
+              {MANUFACTURERS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

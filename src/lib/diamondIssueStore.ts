@@ -24,6 +24,7 @@ export type NewIssue = {
   memoNo: string;
   designNumber: string;
   subDesignNo: string;
+  factory: string;
   lines: IssueLine[]; // each line's values may include "Product"
 };
 
@@ -43,6 +44,7 @@ export type Issue = {
   product: string;
   status: string;
   receivedDate: string;
+  factory: string;
   additionOfTotalPrice: string;
   averagePrice: string;
   lines: IssueLineView[];
@@ -64,6 +66,7 @@ function buildRows(issue: {
   date: string;
   designNumber: string;
   subDesignNo: string;
+  factory: string;
   status: string;
   receivedDate: string;
   lines: IssueLine[];
@@ -115,6 +118,8 @@ function buildRows(issue: {
           return issue.status;
         case "Received date":
           return issue.receivedDate;
+        case "Factory":
+          return issue.factory;
       }
       if (ISSUE_LINE_FIELD_NAMES.includes(header)) return ln.values[header] ?? "";
       return "";
@@ -132,6 +137,7 @@ export async function createIssue(issue: NewIssue): Promise<string> {
     date: today,
     designNumber: issue.designNumber,
     subDesignNo: issue.subDesignNo,
+    factory: issue.factory,
     status: "ISSUED",
     receivedDate: "",
     lines: issue.lines,
@@ -172,6 +178,7 @@ function groupIssues(objs: Record<string, string>[]): Issue[] {
         product: "",
         status: r["Status"] || "ISSUED",
         receivedDate: r["Received date"] || "",
+        factory: r["Factory"] || "",
         additionOfTotalPrice: "",
         averagePrice: "",
         lines: [],
@@ -243,6 +250,7 @@ export async function reconcileIssue(input: ReconcileInput): Promise<void> {
     date: existing.date,
     designNumber: existing.designNumber,
     subDesignNo: existing.subDesignNo,
+    factory: existing.factory,
     status: input.status,
     receivedDate: input.receivedDate,
     lines,

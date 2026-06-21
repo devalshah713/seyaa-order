@@ -39,11 +39,13 @@ export default async function IssueDetailPage({
               {issue.designNumber || "—"}
               {issue.subDesignNo ? ` / ${issue.subDesignNo}` : ""}
             </div>
-            <div className="muted" style={{ marginTop: 8 }}>Product</div>
-            <div style={{ fontWeight: 600 }}>{issue.product || "—"}</div>
+            <div className="muted" style={{ marginTop: 8 }}>Factory (issued to)</div>
+            <div style={{ fontWeight: 600 }}>{issue.factory || "—"}</div>
           </div>
           <div>
-            <div className="muted">Issue Date</div>
+            <div className="muted">Product</div>
+            <div style={{ fontWeight: 600 }}>{issue.product || "—"}</div>
+            <div className="muted" style={{ marginTop: 8 }}>Issue Date</div>
             <div style={{ fontWeight: 600 }}>{issue.date || "—"}</div>
             <div className="muted" style={{ marginTop: 8 }}>Received Date</div>
             <div style={{ fontWeight: 600 }}>{issue.receivedDate || "—"}</div>

@@ -82,6 +82,7 @@ export default async function IssuesPage({
             <tr>
               <th>Memo #</th>
               <th>Design</th>
+              <th>Factory</th>
               <th>Product</th>
               <th>Lines</th>
               <th>Total Price</th>
@@ -103,6 +104,7 @@ export default async function IssuesPage({
                     {i.subDesignNo ? ` / ${i.subDesignNo}` : ""}
                   </Link>
                 </td>
+                <td>{i.factory || "—"}</td>
                 <td className="muted">{i.product || "—"}</td>
                 <td className="muted">{i.lines.length}</td>
                 <td>{i.additionOfTotalPrice || "—"}</td>
