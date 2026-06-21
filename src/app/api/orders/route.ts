@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendOrder, listOrders, updateStatus, isStorageConfigured, logActivity, NewOrder, ProductInput } from "@/lib/sheetStore";
+import { appendOrder, listOrders, getOrder, updateStatus, isStorageConfigured, logActivity, NewOrder, ProductInput } from "@/lib/sheetStore";
 import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS, ORDER_STATUSES } from "@/lib/formConfig";
 import { getCurrentUser } from "@/lib/currentUser";
 
@@ -21,10 +21,42 @@ type IncomingOrder = {
 
 export const dynamic = "force-dynamic";
 
-// Slim list of existing orders, used to populate the "pick an order" dropdown
-// on the Diamond Issue form (Order Number doubles as the Design Number).
-export async function GET() {
+// Two modes:
+//  - no params: slim list of orders for the Diamond Issue "pick an order"
+//    dropdown (Order Number doubles as the Design Number).
+//  - ?id=<orderNumber>: the order's estimated diamond demand, so the Diamond
+//    Issue form can pre-fill its lines (editable — actual received may differ).
+export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id");
   try {
+    if (id) {
+      const order = await getOrder(id);
+      if (!order) return NextResponse.json({ order: null });
+      const demandLines = [];
+      for (const it of order.items) {
+        const qty = parseInt(it.quantity, 10) || 1;
+        for (const d of it.diamonds) {
+          const perPiece = parseFloat(d["Number of Diamonds"]) || 0;
+          const pcs = perPiece * qty;
+          // Estimate carats from a size label like "… · 0.07 ct" × total pcs.
+          const m = (d["Diamond Size"] || "").match(/([\d.]+)\s*ct/i);
+          const perCt = m ? parseFloat(m[1]) : 0;
+          const carats = perCt ? Math.round(perCt * pcs * 100) / 100 : 0;
+          demandLines.push({
+            product: it.productType || "",
+            shape: d["Diamond Shape"] || "",
+            size: d["Diamond Size"] || "",
+            pcs: pcs ? String(pcs) : "",
+            stoneType: d["Stone Type"] || "",
+            certiNo: d["Certificate Number"] || "",
+            carats: carats ? String(carats) : "",
+          });
+        }
+      }
+      return NextResponse.json({
+        order: { orderNumber: order.orderNumber, demandLines },
+      });
+    }
     const orders = await listOrders();
     return NextResponse.json({
       orders: orders.map((o) => ({
@@ -34,7 +66,7 @@ export async function GET() {
       })),
     });
   } catch {
-    return NextResponse.json({ orders: [] });
+    return NextResponse.json({ orders: [], order: null });
   }
 }
 

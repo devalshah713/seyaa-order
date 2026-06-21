@@ -62,6 +62,7 @@ export default async function IssueDetailPage({
         <table>
           <thead>
             <tr>
+              <th>Product</th>
               <th>Shape</th>
               <th>Setting</th>
               <th>Certi No.</th>
@@ -79,6 +80,7 @@ export default async function IssueDetailPage({
           <tbody>
             {issue.lines.map((ln, i) => (
               <tr key={i}>
+                <td>{ln.values["Product"] || "—"}</td>
                 <td>{ln.values["Diamond Shape"] || "—"}</td>
                 <td>{ln.values["SETTING"] || "—"}</td>
                 <td>{ln.values["Certi No."] || "—"}</td>

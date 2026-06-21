@@ -24,8 +24,7 @@ export type NewIssue = {
   memoNo: string;
   designNumber: string;
   subDesignNo: string;
-  product: string;
-  lines: IssueLine[];
+  lines: IssueLine[]; // each line's values may include "Product"
 };
 
 // Reconstructed issue for display.
@@ -65,7 +64,6 @@ function buildRows(issue: {
   date: string;
   designNumber: string;
   subDesignNo: string;
-  product: string;
   status: string;
   receivedDate: string;
   lines: IssueLine[];
@@ -99,8 +97,6 @@ function buildRows(issue: {
           return issue.designNumber;
         case "Sub Design No":
           return issue.subDesignNo;
-        case "Product":
-          return issue.product;
         case "Memo No.":
           return issue.memoNo;
         case "Dia Cts Used":
@@ -136,7 +132,6 @@ export async function createIssue(issue: NewIssue): Promise<string> {
     date: today,
     designNumber: issue.designNumber,
     subDesignNo: issue.subDesignNo,
-    product: issue.product,
     status: "ISSUED",
     receivedDate: "",
     lines: issue.lines,
@@ -174,7 +169,7 @@ function groupIssues(objs: Record<string, string>[]): Issue[] {
         date: r["Date"] || "",
         designNumber: r["Design Number"] || "",
         subDesignNo: r["Sub Design No"] || "",
-        product: r["Product"] || "",
+        product: "",
         status: r["Status"] || "ISSUED",
         receivedDate: r["Received date"] || "",
         additionOfTotalPrice: "",
@@ -183,6 +178,10 @@ function groupIssues(objs: Record<string, string>[]): Issue[] {
       });
     }
     const issue = byMemo.get(memo)!;
+    // Product is per row; show the distinct set on the memo header.
+    if (r["Product"] && !issue.product.split(", ").includes(r["Product"])) {
+      issue.product = issue.product ? `${issue.product}, ${r["Product"]}` : r["Product"];
+    }
     // Addition/Average live on the first row; pick them up whenever present.
     if (!issue.additionOfTotalPrice && r["Addition of Total Price"]) {
       issue.additionOfTotalPrice = r["Addition of Total Price"];
@@ -244,7 +243,6 @@ export async function reconcileIssue(input: ReconcileInput): Promise<void> {
     date: existing.date,
     designNumber: existing.designNumber,
     subDesignNo: existing.subDesignNo,
-    product: existing.product,
     status: input.status,
     receivedDate: input.receivedDate,
     lines,

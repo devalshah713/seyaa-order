@@ -41,12 +41,13 @@ export const CVD_HPHT_OPTIONS = ["CVD", "HPHT"];
 export const ISSUE_HEADER_FIELDS: Field[] = [
   { name: "Design Number", inputType: "TEXT", required: true },
   { name: "Sub Design No", inputType: "TEXT" },
-  { name: "Product", inputType: "SELECT", options: PRODUCT_TYPES },
   { name: "Memo No.", inputType: "TEXT", required: true },
 ];
 
-// Fields entered per diamond line at issue time.
+// Fields entered per diamond line at issue time. Product is per line (matching
+// the Excel layout) and is auto-filled from the selected order's items.
 export const ISSUE_LINE_FIELDS: Field[] = [
+  { name: "Product", inputType: "SELECT", options: PRODUCT_TYPES },
   { name: "Diamond Shape", inputType: "SELECT", required: true, options: SHAPE_OPTIONS },
   { name: "SETTING", inputType: "TEXT" },
   { name: "Certi No.", inputType: "TEXT" },

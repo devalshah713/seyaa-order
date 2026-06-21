@@ -112,7 +112,6 @@ export async function POST(req: NextRequest) {
     memoNo,
     designNumber: String(body.designNumber).trim(),
     subDesignNo: String(body.subDesignNo || "").trim(),
-    product: String(body.product || ""),
     lines,
   };
 

@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { Field } from "@/lib/formConfig";
 import OrderCombobox, { OrderOption } from "./OrderCombobox";
 import {
-  ISSUE_HEADER_FIELDS,
   ISSUE_LINE_FIELDS,
-  PRODUCT_TYPES,
   DIAMOND_SIZES_BY_SHAPE,
   parseNum,
   round2,
@@ -27,12 +25,12 @@ export default function DiamondIssueForm() {
 
   const [designNumber, setDesignNumber] = useState("");
   const [subDesignNo, setSubDesignNo] = useState("");
-  const [product, setProduct] = useState("");
   const [memoNo, setMemoNo] = useState("");
   const [lines, setLines] = useState<Line[]>([blankLine()]);
+  const [loadingDemand, setLoadingDemand] = useState(false);
 
   // Existing orders. The Order Number doubles as the Design Number, so picking
-  // an order here links the whole journey and auto-fills the product.
+  // an order links the whole journey and pulls in its estimated diamond demand.
   const [orders, setOrders] = useState<OrderOption[]>([]);
 
   useEffect(() => {
@@ -44,10 +42,46 @@ export default function DiamondIssueForm() {
       .catch(() => {});
   }, []);
 
-  function pickOrder(orderNumber: string) {
+  // When an order is chosen, pre-fill the diamond lines from that order's
+  // estimated demand. Everything stays editable — the actual diamonds issued
+  // and later received can differ in size or weight.
+  async function pickOrder(orderNumber: string) {
     setDesignNumber(orderNumber);
-    const o = orders.find((x) => x.orderNumber === orderNumber);
-    if (o && o.product) setProduct(o.product);
+    if (!orderNumber) return;
+    setLoadingDemand(true);
+    try {
+      const res = await fetch(`/api/orders?id=${encodeURIComponent(orderNumber)}`);
+      const data = res.ok ? await res.json() : null;
+      const demand: Array<{
+        product: string;
+        shape: string;
+        size: string;
+        pcs: string;
+        stoneType: string;
+        certiNo: string;
+        carats: string;
+      }> = data?.order?.demandLines || [];
+      if (demand.length) {
+        setLines(
+          demand.map((d) => ({
+            key: keyCounter++,
+            values: {
+              Product: d.product,
+              "Diamond Shape": d.shape,
+              "Diamond Size": d.size,
+              "Diamond Pcs": d.pcs,
+              "Diamond Carats": d.carats,
+              "Cvd/Hpht": d.stoneType === "CVD" || d.stoneType === "HPHT" ? d.stoneType : "",
+              "Certi No.": d.certiNo,
+            },
+          }))
+        );
+      }
+    } catch {
+      // Leave the existing blank line if demand couldn't be loaded.
+    } finally {
+      setLoadingDemand(false);
+    }
   }
 
   // Staff-added sizes, keyed by shape (shared with the order form's list).
@@ -199,7 +233,6 @@ export default function DiamondIssueForm() {
       memoNo,
       designNumber,
       subDesignNo,
-      product,
       lines: filled.map((ln) => ({ values: ln.values })),
     };
 
@@ -246,30 +279,27 @@ export default function DiamondIssueForm() {
               loading={!orders.length}
             />
             <span className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-              The order number is the design number for the whole journey.
+              {loadingDemand
+                ? "Loading this order's diamond demand…"
+                : "Picking an order is the design number and pre-fills its diamond demand below."}
             </span>
           </div>
           <div className="field">
             <label>Sub Design No</label>
             <input value={subDesignNo} onChange={(e) => setSubDesignNo(e.target.value)} />
           </div>
-          <div className="field">
-            <label>Product</label>
-            <select value={product} onChange={(e) => setProduct(e.target.value)}>
-              <option value="">Select…</option>
-              {PRODUCT_TYPES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
       <div className="card">
         <div className="row spread">
-          <h2>Diamonds Issued</h2>
+          <div>
+            <h2>Diamonds Issued</h2>
+            <p className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+              Pre-filled from the order&apos;s estimated demand — edit any size, pieces
+              or weight to match what was actually issued.
+            </p>
+          </div>
           <button type="button" className="btn ghost small" onClick={() => setLines([...lines, blankLine()])}>
             + Add diamond line
           </button>
