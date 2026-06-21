@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/currentUser";
 import UserMenu from "./UserMenu";
+import NavMenu from "./NavMenu";
 
 export const metadata: Metadata = {
   title: "Seyaa Order Management",
@@ -26,20 +27,10 @@ export default async function RootLayout({
           </Link>
           {user ? (
             <div className="row" style={{ gap: 10 }}>
-              <Link href="/" className="btn ghost small" style={{ color: "#fff", borderColor: "#3f3f46" }}>
-                Orders
-              </Link>
+              <NavMenu isAdmin={user.role === "admin"} />
               <Link href="/orders/new" className="btn gold small">
                 + New Order
               </Link>
-              <Link href="/issues" className="btn ghost small" style={{ color: "#fff", borderColor: "#3f3f46" }}>
-                Diamond Issue
-              </Link>
-              {user.role === "admin" && (
-                <Link href="/admin/team" className="btn ghost small" style={{ color: "#fff", borderColor: "#3f3f46" }}>
-                  Team
-                </Link>
-              )}
               <UserMenu name={user.name} role={user.role} />
             </div>
           ) : null}
