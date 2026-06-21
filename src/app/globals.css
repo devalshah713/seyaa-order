@@ -658,3 +658,70 @@ textarea:focus {
     display: none;
   }
 }
+
+/* Searchable order dropdown (combobox) */
+.combo {
+  position: relative;
+}
+.combo-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: #e7e5e4;
+  color: #44403c;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 15px;
+  padding: 0;
+}
+.combo-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.combo-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f4;
+}
+.combo-item:hover,
+.combo-item.selected {
+  background: var(--gold-soft);
+}
+.combo-num {
+  font-weight: 600;
+}
+.combo-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.combo-empty,
+.combo-more {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.combo-more {
+  border-top: 1px solid #f5f5f4;
+}

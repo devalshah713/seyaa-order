@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Field } from "@/lib/formConfig";
+import OrderCombobox, { OrderOption } from "./OrderCombobox";
 import {
   ISSUE_HEADER_FIELDS,
   ISSUE_LINE_FIELDS,
@@ -32,7 +33,6 @@ export default function DiamondIssueForm() {
 
   // Existing orders. The Order Number doubles as the Design Number, so picking
   // an order here links the whole journey and auto-fills the product.
-  type OrderOption = { orderNumber: string; customerName: string; product: string };
   const [orders, setOrders] = useState<OrderOption[]>([]);
 
   useEffect(() => {
@@ -239,17 +239,12 @@ export default function DiamondIssueForm() {
             <label>
               Design Number (Order) <span className="req">*</span>
             </label>
-            <select value={designNumber} onChange={(e) => pickOrder(e.target.value)}>
-              <option value="">
-                {orders.length ? "Select an order…" : "Loading orders…"}
-              </option>
-              {orders.map((o) => (
-                <option key={o.orderNumber} value={o.orderNumber}>
-                  {o.orderNumber}
-                  {o.customerName ? ` — ${o.customerName}` : ""}
-                </option>
-              ))}
-            </select>
+            <OrderCombobox
+              orders={orders}
+              value={designNumber}
+              onSelect={pickOrder}
+              loading={!orders.length}
+            />
             <span className="muted" style={{ fontSize: 12, marginTop: 4 }}>
               The order number is the design number for the whole journey.
             </span>
