@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendOrder, listOrders, getOrder, updateStatus, isStorageConfigured, logActivity, NewOrder, ProductInput } from "@/lib/sheetStore";
+import { appendOrder, listOrders, getOrder, updateStatus, deleteOrder, isStorageConfigured, logActivity, NewOrder, ProductInput } from "@/lib/sheetStore";
+import { deleteIssuesByDesign } from "@/lib/diamondIssueStore";
+import { deleteReturnsByDesign } from "@/lib/diamondReturnStore";
 import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS, ORDER_STATUSES } from "@/lib/formConfig";
 import { getCurrentUser } from "@/lib/currentUser";
 
@@ -105,6 +107,55 @@ export async function PATCH(req: NextRequest) {
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to update status" },
+      { status: 500 }
+    );
+  }
+}
+
+// Permanently delete an order (admin only). Removes every row of the order from
+// the Orders tab and cascades to that design's Diamond Issue and Diamond Return
+// records. Order number is sent in the body. This cannot be undone.
+export async function DELETE(req: NextRequest) {
+  if (!isStorageConfigured()) {
+    return NextResponse.json(
+      { error: "Storage is not connected yet. The Google Sheet still needs to be linked." },
+      { status: 503 }
+    );
+  }
+
+  const actor = await getCurrentUser();
+  if (!actor) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  if (actor.role !== "admin") {
+    return NextResponse.json({ error: "Only admins can delete orders." }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const orderNumber = String(body.orderNumber || "").trim();
+  if (!orderNumber) return NextResponse.json({ error: "Order number required" }, { status: 400 });
+
+  try {
+    // Look up the order first (for a clean 404 and a meaningful audit detail).
+    const order = await getOrder(orderNumber).catch(() => null);
+    if (!order) return NextResponse.json({ error: `Order "${orderNumber}" not found.` }, { status: 404 });
+
+    await deleteOrder(orderNumber);
+    // Cascade: the design number equals the order number, so purge that design's
+    // diamond issue + return records too. These are best-effort (won't fail the
+    // delete if a tab is missing).
+    await deleteIssuesByDesign(orderNumber);
+    await deleteReturnsByDesign(orderNumber);
+
+    logActivity({
+      user: actor.username,
+      role: actor.role,
+      action: "Deleted order",
+      order: orderNumber,
+      details: `${order.customerName || "—"} · order + diamond records removed`,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to delete order" },
       { status: 500 }
     );
   }

@@ -238,6 +238,26 @@ export async function updateStatus(orderNumber: string, status: string): Promise
   await call({ action: "updateStatus", orderNumber, status });
 }
 
+// Name of the main orders tab in the Google Sheet (matches the Apps Script).
+const ORDERS_TAB = "Orders";
+
+// Permanently delete an order and ALL of its rows (every item/diamond line) from
+// the Orders tab. Implemented with the tab-aware "replaceByKey" action (already
+// used by the Diamond Issue tracker): it removes every row whose "Order Number"
+// equals the key and appends the replacement set — here an empty set, so the
+// order's rows are simply removed while every other order is left untouched.
+// This is irreversible; callers must gate it (admin-only) and confirm first.
+export async function deleteOrder(orderNumber: string): Promise<void> {
+  await call({
+    action: "replaceByKey",
+    tab: ORDERS_TAB,
+    keyHeader: "Order Number",
+    keyValue: orderNumber,
+    headers: SHEET_HEADERS,
+    rows: [],
+  });
+}
+
 // Column order for the "Activity Log" tab in the Google Sheet.
 export const ACTIVITY_LOG_HEADERS = [
   "Timestamp",

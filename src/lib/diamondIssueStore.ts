@@ -203,6 +203,24 @@ export async function createIssue(issue: NewIssue): Promise<string> {
   return issue.memoNo;
 }
 
+// Permanently delete every Diamond Issue row for a design number (across all of
+// its memos). Used when an order is deleted, to purge that design's diamond
+// records too. Best-effort: a missing tab or no matching rows is not an error.
+export async function deleteIssuesByDesign(designNumber: string): Promise<void> {
+  try {
+    await sheetCall({
+      action: "replaceByKey",
+      tab: DIAMOND_ISSUE_TAB,
+      keyHeader: "Design Number",
+      keyValue: designNumber,
+      headers: DIAMOND_ISSUE_HEADERS,
+      rows: [],
+    });
+  } catch (e) {
+    console.error("[issues] delete by design failed:", e instanceof Error ? e.message : e);
+  }
+}
+
 function toObjects(headers: string[], rows: string[][]): Record<string, string>[] {
   return rows.map((r) => {
     const o: Record<string, string> = {};

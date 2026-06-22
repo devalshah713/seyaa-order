@@ -78,6 +78,24 @@ export async function listReturns(): Promise<ReturnRow[]> {
   }
 }
 
+// Permanently delete every return line logged for a design number. Used when an
+// order is deleted, to purge that design's returned-diamond records too.
+// Best-effort: a missing tab or no matching rows is not an error.
+export async function deleteReturnsByDesign(designNumber: string): Promise<void> {
+  try {
+    await sheetCall({
+      action: "replaceByKey",
+      tab: DIAMOND_RETURN_TAB,
+      keyHeader: "DESIGN NO",
+      keyValue: designNumber,
+      headers: DIAMOND_RETURN_HEADERS,
+      rows: [],
+    });
+  } catch (e) {
+    console.error("[returns] delete by design failed:", e instanceof Error ? e.message : e);
+  }
+}
+
 // Next Sr NO = (highest existing numeric Sr NO) + 1, so the log stays sequential.
 async function nextSrNo(): Promise<number> {
   const existing = await listReturns();

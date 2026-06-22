@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { listOrders, isStorageConfigured } from "@/lib/sheetStore";
 import { REGIONS, ORDER_STATUSES, STATUS_LABELS, STATUS_COLORS, formatDate } from "@/lib/formConfig";
+import { getCurrentUser } from "@/lib/currentUser";
+import DeleteOrderButton from "./DeleteOrderButton";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,10 @@ export default async function HomePage({
   }
 
   const { region, status, q } = searchParams;
+
+  // Only admins get the delete control (deleting is irreversible).
+  const actor = await getCurrentUser();
+  const isAdmin = actor?.role === "admin";
 
   let orders = await listOrders();
 
@@ -102,6 +108,7 @@ export default async function HomePage({
               <th>Products</th>
               <th>Status</th>
               <th>Date</th>
+              {isAdmin && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -127,6 +134,11 @@ export default async function HomePage({
                   </span>
                 </td>
                 <td className="muted">{formatDate(o.date)}</td>
+                {isAdmin && (
+                  <td className="no-print">
+                    <DeleteOrderButton orderNumber={o.orderNumber} customerName={o.customerName} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
