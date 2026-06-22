@@ -47,6 +47,9 @@ export default async function IssuesPage({
           </p>
         </div>
         <div className="row">
+          <Link href="/jewellery-in" className="btn ghost">
+            Jewellery In
+          </Link>
           <Link href="/issues/export" className="btn ghost">
             Export to Excel
           </Link>

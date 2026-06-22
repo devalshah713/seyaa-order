@@ -3,12 +3,45 @@ import { isStorageConfigured, logActivity } from "@/lib/sheetStore";
 import {
   createIssue,
   getIssue,
+  listIssues,
   reconcileIssue,
   NewIssue,
   IssueLine,
 } from "@/lib/diamondIssueStore";
 import { ISSUE_LINE_FIELDS, ISSUE_STATUSES } from "@/lib/diamondIssueConfig";
 import { getCurrentUser } from "@/lib/currentUser";
+
+export const dynamic = "force-dynamic";
+
+// Fetch the issued memos + bags for one design number, so the "Jewellery In"
+// form can list every issued bag (with its issued carats/pcs and any used
+// values already recorded) for the user to receive against.
+export async function GET(req: NextRequest) {
+  const design = req.nextUrl.searchParams.get("design");
+  if (!design) return NextResponse.json({ memos: [] });
+  try {
+    const all = await listIssues();
+    const memos = all
+      .filter((i) => (i.designNumber || "") === design)
+      .map((i) => ({
+        memoNo: i.memoNo,
+        date: i.date,
+        status: i.status,
+        receivedDate: i.receivedDate,
+        bags: i.lines.map((ln) => ({
+          shape: ln.values["Diamond Shape"] || "",
+          size: ln.values["Diamond Size"] || "",
+          pcs: ln.values["Diamond Pcs"] || "",
+          carats: ln.values["Diamond Carats"] || "",
+          ctsUsed: ln.diaCtsUsed || "",
+          pcsUsed: ln.diaPcsUsed || "",
+        })),
+      }));
+    return NextResponse.json({ memos });
+  } catch {
+    return NextResponse.json({ memos: [] });
+  }
+}
 
 // Reconcile an existing issue (record used carats/pcs, received date, status).
 export async function PATCH(req: NextRequest) {

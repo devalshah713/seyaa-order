@@ -29,7 +29,9 @@ export default function ReconcileControl({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [status, setStatus] = useState(currentStatus === "ISSUED" ? "RECEIVED" : currentStatus);
+  const [status, setStatus] = useState(
+    currentStatus === "PENDING" || currentStatus === "ISSUED" ? "RECEIVED" : currentStatus
+  );
   const [received, setReceived] = useState(receivedDate || "");
   const [note, setNote] = useState(comments || "");
   const [used, setUsed] = useState(

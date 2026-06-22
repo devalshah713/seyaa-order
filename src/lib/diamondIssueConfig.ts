@@ -106,20 +106,31 @@ export const ISSUE_LINE_FIELDS: Field[] = [
 export const ISSUE_HEADER_FIELD_NAMES = ISSUE_HEADER_FIELDS.map((f) => f.name);
 export const ISSUE_LINE_FIELD_NAMES = ISSUE_LINE_FIELDS.map((f) => f.name);
 
-// Lifecycle of an issued memo.
-export const ISSUE_STATUSES = ["ISSUED", "PARTIAL", "RECEIVED", "CANCELLED"] as const;
+// Lifecycle of an issued memo (column T of the Diamond Issue sheet). A memo
+// starts as "Pending" when diamonds are issued; when the jewellery comes back
+// it becomes "Received" (jewellery made, leftovers returned) or "Whole Return
+// Received" (everything came back, no jewellery made).
+export const ISSUE_STATUSES = ["PENDING", "RECEIVED", "WHOLE_RETURN"] as const;
 
+// Labels include legacy codes so any rows created before this change still
+// render sensibly. Only ISSUE_STATUSES are offered in the dropdowns.
 export const ISSUE_STATUS_LABELS: Record<string, string> = {
-  ISSUED: "Issued",
-  PARTIAL: "Partly Received",
+  PENDING: "Pending",
   RECEIVED: "Received",
+  WHOLE_RETURN: "Whole Return Received",
+  // legacy
+  ISSUED: "Pending",
+  PARTIAL: "Partly Received",
   CANCELLED: "Cancelled",
 };
 
 export const ISSUE_STATUS_COLORS: Record<string, string> = {
+  PENDING: "#d97706",
+  RECEIVED: "#16a34a",
+  WHOLE_RETURN: "#0891b2",
+  // legacy
   ISSUED: "#d97706",
   PARTIAL: "#7c3aed",
-  RECEIVED: "#16a34a",
   CANCELLED: "#dc2626",
 };
 

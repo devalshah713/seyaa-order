@@ -187,7 +187,7 @@ export async function createIssue(issue: NewIssue): Promise<string> {
     subDesignNo: existing && existing.subDesignNo ? existing.subDesignNo : issue.subDesignNo,
     factory: existing && existing.factory ? existing.factory : issue.factory,
     comments: existing && existing.comments ? existing.comments : issue.comments,
-    status: existing ? existing.status : "ISSUED",
+    status: existing ? existing.status : "PENDING",
     receivedDate: existing ? existing.receivedDate : "",
     lines: mergedLines,
   });
@@ -225,7 +225,7 @@ function groupIssues(objs: Record<string, string>[]): Issue[] {
         designNumber: r["Design Number"] || "",
         subDesignNo: r["Sub Design No"] || "",
         product: "",
-        status: r["Status"] || "ISSUED",
+        status: r["Status"] || "PENDING",
         receivedDate: r["Received date"] || "",
         factory: r["Factory"] || "",
         comments: "",

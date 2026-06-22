@@ -12,6 +12,9 @@ const MODULES: Module[] = [
   { label: "Diamond Issue", href: "/issues" },
   { label: "New Diamond Issue", href: "/issues/new" },
   { label: "Export Diamond Issues", href: "/issues/export" },
+  { label: "Jewellery In", href: "/jewellery-in" },
+  { label: "Record Jewellery In", href: "/jewellery-in/new" },
+  { label: "Diamond Return Log", href: "/jewellery-in/returns" },
   { label: "Audit Trail", href: "/audit" },
   { label: "Team", href: "/admin/team", adminOnly: true },
 ];
