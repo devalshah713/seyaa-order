@@ -48,6 +48,14 @@ export default async function DiamondReturnLogPage({
           <Link href="/jewellery-in" className="btn ghost">
             ← Jewellery In
           </Link>
+          {rows.length > 0 && (
+            <a
+              href={`/api/jewellery-in/returns/export${q ? `?q=${encodeURIComponent(q)}` : ""}`}
+              className="btn gold"
+            >
+              Export to Excel
+            </a>
+          )}
         </div>
       </div>
 
