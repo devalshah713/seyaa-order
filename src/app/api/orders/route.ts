@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { appendOrder, listOrders, getOrder, updateStatus, deleteOrder, isStorageConfigured, logActivity, NewOrder, ProductInput } from "@/lib/sheetStore";
 import { deleteIssuesByDesign } from "@/lib/diamondIssueStore";
 import { deleteReturnsByDesign } from "@/lib/diamondReturnStore";
+import { deleteStockByDesign } from "@/lib/stockStore";
 import { PRODUCT_FIELD_NAMES, DIAMOND_FIELD_NAMES, DIAMOND_FIELDS, ORDER_STATUSES } from "@/lib/formConfig";
 import { getCurrentUser } from "@/lib/currentUser";
 
@@ -144,6 +145,7 @@ export async function DELETE(req: NextRequest) {
     // delete if a tab is missing).
     await deleteIssuesByDesign(orderNumber);
     await deleteReturnsByDesign(orderNumber);
+    await deleteStockByDesign(orderNumber);
 
     logActivity({
       user: actor.username,
