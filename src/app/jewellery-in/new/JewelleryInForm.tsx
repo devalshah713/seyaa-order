@@ -243,6 +243,15 @@ export default function JewelleryInForm({ initialDesign = "" }: { initialDesign?
     );
   }
 
+  // A design's diamonds are issued together and are treated as ONE memo, even if
+  // the underlying sheet ended up with more than one memo number. Flatten every
+  // bag across all of the design's memos into a single list (remembering which
+  // memo + bag each came from) so they show as one consolidated section while
+  // each row is still written back to its correct memo on submit.
+  const flatBags = memos.flatMap((memo, mi) =>
+    memo.bags.map((bag, bi) => ({ memo, mi, bag, bi }))
+  );
+
   return (
     <form onSubmit={submit}>
       {error && (
@@ -305,16 +314,13 @@ export default function JewelleryInForm({ initialDesign = "" }: { initialDesign?
         </div>
       )}
 
-      {memos.map((memo, mi) => (
-        <div className="card" key={memo.memoNo} style={{ overflowX: "auto" }}>
+      {memos.length > 0 && (
+        <div className="card" style={{ overflowX: "auto" }}>
           <div className="row spread">
-            <h2 style={{ margin: 0 }}>
-              Memo {memo.memoNo}
-              <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>
-                {" "}
-                · {ISSUE_STATUS_LABELS[memo.status] || memo.status}
-              </span>
-            </h2>
+            <h2 style={{ margin: 0 }}>Diamonds Issued for {designNumber}</h2>
+            <span className="muted" style={{ fontSize: 13 }}>
+              {flatBags.length} bag{flatBags.length === 1 ? "" : "s"}
+            </span>
           </div>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             Enter how many diamonds were actually <b>used</b>. The difference is treated as returned.
@@ -334,13 +340,13 @@ export default function JewelleryInForm({ initialDesign = "" }: { initialDesign?
               </tr>
             </thead>
             <tbody>
-              {memo.bags.map((bag, bi) => {
+              {flatBags.map(({ mi, bi, bag }, gi) => {
                 const u = used[mi]?.[bi] || { ctsUsed: "", pcsUsed: "" };
                 const retCts = round2(Math.max(0, parseNum(bag.carats) - parseNum(u.ctsUsed)));
                 const retPcs = Math.max(0, Math.round(parseNum(bag.pcs) - parseNum(u.pcsUsed)));
                 return (
-                  <tr key={bi}>
-                    <td>{bi + 1}</td>
+                  <tr key={`${mi}-${bi}`}>
+                    <td>{gi + 1}</td>
                     <td>{bag.shape || "—"}</td>
                     <td className="muted">{bag.size || "—"}</td>
                     <td className="muted">{bag.carats || "—"}</td>
@@ -373,7 +379,7 @@ export default function JewelleryInForm({ initialDesign = "" }: { initialDesign?
             </tbody>
           </table>
         </div>
-      ))}
+      )}
 
       {memos.length > 0 && (
         <div className="card" style={{ overflowX: "auto" }}>
