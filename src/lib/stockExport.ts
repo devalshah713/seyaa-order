@@ -28,7 +28,6 @@ function cellFor(e: StockEntry, st: StockEntry["stones"][number], first: boolean
     case "TOTAL DIAMOND WEIGHT": return first ? e.totalDiamondWeight : "";
     case "TOTAL DIA PCS.": return first ? e.totalDiaPcs : "";
     case "Manufacturer Name": return first ? e.manufacturerName : "";
-    case "Product Code": return first ? e.productCode : "";
     case "Gold Price ($)": return first ? e.goldPriceUsd : "";
     case "Labor ($)": return first ? e.laborUsd : "";
     case "Total ($)": return first ? e.totalUsd : "";
@@ -41,6 +40,7 @@ function cellFor(e: StockEntry, st: StockEntry["stones"][number], first: boolean
     case "POINTERS": return st.pointers;
     case "SHAPE": return st.shape;
     case "Sieve / Size": return st.sieveSize;
+    case "Product Code": return st.productCode;
     case "Diamond Price ($)": return st.diamondPriceUsd;
     case "Diamond Price (₹)": return st.diamondPriceInr;
   }
@@ -75,7 +75,7 @@ export async function buildStockWorkbook(designNumbers?: string[]): Promise<Arra
   let r = 2;
   for (const e of entries) {
     const stones = e.stones.length ? e.stones : [{
-      weightBreakup: "", pcs: "", pointers: "", shape: "", sieveSize: "", diamondPriceUsd: "", diamondPriceInr: "",
+      weightBreakup: "", pcs: "", pointers: "", shape: "", sieveSize: "", productCode: "", diamondPriceUsd: "", diamondPriceInr: "",
     }];
     stones.forEach((st, i) => {
       const row = ws.getRow(r++);

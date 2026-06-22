@@ -17,9 +17,10 @@ import {
 export type StockStone = {
   weightBreakup: string; // carats for this line
   pcs: string;
-  pointers: string; // usually auto = (carats/pcs)*100
+  pointers: string; // usually auto = Stone Weight / Pcs
   shape: string;
   sieveSize: string;
+  productCode: string; // from the India price master; drives the price
   diamondPriceUsd: string;
   diamondPriceInr: string;
 };
@@ -36,7 +37,6 @@ export type NewStockEntry = {
   grossWeight: string;
   netWeight: string;
   manufacturerName: string;
-  productCode: string;
   goldPriceUsd: string;
   laborUsd: string;
   goldPriceInr: string;
@@ -104,7 +104,6 @@ function buildRows(entry: StockEntry): string[][] {
         case "TOTAL DIAMOND WEIGHT": return first ? (totalDiaWt ? String(totalDiaWt) : "") : "";
         case "TOTAL DIA PCS.": return first ? (totalDiaPcs ? String(totalDiaPcs) : "") : "";
         case "Manufacturer Name": return first ? entry.manufacturerName : "";
-        case "Product Code": return first ? entry.productCode : "";
         case "Gold Price ($)": return first ? entry.goldPriceUsd : "";
         case "Labor ($)": return first ? entry.laborUsd : "";
         case "Total ($)": return first ? (totalUsd ? String(totalUsd) : "") : "";
@@ -118,6 +117,7 @@ function buildRows(entry: StockEntry): string[][] {
         case "POINTERS": return ptr;
         case "SHAPE": return st.shape;
         case "Sieve / Size": return st.sieveSize;
+        case "Product Code": return st.productCode;
         case "Diamond Price ($)": return st.diamondPriceUsd;
         case "Diamond Price (₹)": return st.diamondPriceInr;
       }
@@ -131,7 +131,7 @@ function buildRows(entry: StockEntry): string[][] {
 }
 
 function emptyStone(): StockStone {
-  return { weightBreakup: "", pcs: "", pointers: "", shape: "", sieveSize: "", diamondPriceUsd: "", diamondPriceInr: "" };
+  return { weightBreakup: "", pcs: "", pointers: "", shape: "", sieveSize: "", productCode: "", diamondPriceUsd: "", diamondPriceInr: "" };
 }
 
 function toObjects(headers: string[], rows: string[][]): Record<string, string>[] {
@@ -159,7 +159,6 @@ function groupStock(objs: Record<string, string>[]): StockEntry[] {
         grossWeight: "",
         netWeight: "",
         manufacturerName: "",
-        productCode: "",
         goldPriceUsd: "",
         laborUsd: "",
         goldPriceInr: "",
@@ -186,7 +185,6 @@ function groupStock(objs: Record<string, string>[]): StockEntry[] {
     set("grossWeight", r["GROSS WEIGHT"]);
     set("netWeight", r["NET WEIGHT"]);
     set("manufacturerName", r["Manufacturer Name"]);
-    set("productCode", r["Product Code"]);
     set("goldPriceUsd", r["Gold Price ($)"]);
     set("laborUsd", r["Labor ($)"]);
     set("goldPriceInr", r["Gold Price (₹)"]);
@@ -204,6 +202,7 @@ function groupStock(objs: Record<string, string>[]): StockEntry[] {
         pointers: r["POINTERS"] || "",
         shape: r["SHAPE"] || "",
         sieveSize: r["Sieve / Size"] || "",
+        productCode: r["Product Code"] || "",
         diamondPriceUsd: r["Diamond Price ($)"] || "",
         diamondPriceInr: r["Diamond Price (₹)"] || "",
       });

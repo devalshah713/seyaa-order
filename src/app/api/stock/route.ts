@@ -33,10 +33,11 @@ export async function POST(req: NextRequest) {
       pointers: String(s?.pointers ?? "").trim(),
       shape: String(s?.shape ?? "").trim(),
       sieveSize: String(s?.sieveSize ?? "").trim(),
+      productCode: String(s?.productCode ?? "").trim(),
       diamondPriceUsd: String(s?.diamondPriceUsd ?? "").trim(),
       diamondPriceInr: String(s?.diamondPriceInr ?? "").trim(),
     }))
-    .filter((s) => s.shape || s.sieveSize || s.weightBreakup || s.pcs || s.diamondPriceUsd || s.diamondPriceInr);
+    .filter((s) => s.shape || s.sieveSize || s.weightBreakup || s.pcs || s.productCode || s.diamondPriceUsd || s.diamondPriceInr);
 
   const entry: NewStockEntry = {
     stockNo: body.stockNo ? String(body.stockNo).trim() : "",
@@ -49,7 +50,6 @@ export async function POST(req: NextRequest) {
     grossWeight: String(body.grossWeight || "").trim(),
     netWeight: String(body.netWeight || "").trim(),
     manufacturerName: String(body.manufacturerName || "").trim(),
-    productCode: String(body.productCode || "").trim(),
     goldPriceUsd: String(body.goldPriceUsd || "").trim(),
     laborUsd: String(body.laborUsd || "").trim(),
     goldPriceInr: String(body.goldPriceInr || "").trim(),
