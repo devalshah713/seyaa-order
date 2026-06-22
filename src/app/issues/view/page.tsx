@@ -65,7 +65,7 @@ export default async function IssueDetailPage({
         </div>
       </div>
 
-      <h2 style={{ marginTop: 8 }}>Diamond Lines</h2>
+      <h2 style={{ marginTop: 8 }}>Bags of Diamonds</h2>
       <div className="card" style={{ overflowX: "auto" }}>
         <table>
           <thead>

@@ -92,7 +92,7 @@ export default async function IssuesPage({
               <th>Design</th>
               <th>Factory</th>
               <th>Product</th>
-              <th>Lines</th>
+              <th>Bags</th>
               <th>Total Price</th>
               <th>Status</th>
               <th>Date</th>

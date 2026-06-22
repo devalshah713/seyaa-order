@@ -119,7 +119,7 @@ export default function ExportPicker({ designs }: { designs: DesignSummary[] }) 
                 </th>
                 <th>Design Number</th>
                 <th>Memos</th>
-                <th>Diamond lines</th>
+                <th>Bags</th>
               </tr>
             </thead>
             <tbody>
@@ -155,7 +155,7 @@ export default function ExportPicker({ designs }: { designs: DesignSummary[] }) 
 
       <div className="row spread" style={{ marginTop: 12, alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <span className="muted">
-          {selected.size} design{selected.size === 1 ? "" : "s"} selected · {selectedLines} diamond line
+          {selected.size} design{selected.size === 1 ? "" : "s"} selected · {selectedLines} bag
           {selectedLines === 1 ? "" : "s"}
         </span>
         <button className="btn gold" type="button" onClick={exportNow} disabled={!selected.size || downloading}>

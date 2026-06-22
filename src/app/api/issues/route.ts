@@ -3,7 +3,6 @@ import { isStorageConfigured, logActivity } from "@/lib/sheetStore";
 import {
   createIssue,
   getIssue,
-  listIssues,
   reconcileIssue,
   NewIssue,
   IssueLine,
@@ -77,22 +76,12 @@ export async function POST(req: NextRequest) {
   if (!String(body.designNumber || "").trim())
     return NextResponse.json({ error: "Design Number is required" }, { status: 400 });
   if (!body.lines?.length)
-    return NextResponse.json({ error: "Add at least one diamond line" }, { status: 400 });
+    return NextResponse.json({ error: "Add at least one bag of diamonds" }, { status: 400 });
 
-  // Reject a duplicate Memo No. so two issues never collide on the same key.
-  try {
-    const existing = await listIssues();
-    if (existing.some((i) => i.memoNo === memoNo)) {
-      return NextResponse.json(
-        { error: `Memo No. "${memoNo}" already exists. Please use a different one.` },
-        { status: 409 }
-      );
-    }
-  } catch {
-    // If the lookup fails, continue — the write will still be attempted.
-  }
+  // A memo number may be reused / added to: if it already exists, createIssue
+  // appends the new bags to it rather than overwriting, so duplicates are fine.
 
-  // Keep only lines that have a shape; require all mandatory fields on those.
+  // Keep only bags that have a shape; require all mandatory fields on those.
   const lines: IssueLine[] = [];
   for (const ln of body.lines) {
     const values = ln.values || {};
@@ -100,7 +89,7 @@ export async function POST(req: NextRequest) {
     for (const f of ISSUE_LINE_FIELDS) {
       if (f.required && !(values[f.name] && String(values[f.name]).trim())) {
         return NextResponse.json(
-          { error: `"${f.name}" is required for each diamond line (${values["Diamond Shape"]}).` },
+          { error: `"${f.name}" is required for each bag (${values["Diamond Shape"]}).` },
           { status: 400 }
         );
       }
@@ -111,7 +100,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!lines.length)
-    return NextResponse.json({ error: "Add at least one diamond line with a shape" }, { status: 400 });
+    return NextResponse.json({ error: "Add at least one bag with a shape" }, { status: 400 });
 
   const issue: NewIssue = {
     memoNo,

@@ -162,18 +162,34 @@ function formatIssueDate(d: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : d;
 }
 
-// Create a brand-new issue (status ISSUED).
+// Create an issue, or add more bags to an existing memo number.
+// A memo number (e.g. the pre-printed "397") is entered by the user and a memo
+// can hold several bags of diamonds. If the memo already exists, the new bags
+// are appended to it (existing bags are kept) rather than overwriting it, so a
+// memo accumulates its bags safely. Memo-level fields (date/design/factory)
+// keep the existing memo's values when adding to one.
 export async function createIssue(issue: NewIssue): Promise<string> {
+  const existing = await getIssue(issue.memoNo);
+
+  const existingLines: IssueLine[] = existing
+    ? existing.lines.map((ln) => ({
+        values: ln.values,
+        diaCtsUsed: ln.diaCtsUsed,
+        diaPcsUsed: ln.diaPcsUsed,
+      }))
+    : [];
+  const mergedLines = [...existingLines, ...issue.lines];
+
   const rows = buildRows({
     memoNo: issue.memoNo,
-    date: formatIssueDate(issue.date),
-    designNumber: issue.designNumber,
-    subDesignNo: issue.subDesignNo,
-    factory: issue.factory,
-    comments: issue.comments,
-    status: "ISSUED",
-    receivedDate: "",
-    lines: issue.lines,
+    date: existing ? existing.date : formatIssueDate(issue.date),
+    designNumber: existing && existing.designNumber ? existing.designNumber : issue.designNumber,
+    subDesignNo: existing && existing.subDesignNo ? existing.subDesignNo : issue.subDesignNo,
+    factory: existing && existing.factory ? existing.factory : issue.factory,
+    comments: existing && existing.comments ? existing.comments : issue.comments,
+    status: existing ? existing.status : "ISSUED",
+    receivedDate: existing ? existing.receivedDate : "",
+    lines: mergedLines,
   });
 
   await sheetCall({

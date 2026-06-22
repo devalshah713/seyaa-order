@@ -227,11 +227,11 @@ export default function DiamondIssueForm() {
     if (!designNumber.trim()) return setError("Please select the order / design number.");
 
     const filled = lines.filter((ln) => ln.values["Diamond Shape"]);
-    if (!filled.length) return setError("Add at least one diamond line with a shape.");
+    if (!filled.length) return setError("Add at least one bag with a shape.");
     for (const ln of filled) {
       for (const f of ISSUE_LINE_FIELDS) {
         if (f.required && !(ln.values[f.name] && ln.values[f.name].trim())) {
-          return setError(`"${f.name}" is required for each diamond line.`);
+          return setError(`"${f.name}" is required for each bag.`);
         }
       }
     }
@@ -331,14 +331,14 @@ export default function DiamondIssueForm() {
       <div className="card">
         <div className="row spread">
           <div>
-            <h2>Diamonds Issued</h2>
+            <h2>Bags of Diamonds Issued</h2>
             <p className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-              Pre-filled from the order&apos;s estimated demand — edit any size, pieces
-              or weight to match what was actually issued.
+              Each bag is one row of your memo. Pre-filled from the order&apos;s estimated
+              demand — edit any size, pieces or weight to match what was actually issued.
             </p>
           </div>
           <button type="button" className="btn ghost small" onClick={() => setLines([...lines, blankLine()])}>
-            + Add diamond line
+            + Add bag
           </button>
         </div>
 
@@ -349,7 +349,7 @@ export default function DiamondIssueForm() {
             <div className="diamond-block" key={ln.key}>
               <div className="row spread">
                 <span className="muted" style={{ fontSize: 13, fontWeight: 600 }}>
-                  Diamond line {idx + 1}
+                  Bag {idx + 1}
                   {lineTotals[idx] ? ` · Total ${lineTotals[idx]}` : ""}
                 </span>
                 {lines.length > 1 && (
