@@ -97,9 +97,10 @@ export const DEFAULT_GOLD_DETAILS = [
 export const DEFAULT_LOCATIONS = ["Office", "Showroom", "Safe", "Bharat Diamond Bourse"];
 export const DEFAULT_INCH_SIZES = ["6", "6.5", "7", "7.5", "8", "16", "18", "20"];
 
-// POINTERS for a breakup line = carats-per-stone × 100 (1 ct = 100 points).
+// POINTERS for a breakup line = Stone Weight ÷ Pcs (the per-stone weight).
+// Kept to 3 decimals so small melee stones don't round away to zero.
 export function pointerFor(weightBreakup: string | number, pcs: string | number): number {
   const w = parseNum(weightBreakup);
   const p = parseNum(pcs);
-  return p > 0 ? round2((w / p) * 100) : 0;
+  return p > 0 ? Math.round((w / p) * 1000) / 1000 : 0;
 }
