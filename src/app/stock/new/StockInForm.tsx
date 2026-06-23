@@ -14,7 +14,7 @@ import {
   pointerFor,
 } from "@/lib/stockConfig";
 import {
-  PRICE_CODES,
+  PRICE_OPTIONS,
   findPrice,
   isPolkiCode,
   GOLD_RATES,
@@ -357,7 +357,7 @@ export default function StockInForm({
         </div>
       </div>
 
-      <div className="card" style={{ overflowX: "auto" }}>
+      <div className="card">
         <div className="row spread">
           <div>
             <h2 style={{ margin: 0 }}>Diamond Breakup</h2>
@@ -403,7 +403,7 @@ export default function StockInForm({
                   <td style={{ fontWeight: 600, color: ptr ? "#0891b2" : undefined }}>{ptr || "—"}</td>
                   <td>
                     <OptionInput value={s.productCode} onChange={(v) => updateStone(i, { productCode: v, priceTouched: false }, true)}
-                      options={PRICE_CODES} placeholder="code" style={{ width: 130 }} />
+                      options={[]} items={PRICE_OPTIONS} placeholder="code" style={{ width: 150 }} />
                     {pe ? (
                       <span className="muted" style={{ fontSize: 11, display: "block", marginTop: 2 }}>
                         {pe.label} · ${pe.usd}/ct · ₹{pe.inr}/ct

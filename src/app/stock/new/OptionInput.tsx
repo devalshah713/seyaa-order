@@ -10,6 +10,7 @@ export default function OptionInput({
   value,
   onChange,
   options,
+  items,
   onSaveNew,
   placeholder,
   style,
@@ -17,6 +18,9 @@ export default function OptionInput({
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  // Optional rich options: shown as `label` in the list, but selecting stores
+  // `value` (e.g. the bare product code). Takes precedence over `options`.
+  items?: { value: string; label: string }[];
   onSaveNew?: (v: string) => Promise<void> | void;
   placeholder?: string;
   style?: React.CSSProperties;
@@ -33,13 +37,17 @@ export default function OptionInput({
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
+  const list: { value: string; label: string }[] = items ?? options.map((o) => ({ value: o, label: o }));
   const trimmed = value.trim();
   const q = trimmed.toLowerCase();
-  const exists = options.some((o) => o.toLowerCase() === q);
+  const exists = list.some((it) => it.value.toLowerCase() === q);
   const canSave = !!onSaveNew && trimmed !== "" && !exists;
-  // While typing a new value, narrow the list; once it matches an option exactly
+  // While typing a new value, narrow the list; once it matches a value exactly
   // (or is empty), show the full list so the arrow always reveals everything.
-  const filtered = (q && !exists ? options.filter((o) => o.toLowerCase().includes(q)) : options).slice(0, 100);
+  const filtered = (q && !exists
+    ? list.filter((it) => it.label.toLowerCase().includes(q) || it.value.toLowerCase().includes(q))
+    : list
+  ).slice(0, 200);
 
   async function save() {
     if (!onSaveNew) return;
@@ -71,15 +79,15 @@ export default function OptionInput({
         ▾
       </button>
       {open && (
-        <div className="combo-panel">
-          {filtered.map((o) => (
+        <div className="combo-panel" style={items ? { minWidth: 300 } : undefined}>
+          {filtered.map((it) => (
             <button
               type="button"
-              key={o}
-              className={`combo-item${o.toLowerCase() === q ? " selected" : ""}`}
-              onClick={() => { onChange(o); setOpen(false); }}
+              key={it.value}
+              className={`combo-item${it.value.toLowerCase() === q ? " selected" : ""}`}
+              onClick={() => { onChange(it.value); setOpen(false); }}
             >
-              {o}
+              {it.label}
             </button>
           ))}
           {canSave && (
