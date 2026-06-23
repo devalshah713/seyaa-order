@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     stones,
   };
 
+  const isEdit = !!entry.stockNo;
   try {
     const stockNo = await createStockEntry(entry);
     const actor = await getCurrentUser();
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
       logActivity({
         user: actor.username,
         role: actor.role,
-        action: "Stock in",
+        action: isEdit ? "Updated stock" : "Stock in",
         order: designNumber,
         details: `Stock ${stockNo} · ${stones.length} breakup line(s)`,
       });

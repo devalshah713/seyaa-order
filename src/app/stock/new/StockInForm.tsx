@@ -21,6 +21,7 @@ import {
   LABOUR_RATES,
   karatFromGoldDetails,
 } from "@/lib/stockPriceList";
+import type { StockEntry } from "@/lib/stockStore";
 
 type Stone = {
   shape: string;
@@ -51,30 +52,57 @@ function isoToDdmmyyyy(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
+function ddmmyyyyToIso(s: string): string {
+  const m = (s || "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
 
-export default function StockInForm({ initialDesign = "" }: { initialDesign?: string }) {
+export default function StockInForm({
+  initialDesign = "",
+  initialEntry = null,
+}: {
+  initialDesign?: string;
+  initialEntry?: StockEntry | null;
+}) {
   const router = useRouter();
+  const editing = !!initialEntry;
+  const editingStockNo = initialEntry?.stockNo || "";
+
   const [orders, setOrders] = useState<OrderOption[]>([]);
   const [options, setOptions] = useState<Options>({ gold: [], location: [], inch: [] });
   const [customSizes, setCustomSizes] = useState<Record<string, string[]>>({});
 
   const todayIso = new Date().toISOString().slice(0, 10);
-  const [date, setDate] = useState(todayIso);
-  const [designNumber, setDesignNumber] = useState(initialDesign);
-  const [designName, setDesignName] = useState("");
-  const [location, setLocation] = useState("");
-  const [goldDetails, setGoldDetails] = useState("");
-  const [inchSize, setInchSize] = useState("");
-  const [grossWeight, setGrossWeight] = useState("");
-  const [netWeight, setNetWeight] = useState("");
-  const [manufacturerName, setManufacturerName] = useState("");
-  const [goldPriceUsd, setGoldPriceUsd] = useState("");
-  const [laborUsd, setLaborUsd] = useState("");
-  const [goldPriceInr, setGoldPriceInr] = useState("");
-  const [laborInr, setLaborInr] = useState("");
-  const [comments, setComments] = useState("");
-  const [stones, setStones] = useState<Stone[]>([blankStone()]);
-  const [autoRates, setAutoRates] = useState(true);
+  const [date, setDate] = useState(initialEntry ? (ddmmyyyyToIso(initialEntry.date) || todayIso) : todayIso);
+  const [designNumber, setDesignNumber] = useState(initialEntry?.designNumber || initialDesign);
+  const [designName, setDesignName] = useState(initialEntry?.designName || "");
+  const [location, setLocation] = useState(initialEntry?.location || "");
+  const [goldDetails, setGoldDetails] = useState(initialEntry?.goldDetails || "");
+  const [inchSize, setInchSize] = useState(initialEntry?.inchSize || "");
+  const [grossWeight, setGrossWeight] = useState(initialEntry?.grossWeight || "");
+  const [netWeight, setNetWeight] = useState(initialEntry?.netWeight || "");
+  const [manufacturerName, setManufacturerName] = useState(initialEntry?.manufacturerName || "");
+  const [goldPriceUsd, setGoldPriceUsd] = useState(initialEntry?.goldPriceUsd || "");
+  const [laborUsd, setLaborUsd] = useState(initialEntry?.laborUsd || "");
+  const [goldPriceInr, setGoldPriceInr] = useState(initialEntry?.goldPriceInr || "");
+  const [laborInr, setLaborInr] = useState(initialEntry?.laborInr || "");
+  const [comments, setComments] = useState(initialEntry?.comments || "");
+  const [stones, setStones] = useState<Stone[]>(
+    initialEntry && initialEntry.stones.length
+      ? initialEntry.stones.map((s) => ({
+          shape: s.shape,
+          sieveSize: s.sieveSize,
+          pcs: s.pcs,
+          weightBreakup: s.weightBreakup,
+          productCode: s.productCode,
+          diamondPriceUsd: s.diamondPriceUsd,
+          diamondPriceInr: s.diamondPriceInr,
+          priceTouched: true, // keep stored prices unless the code is re-picked
+        }))
+      : [blankStone()]
+  );
+  // When editing, keep the stored gold/labour as-is (don't auto-overwrite).
+  const [autoRates, setAutoRates] = useState(!editing);
 
   const [loadingDesign, setLoadingDesign] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -137,7 +165,7 @@ export default function StockInForm({ initialDesign = "" }: { initialDesign?: st
   }, []);
 
   useEffect(() => {
-    if (initialDesign) pickDesign(initialDesign);
+    if (!editing && initialDesign) pickDesign(initialDesign);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -210,6 +238,7 @@ export default function StockInForm({ initialDesign = "" }: { initialDesign?: st
 
     setSubmitting(true);
     const payload = {
+      stockNo: editingStockNo,
       date: isoToDdmmyyyy(date),
       designName, designNumber, location, goldDetails, inchSize,
       grossWeight, netWeight, manufacturerName,
@@ -243,7 +272,7 @@ export default function StockInForm({ initialDesign = "" }: { initialDesign?: st
   if (done !== null) {
     return (
       <div className="card" style={{ borderColor: "#16a34a", background: "#f0fdf4" }}>
-        <h2 style={{ marginTop: 0 }}>✅ Stock recorded</h2>
+        <h2 style={{ marginTop: 0 }}>✅ {editing ? "Stock updated" : "Stock recorded"}</h2>
         <p>Saved as <b>Stock No. {done}</b> for design <b>{designNumber}</b>.</p>
         <div className="row" style={{ marginTop: 8 }}>
           <Link className="btn gold" href="/stock">View stock</Link>
@@ -442,7 +471,7 @@ export default function StockInForm({ initialDesign = "" }: { initialDesign?: st
       </div>
 
       <div className="row">
-        <button className="btn gold" type="submit" disabled={submitting}>{submitting ? "Saving…" : "Record Stock In"}</button>
+        <button className="btn gold" type="submit" disabled={submitting}>{submitting ? "Saving…" : editing ? "Update Stock" : "Record Stock In"}</button>
         <button type="button" className="btn ghost" onClick={() => router.push("/stock")}>Cancel</button>
       </div>
     </form>

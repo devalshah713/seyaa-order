@@ -76,6 +76,7 @@ export default async function StockPage({
               <th>Dia Pcs</th>
               <th>Total ($)</th>
               <th>Total (₹)</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -97,6 +98,11 @@ export default async function StockPage({
                 <td className="muted">{e.totalDiaPcs || "—"}</td>
                 <td>{e.totalUsd || "—"}</td>
                 <td>{e.totalInr || "—"}</td>
+                <td>
+                  <Link href={`/stock/new?stock=${encodeURIComponent(e.stockNo)}`} className="btn ghost small">
+                    Edit
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
