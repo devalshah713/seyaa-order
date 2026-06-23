@@ -44,6 +44,7 @@ export default async function StockPage({
           </p>
         </div>
         <div className="row">
+          <Link href="/sell" className="btn ghost">Sell of Diamonds</Link>
           <a href="/api/stock/export" className="btn ghost">Export to Excel</a>
           <Link href="/stock/new" className="btn gold">+ Record Stock In</Link>
         </div>
