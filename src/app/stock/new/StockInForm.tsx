@@ -72,6 +72,7 @@ export default function StockInForm({
   const [options, setOptions] = useState<Options>({ gold: [], location: [], inch: [] });
   const [customSizes, setCustomSizes] = useState<Record<string, string[]>>({});
 
+  const [customStockNo, setCustomStockNo] = useState("");
   const todayIso = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(initialEntry ? (ddmmyyyyToIso(initialEntry.date) || todayIso) : todayIso);
   const [designNumber, setDesignNumber] = useState(initialEntry?.designNumber || initialDesign);
@@ -238,7 +239,8 @@ export default function StockInForm({
 
     setSubmitting(true);
     const payload = {
-      stockNo: editingStockNo,
+      stockNo: editing ? editingStockNo : customStockNo.trim(),
+      editing,
       date: isoToDdmmyyyy(date),
       designName, designNumber, location, goldDetails, inchSize,
       grossWeight, netWeight, manufacturerName,
@@ -277,7 +279,7 @@ export default function StockInForm({
         <div className="row" style={{ marginTop: 8 }}>
           <Link className="btn gold" href="/stock">View stock</Link>
           <button className="btn ghost" type="button" onClick={() => {
-            setDone(null); setDesignNumber(""); setDesignName(""); setLocation(""); setGoldDetails(""); setInchSize("");
+            setDone(null); setCustomStockNo(""); setDesignNumber(""); setDesignName(""); setLocation(""); setGoldDetails(""); setInchSize("");
             setGrossWeight(""); setNetWeight(""); setManufacturerName("");
             setGoldPriceUsd(""); setLaborUsd(""); setGoldPriceInr(""); setLaborInr("");
             setComments(""); setStones([blankStone()]);
@@ -303,6 +305,23 @@ export default function StockInForm({
           )}
         </div>
         <div className="grid3">
+          <div className="field">
+            <label>Stock No.</label>
+            {editing ? (
+              <input value={editingStockNo} readOnly style={{ background: "#f8fafc" }} />
+            ) : (
+              <input
+                value={customStockNo}
+                onChange={(e) => setCustomStockNo(e.target.value)}
+                placeholder="Leave blank to auto-number"
+              />
+            )}
+            {!editing && (
+              <span className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Enter your own stock number, or leave blank to auto-number.
+              </span>
+            )}
+          </div>
           <div className="field">
             <label>Design Number <span className="req">*</span></label>
             <OrderCombobox orders={orders} value={designNumber} onSelect={pickDesign} loading={!orders.length} />

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isStorageConfigured, logActivity } from "@/lib/sheetStore";
-import { createStockEntry, NewStockEntry, StockStone } from "@/lib/stockStore";
+import { createStockEntry, getStockEntry, NewStockEntry, StockStone } from "@/lib/stockStore";
 import { getCurrentUser } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +58,20 @@ export async function POST(req: NextRequest) {
     stones,
   };
 
-  const isEdit = !!entry.stockNo;
+  // `editing` distinguishes updating an existing piece (replace) from creating a
+  // new one with a custom Stock No. For a new custom number, reject collisions
+  // so we never silently overwrite an existing piece.
+  const isEdit = !!(body as { editing?: boolean }).editing;
+  if (!isEdit && entry.stockNo) {
+    const clash = await getStockEntry(entry.stockNo).catch(() => null);
+    if (clash) {
+      return NextResponse.json(
+        { error: `Stock No. "${entry.stockNo}" already exists. Use a different number or leave it blank to auto-number.` },
+        { status: 409 }
+      );
+    }
+  }
+
   try {
     const stockNo = await createStockEntry(entry);
     const actor = await getCurrentUser();

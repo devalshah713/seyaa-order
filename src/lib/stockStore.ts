@@ -65,7 +65,7 @@ function escapeCell(v: string): string {
 function escapeIdCell(v: string): string {
   return /^\d+$/.test(v) ? "'" + v : escapeCell(v);
 }
-const TEXT_ID_HEADERS = new Set<string>(["Design Number", "Product Code"]);
+const TEXT_ID_HEADERS = new Set<string>(["Stock No.", "Design Number", "Product Code"]);
 
 function today(): string {
   return new Date().toLocaleDateString("en-GB"); // dd/mm/yyyy
