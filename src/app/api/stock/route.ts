@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isStorageConfigured, logActivity } from "@/lib/sheetStore";
-import { createStockEntry, getStockEntry, NewStockEntry, StockStone } from "@/lib/stockStore";
+import { createStockEntry, getStockEntry, listStockEntries, NewStockEntry, StockStone } from "@/lib/stockStore";
 import { getCurrentUser } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
+
+// Slim list of stock pieces for pickers (e.g. the Photoshoot form auto-fetch by
+// Stock No.). Returns the fields needed to auto-fill: design name + gold color.
+export async function GET() {
+  try {
+    const entries = await listStockEntries();
+    return NextResponse.json({
+      stocks: entries.map((e) => ({
+        stockNo: e.stockNo,
+        designName: e.designName,
+        goldColor: e.goldDetails,
+        designNumber: e.designNumber,
+        date: e.date,
+      })),
+    });
+  } catch {
+    return NextResponse.json({ stocks: [] });
+  }
+}
 
 export async function POST(req: NextRequest) {
   if (!isStorageConfigured()) {
