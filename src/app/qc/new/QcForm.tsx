@@ -241,8 +241,8 @@ export default function QcForm({ initial = null }: { initial?: QcInitial | null 
                         className="btn small"
                         onClick={() => setValue(c, "YES")}
                         style={a.value === "YES"
-                          ? { background: "#16a34a", color: "#fff", borderColor: "#16a34a" }
-                          : { background: "#fff" }}
+                          ? { background: "#16a34a", color: "#fff", border: "1px solid #16a34a" }
+                          : { background: "#fff", color: "#1c1917", border: "1px solid #d6d3d1" }}
                       >
                         Yes
                       </button>
@@ -251,8 +251,8 @@ export default function QcForm({ initial = null }: { initial?: QcInitial | null 
                         className="btn small"
                         onClick={() => setValue(c, "NO")}
                         style={a.value === "NO"
-                          ? { background: "#dc2626", color: "#fff", borderColor: "#dc2626" }
-                          : { background: "#fff" }}
+                          ? { background: "#dc2626", color: "#fff", border: "1px solid #dc2626" }
+                          : { background: "#fff", color: "#1c1917", border: "1px solid #d6d3d1" }}
                       >
                         No
                       </button>
