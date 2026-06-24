@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
+    console.error("[sell] export failed:", e instanceof Error ? e.stack || e.message : e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to build sell sheet" },
       { status: 500 }

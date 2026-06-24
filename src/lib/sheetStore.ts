@@ -59,17 +59,42 @@ export type Order = {
 
 async function call<T>(payload: Record<string, unknown>): Promise<T> {
   if (!WEBAPP_URL) throw new Error("STORAGE_NOT_CONFIGURED");
-  const res = await fetch(WEBAPP_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: TOKEN, ...payload }),
-    cache: "no-store",
-    redirect: "follow",
-  });
-  if (!res.ok) throw new Error(`Sheet request failed (${res.status})`);
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "Sheet request failed");
-  return data as T;
+  // The Apps Script Web App occasionally returns a transient 5xx (cold start /
+  // momentary Google error), especially when a request makes several reads in a
+  // row. Retry those (and network failures) a couple of times with a short
+  // backoff. 4xx and application-level errors are NOT retried.
+  const attempts = 3;
+  let lastErr: unknown = new Error("Sheet request failed");
+  for (let i = 0; i < attempts; i++) {
+    let res: Response;
+    try {
+      res = await fetch(WEBAPP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: TOKEN, ...payload }),
+        cache: "no-store",
+        redirect: "follow",
+      });
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error("Sheet request failed");
+      if (i < attempts - 1) { await sleep(500 * (i + 1) * (i + 1)); continue; }
+      throw lastErr;
+    }
+    if (res.status >= 500) {
+      lastErr = new Error(`Sheet request failed (${res.status})`);
+      if (i < attempts - 1) { await sleep(500 * (i + 1) * (i + 1)); continue; }
+      throw lastErr;
+    }
+    if (!res.ok) throw new Error(`Sheet request failed (${res.status})`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "Sheet request failed");
+    return data as T;
+  }
+  throw lastErr;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 // Shared so other stores (e.g. the Diamond Issue tracker) can talk to the same
