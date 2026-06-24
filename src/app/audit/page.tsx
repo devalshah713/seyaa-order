@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 // filtered per module. Extend this as new modules are added.
 function moduleOf(e: AuditEntry): string {
   const a = e.action.toLowerCase();
+  if (a.includes("qc")) return "QC";
   if (a.includes("photoshoot")) return "Photoshoot";
   if (a.includes("sell")) return "Sell";
   if (a.includes("stock")) return "Stock";
@@ -66,7 +67,7 @@ export default async function AuditTrailPage({
     );
   }
 
-  const MODULES = ["Orders", "Diamond Issue", "Jewellery In", "Stock", "Sell", "Photoshoot", "Account", "Uploads", "Team", "Settings"];
+  const MODULES = ["Orders", "Diamond Issue", "Jewellery In", "Stock", "Sell", "Photoshoot", "QC", "Account", "Uploads", "Team", "Settings"];
 
   return (
     <main className="container">

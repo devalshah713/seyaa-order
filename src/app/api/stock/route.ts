@@ -5,8 +5,8 @@ import { getCurrentUser } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
 
-// Slim list of stock pieces for pickers (e.g. the Photoshoot form auto-fetch by
-// Stock No.). Returns the fields needed to auto-fill: design name + gold color.
+// Slim list of stock pieces for pickers (Photoshoot / QC auto-fetch by Stock
+// No.). Returns the detail fields needed to auto-fill (everything but price).
 export async function GET() {
   try {
     const entries = await listStockEntries();
@@ -15,8 +15,16 @@ export async function GET() {
         stockNo: e.stockNo,
         designName: e.designName,
         goldColor: e.goldDetails,
+        goldDetails: e.goldDetails,
         designNumber: e.designNumber,
         date: e.date,
+        location: e.location,
+        inchSize: e.inchSize,
+        grossWeight: e.grossWeight,
+        netWeight: e.netWeight,
+        totalDiamondWeight: e.totalDiamondWeight,
+        totalDiaPcs: e.totalDiaPcs,
+        manufacturerName: e.manufacturerName,
       })),
     });
   } catch {

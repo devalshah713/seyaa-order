@@ -19,6 +19,7 @@ const MODULES: Module[] = [
   { label: "Record Stock In", href: "/stock/new" },
   { label: "Sell of Diamonds", href: "/sell" },
   { label: "Photoshoot & Marketing", href: "/photoshoot" },
+  { label: "Quality Check", href: "/qc" },
   { label: "Audit Trail", href: "/audit" },
   { label: "Team", href: "/admin/team", adminOnly: true },
 ];
