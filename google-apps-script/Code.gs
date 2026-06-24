@@ -111,9 +111,9 @@ function replaceByKey_(tabName,keyHeader,keyValue,headers,rows){
   return json_({ ok:true });
 }
 // Send an email from the script owner's Gmail. Used for QC failure alerts.
-// If "to" is blank, it sends to the account that owns/deployed this script.
+// If "to" is blank, it falls back to the owner's address below.
 function email_(to,subject,body){
-  var recipient=(to && String(to).trim()) ? String(to).trim() : Session.getEffectiveUser().getEmail();
+  var recipient=(to && String(to).trim()) ? String(to).trim() : "devalshah713@gmail.com";
   MailApp.sendEmail(recipient, subject||"Notification", body||"");
   return json_({ ok:true });
 }
