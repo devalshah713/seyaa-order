@@ -142,3 +142,23 @@ export async function saveQc(rec: QcRecord): Promise<string> {
   });
   return rec.stockNo;
 }
+
+// Email the list of stock numbers currently failing QC (only the numbers, one
+// per line). Best-effort: a missing "email" action or any error is swallowed so
+// it never breaks the QC save. The Apps Script sends from the owner's Gmail; an
+// optional QC_ALERT_EMAIL env var overrides the recipient.
+export async function emailFailedStockNumbers(): Promise<void> {
+  try {
+    const all = await listQc();
+    const failed = all.filter((q) => q.result === "FAIL").map((q) => q.stockNo);
+    if (!failed.length) return;
+    await sheetCall({
+      action: "email",
+      to: process.env.QC_ALERT_EMAIL || "",
+      subject: "QC Failed — Seyaa",
+      body: failed.join("\n"),
+    });
+  } catch (e) {
+    console.error("[qc] failure email not sent:", e instanceof Error ? e.message : e);
+  }
+}

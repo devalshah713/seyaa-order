@@ -144,6 +144,7 @@ export default function QcForm({ initial = null }: { initial?: QcInitial | null 
         </p>
         <div className="row" style={{ marginTop: 8 }}>
           <Link className="btn gold" href="/qc">View QC list</Link>
+          <Link className="btn ghost" href={`/qc/new?stock=${encodeURIComponent(stockNo)}`}>Edit this QC</Link>
           {!editing && (
             <button className="btn ghost" type="button" onClick={() => {
               setDone(null); setStockNo(""); setDetail(EMPTY_DETAIL); setComments("");

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isStorageConfigured, logActivity } from "@/lib/sheetStore";
-import { saveQc, QcRecord, QcItem } from "@/lib/qcStore";
+import { saveQc, emailFailedStockNumbers, QcRecord, QcItem } from "@/lib/qcStore";
 import { QC_CHECKS, deriveResult } from "@/lib/qcConfig";
 import { getCurrentUser } from "@/lib/currentUser";
 
@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
 
   try {
     await saveQc(rec);
+    // On a fail, email the owner the list of stock numbers currently failing QC.
+    if (rec.result === "FAIL") await emailFailedStockNumbers();
     const actor = await getCurrentUser();
     if (actor) {
       logActivity({
