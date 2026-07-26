@@ -7,7 +7,7 @@
 // single-office workflow this read-modify-write is safe; if two memos are ever
 // saved in the very same instant the second simply retries onto a fresh read.
 import "server-only";
-import { list, put } from "@vercel/blob";
+import { get, put, BlobNotFoundError } from "@vercel/blob";
 import { fyFromInput, memoIdFor, memoNoFor, todayInput } from "./memoFormat";
 
 const DB_PATH = "memos/db.json";
@@ -49,18 +49,25 @@ function requireToken(): string {
 }
 
 async function readDB(token: string): Promise<DB> {
-  const { blobs } = await list({ prefix: DB_PATH, token, limit: 1 });
-  const hit = blobs.find((b) => b.pathname === DB_PATH);
-  if (!hit) return { counters: {}, memos: [] };
-  const res = await fetch(hit.url, { cache: "no-store" });
-  if (!res.ok) return { counters: {}, memos: [] };
-  const db = (await res.json()) as Partial<DB>;
-  return { counters: db.counters || {}, memos: db.memos || [] };
+  try {
+    // Private store: read the content via the SDK (a plain public fetch is
+    // rejected). useCache:false so a just-saved memo is visible immediately.
+    const result = await get(DB_PATH, { access: "private", token, useCache: false });
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      return { counters: {}, memos: [] };
+    }
+    const db = (await new Response(result.stream).json()) as Partial<DB>;
+    return { counters: db.counters || {}, memos: db.memos || [] };
+  } catch (err) {
+    // First run: the DB blob doesn't exist yet.
+    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [] };
+    throw err;
+  }
 }
 
 async function writeDB(db: DB, token: string): Promise<void> {
   await put(DB_PATH, JSON.stringify(db), {
-    access: "public",
+    access: "private",
     token,
     addRandomSuffix: false,
     allowOverwrite: true,
