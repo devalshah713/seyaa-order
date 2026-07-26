@@ -147,6 +147,7 @@ button.ghost:hover { border-color: var(--gold-soft); background: color-mix(in sr
   background: var(--paper); color: var(--paper-ink); width: 210mm; min-height: 297mm;
   padding: 16mm 15mm 14mm; box-shadow: 0 12px 40px rgba(40,34,20,.22);
   font-size: 12px; line-height: 1.45; position: relative;
+  display: flex; flex-direction: column;
 }
 .memo .letterhead { display: flex; align-items: center; gap: 16px; padding-bottom: 12px; }
 .memo .letterhead .mark { width: 54px; height: 54px; flex: none; color: var(--gold); }
@@ -202,7 +203,8 @@ table.items tfoot .totval { text-align: center; font-size: 13px; font-variant-nu
 .terms ol { margin: 0; padding-left: 16px; font-size: 9.8px; line-height: 1.5; color: var(--paper-muted); }
 .terms ol li { margin-bottom: 2px; }
 
-.signs { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 34px; }
+/* Pinned to the bottom of the page — the empty space falls above the block. */
+.signs { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: auto; padding-top: 26px; }
 .sign .line { border-top: 1px solid var(--paper-ink); padding-top: 5px; }
 .sign .who { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 650; color: var(--paper-ink); }
 .sign .for { font-size: 9.5px; color: var(--paper-muted); margin-top: 2px; font-family: var(--serif);
@@ -256,6 +258,8 @@ table.history .num { font-variant-numeric: tabular-nums; text-align: center; }
   body { background: #fff; }
   .app { display: block; }
   .stage, .wrap { padding: 0; display: block; overflow: visible; max-width: none; }
-  .memo { width: auto; min-height: auto; box-shadow: none; padding: 12mm; }
+  /* Fill the printable A4 area (297mm − 2×8mm page margin) so the flex column
+     can push the signature block to the bottom of the page. */
+  .memo { width: auto; min-height: 281mm; box-shadow: none; padding: 12mm; }
   @page { size: A4; margin: 8mm; }
 }
