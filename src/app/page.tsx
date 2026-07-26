@@ -1,11 +1,11 @@
 import Link from "next/link";
-import DiamondMark from "@/components/DiamondMark";
+import Logo from "@/components/Logo";
 import { COMPANY } from "@/lib/memoFormat";
 
 export default function Home() {
   return (
     <div className="hero">
-      <DiamondMark className="mark" />
+      <Logo height={96} className="mark" />
       <h1>{COMPANY.name}</h1>
       <p className="tagline">{COMPANY.tagline}</p>
       <p className="lead">

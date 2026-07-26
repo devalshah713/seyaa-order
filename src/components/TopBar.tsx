@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import DiamondMark from "./DiamondMark";
+import Logo from "./Logo";
 import ThemeToggle from "./ThemeToggle";
 import { COMPANY } from "@/lib/memoFormat";
 
@@ -12,7 +12,7 @@ export default function TopBar() {
 
   return (
     <header className="topbar no-print">
-      <DiamondMark className="mark" />
+      <Logo height={30} className="mark" />
       <Link href="/" className="brand" style={{ textDecoration: "none" }}>
         {COMPANY.name}
       </Link>

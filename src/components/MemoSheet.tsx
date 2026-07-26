@@ -1,4 +1,4 @@
-import DiamondMark from "./DiamondMark";
+import Logo from "./Logo";
 import { COMPANY, formatDate } from "@/lib/memoFormat";
 
 export type MemoSheetData = {
@@ -24,7 +24,7 @@ export default function MemoSheet({ data }: { data: MemoSheetData }) {
   return (
     <div className="memo">
       <div className="letterhead">
-        <DiamondMark className="mark" />
+        <Logo height={66} className="mark" />
         <div className="lh-text">
           <h2>{COMPANY.name}</h2>
           <p className="tagline">{COMPANY.tagline}</p>
