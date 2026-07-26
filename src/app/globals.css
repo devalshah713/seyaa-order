@@ -227,6 +227,17 @@ table.history tbody tr { cursor: pointer; }
 table.history tbody tr:hover { background: var(--field-bg); }
 table.history .memono { font-weight: 650; color: var(--gold); font-variant-numeric: tabular-nums; }
 table.history .num { font-variant-numeric: tabular-nums; text-align: center; }
+table.history th.actions-col { text-align: right; width: 150px; }
+td.row-actions { text-align: right; white-space: nowrap; }
+.rowbtn {
+  display: inline-block; font-size: 12px; font-weight: 600; cursor: pointer;
+  text-decoration: none; padding: 5px 11px; border-radius: 7px; margin-left: 6px;
+  border: 1px solid var(--field-line); background: var(--field-bg); color: var(--panel-ink);
+}
+.rowbtn:hover { border-color: var(--gold-soft); }
+.rowbtn.danger { color: #b23; }
+.rowbtn.danger:hover { border-color: #d9a9a9; background: #fbeeee; }
+.rowbtn[disabled] { opacity: .55; cursor: default; }
 .empty-state { text-align: center; color: var(--panel-muted); padding: 60px 20px; }
 .empty-state p { margin: 0 0 16px; }
 

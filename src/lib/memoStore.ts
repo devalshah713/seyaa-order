@@ -128,3 +128,37 @@ export async function getMemo(id: string): Promise<Memo | null> {
   const db = await readDB(token);
   return db.memos.find((m) => m.id === id) || null;
 }
+
+// Update an existing memo's details. The identity fields (id, memoNo, seq, fy,
+// createdAt) are preserved — a memo keeps its number even if the date changes.
+export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const idx = db.memos.findIndex((m) => m.id === id);
+  if (idx === -1) return null;
+  const existing = db.memos[idx];
+  const updated: Memo = {
+    ...existing,
+    to: patch.to,
+    through: patch.through,
+    mobile: patch.mobile,
+    date: patch.date || existing.date,
+    purpose: patch.purpose,
+    comment: patch.comment,
+    items: patch.items,
+    totalPcs: totalOf(patch.items),
+  };
+  db.memos[idx] = updated;
+  await writeDB(db, token);
+  return updated;
+}
+
+export async function deleteMemo(id: string): Promise<boolean> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const before = db.memos.length;
+  db.memos = db.memos.filter((m) => m.id !== id);
+  if (db.memos.length === before) return false;
+  await writeDB(db, token);
+  return true;
+}

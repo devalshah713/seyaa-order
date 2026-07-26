@@ -1,12 +1,15 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { formatDate } from "@/lib/memoFormat";
 import type { Memo } from "@/lib/memoStore";
 
 export default function HistoryTable({ memos }: { memos: Memo[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -21,6 +24,24 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
     });
   }, [q, memos]);
 
+  async function del(m: Memo) {
+    if (!window.confirm(`Delete memo ${m.memoNo}? This cannot be undone.`)) return;
+    setError("");
+    setBusyId(m.id);
+    try {
+      const res = await fetch(`/api/memos/${m.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not delete the memo.");
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete the memo.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   return (
     <>
       <input
@@ -29,6 +50,7 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search memo no., recipient, stock number…"
       />
+      {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
       <table className="history">
         <thead>
           <tr>
@@ -37,6 +59,7 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
             <th>To</th>
             <th>Purpose</th>
             <th className="num">Pcs</th>
+            <th className="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -47,10 +70,20 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
               <td>{m.to || "—"}</td>
               <td>{m.purpose}</td>
               <td className="num">{m.totalPcs}</td>
+              <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                <Link href={`/memo/${m.id}/edit`} className="rowbtn">Edit</Link>
+                <button
+                  className="rowbtn danger"
+                  onClick={() => del(m)}
+                  disabled={busyId === m.id}
+                >
+                  {busyId === m.id ? "Deleting…" : "Delete"}
+                </button>
+              </td>
             </tr>
           ))}
           {filtered.length === 0 && (
-            <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
+            <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
           )}
         </tbody>
       </table>

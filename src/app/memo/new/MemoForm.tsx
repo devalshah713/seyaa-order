@@ -11,31 +11,51 @@ import {
 
 type Item = { key: number; type: string; stock: string };
 
+export type MemoInitial = {
+  id: string;
+  memoNo: string;
+  to: string;
+  through: string;
+  mobile: string;
+  date: string;
+  purpose: string;
+  comment: string;
+  items: { type: string; stockNos: string[] }[];
+};
+
 let keySeq = 1;
 const newItem = (type = "", stock = ""): Item => ({ key: keySeq++, type, stock });
 
-export default function MemoForm() {
+export default function MemoForm({ initial }: { initial?: MemoInitial }) {
   const router = useRouter();
-  const [to, setTo] = useState("");
-  const [through, setThrough] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [date, setDate] = useState(todayInput());
-  const [purpose, setPurpose] = useState<string>(PURPOSES[0]);
-  const [comment, setComment] = useState("");
-  const [items, setItems] = useState<Item[]>([newItem("Ring"), newItem("Pendant"), newItem()]);
-  const [memoNo, setMemoNo] = useState("SS/…");
+  const editing = !!initial;
+
+  const [to, setTo] = useState(initial?.to ?? "");
+  const [through, setThrough] = useState(initial?.through ?? "");
+  const [mobile, setMobile] = useState(initial?.mobile ?? "");
+  const [date, setDate] = useState(initial?.date || todayInput());
+  const [purpose, setPurpose] = useState<string>(initial?.purpose ?? PURPOSES[0]);
+  const [comment, setComment] = useState(initial?.comment ?? "");
+  const [items, setItems] = useState<Item[]>(
+    initial
+      ? initial.items.map((it) => newItem(it.type, it.stockNos.join(", ")))
+      : [newItem("Ring"), newItem("Pendant"), newItem()]
+  );
+  const [memoNo, setMemoNo] = useState(initial?.memoNo ?? "SS/…");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch the predicted next memo number whenever the date changes.
+  // Create mode only: fetch the predicted next memo number when the date changes.
+  // In edit mode the memo keeps its original number.
   const latest = useRef(0);
   useEffect(() => {
+    if (editing) return;
     const id = ++latest.current;
     fetch(`/api/memos/next?date=${encodeURIComponent(date)}`)
       .then((r) => r.json())
       .then((d) => { if (id === latest.current && d.memoNo) setMemoNo(d.memoNo); })
       .catch(() => {});
-  }, [date]);
+  }, [date, editing]);
 
   const sheetItems = useMemo(
     () => items.map((it) => ({ type: it.type, stockNos: parseCodes(it.stock) })),
@@ -64,14 +84,15 @@ export default function MemoForm() {
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/memos", {
-        method: "POST",
+      const res = await fetch(editing ? `/api/memos/${initial!.id}` : "/api/memos", {
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the memo.");
       router.push(`/memo/${data.memo.id}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the memo.");
       setSaving(false);
@@ -135,7 +156,7 @@ export default function MemoForm() {
 
         <div className="actions">
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save Memo"}
+            {saving ? "Saving…" : editing ? "Update Memo" : "Save Memo"}
           </button>
         </div>
         {error && <p className="save-error">{error}</p>}
