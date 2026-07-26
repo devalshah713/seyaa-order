@@ -28,12 +28,13 @@ export type Memo = {
   items: MemoItem[];
   totalPcs: number;
   createdAt: string; // ISO
+  updatedAt?: string; // ISO — set on create and every edit; drives incremental backup
   driveLink?: string; // Google Drive webViewLink, once uploaded
 };
 
 export type NewMemo = Omit<Memo, "id" | "memoNo" | "fy" | "seq" | "totalPcs" | "createdAt">;
 
-type DB = { counters: Record<string, number>; memos: Memo[] };
+export type DB = { counters: Record<string, number>; memos: Memo[] };
 
 export function isStorageConfigured(): boolean {
   return !!process.env.BLOB_READ_WRITE_TOKEN;
@@ -103,6 +104,7 @@ export async function createMemo(input: NewMemo): Promise<Memo> {
     items: input.items,
     totalPcs: totalOf(input.items),
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
   db.memos.push(memo);
   await writeDB(db, token);
@@ -148,6 +150,7 @@ export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | nul
     comment: patch.comment,
     items: patch.items,
     totalPcs: totalOf(patch.items),
+    updatedAt: new Date().toISOString(),
     // Content changed — drop the stale Drive link so the memo re-uploads fresh.
     driveLink: undefined,
   };
@@ -174,4 +177,21 @@ export async function deleteMemo(id: string): Promise<boolean> {
   if (db.memos.length === before) return false;
   await writeDB(db, token);
   return true;
+}
+
+// Full database (counters + memos) for backup. Counters are included so a
+// restore preserves the serial-number sequence.
+export async function exportDb(): Promise<DB> {
+  const token = requireToken();
+  return readDB(token);
+}
+
+// Overwrite the entire database from a previously exported backup.
+export async function importDb(db: DB): Promise<void> {
+  const token = requireToken();
+  const safe: DB = {
+    counters: db && typeof db.counters === "object" && db.counters ? db.counters : {},
+    memos: Array.isArray(db?.memos) ? db.memos : [],
+  };
+  await writeDB(safe, token);
 }
