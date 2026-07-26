@@ -28,6 +28,7 @@ export type Memo = {
   items: MemoItem[];
   totalPcs: number;
   createdAt: string; // ISO
+  driveLink?: string; // Google Drive webViewLink, once uploaded
 };
 
 export type NewMemo = Omit<Memo, "id" | "memoNo" | "fy" | "seq" | "totalPcs" | "createdAt">;
@@ -147,10 +148,22 @@ export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | nul
     comment: patch.comment,
     items: patch.items,
     totalPcs: totalOf(patch.items),
+    // Content changed — drop the stale Drive link so the memo re-uploads fresh.
+    driveLink: undefined,
   };
   db.memos[idx] = updated;
   await writeDB(db, token);
   return updated;
+}
+
+// Record the Drive link after a successful upload.
+export async function setDriveLink(id: string, link: string): Promise<void> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const memo = db.memos.find((m) => m.id === id);
+  if (!memo) return;
+  memo.driveLink = link;
+  await writeDB(db, token);
 }
 
 export async function deleteMemo(id: string): Promise<boolean> {

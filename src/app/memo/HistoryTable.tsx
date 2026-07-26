@@ -71,6 +71,9 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
               <td>{m.purpose}</td>
               <td className="num">{m.totalPcs}</td>
               <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                {m.driveLink && (
+                  <a href={m.driveLink} target="_blank" rel="noopener noreferrer" className="rowbtn" title="Open in Google Drive">Drive ↗</a>
+                )}
                 <Link href={`/memo/${m.id}/edit`} className="rowbtn">Edit</Link>
                 <button
                   className="rowbtn danger"
