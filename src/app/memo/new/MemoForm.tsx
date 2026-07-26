@@ -71,7 +71,7 @@ export default function MemoForm() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the memo.");
-      router.push(`/memo/${data.memo.id}?print=1`);
+      router.push(`/memo/${data.memo.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the memo.");
       setSaving(false);
@@ -135,7 +135,7 @@ export default function MemoForm() {
 
         <div className="actions">
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save & Print Memo"}
+            {saving ? "Saving…" : "Save Memo"}
           </button>
         </div>
         {error && <p className="save-error">{error}</p>}

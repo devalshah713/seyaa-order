@@ -8,10 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function MemoViewPage({
   params,
-  searchParams,
 }: {
   params: { id: string };
-  searchParams: { print?: string };
 }) {
   const memo = await getMemo(params.id).catch(() => null);
   if (!memo) notFound();
@@ -21,7 +19,7 @@ export default async function MemoViewPage({
       <div className="wrap no-print" style={{ paddingBottom: 0 }}>
         <div className="page-head">
           <Link href="/memo" className="btn">← History</Link>
-          <MemoActions autoPrint={searchParams.print === "1"} />
+          <MemoActions id={params.id} />
         </div>
       </div>
       <div className="stage">

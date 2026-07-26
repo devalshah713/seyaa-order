@@ -1,21 +1,29 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
-export default function MemoActions({ autoPrint }: { autoPrint: boolean }) {
-  const done = useRef(false);
-  useEffect(() => {
-    if (autoPrint && !done.current) {
-      done.current = true;
-      const t = setTimeout(() => window.print(), 350);
-      return () => clearTimeout(t);
+export default function MemoActions({ id }: { id: string }) {
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadPdf() {
+    setDownloading(true);
+    try {
+      // Navigating to the route triggers the attachment download.
+      window.location.href = `/api/memos/${id}/pdf`;
+      // Re-enable after a moment in case the user stays on the page.
+      setTimeout(() => setDownloading(false), 4000);
+    } catch {
+      setDownloading(false);
     }
-  }, [autoPrint]);
+  }
 
   return (
     <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
       <Link href="/memo/new" className="btn">+ New</Link>
-      <button className="btn btn-primary" onClick={() => window.print()}>Print</button>
+      <button className="btn" onClick={() => window.print()}>Print</button>
+      <button className="btn btn-primary" onClick={downloadPdf} disabled={downloading}>
+        {downloading ? "Preparing PDF…" : "Download PDF"}
+      </button>
     </div>
   );
 }
