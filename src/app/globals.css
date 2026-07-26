@@ -227,7 +227,8 @@ table.history tbody tr { cursor: pointer; }
 table.history tbody tr:hover { background: var(--field-bg); }
 table.history .memono { font-weight: 650; color: var(--gold); font-variant-numeric: tabular-nums; }
 table.history .num { font-variant-numeric: tabular-nums; text-align: center; }
-table.history th.actions-col { text-align: right; width: 210px; }
+table.history th.actions-col { text-align: right; width: 290px; }
+.rowbtn { margin-left: 5px; padding: 5px 10px; }
 .drive-status { font-size: 13px; }
 .drive-status .muted { color: var(--panel-muted); }
 .drive-status .drive-ok { color: #2f8f4e; font-weight: 600; text-decoration: none; }
