@@ -1,0 +1,626 @@
+<title>Seyaa Solitaire — Memo Generator</title>
+<style>
+  :root {
+    /* Shell (adapts to theme) */
+    --shell-bg: #E9E5DC;
+    --panel: #FFFFFF;
+    --panel-line: #E4DFD3;
+    --panel-ink: #26241F;
+    --panel-muted: #6E6A5F;
+    --field-bg: #FBFAF7;
+    --field-line: #D9D3C5;
+    --field-focus: #8C6A2E;
+
+    /* Brand */
+    --gold: #8C6A2E;
+    --gold-soft: #B0894F;
+    --gold-line: #D8C9A6;
+
+    /* Paper (fixed — it's paper) */
+    --paper: #FCFBF8;
+    --paper-ink: #1B1A17;
+    --paper-muted: #6B6658;
+    --paper-line: #E5DEcd;
+    --paper-rule: #C9BC98;
+
+    --radius: 10px;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: Georgia, "Times New Roman", "Cambria", serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --shell-bg: #1A1815;
+      --panel: #232019;
+      --panel-line: #34302631;
+      --panel-line: #35302680;
+      --panel-ink: #ECE7DA;
+      --panel-muted: #A39C89;
+      --field-bg: #1C1A15;
+      --field-line: #443E30;
+      --gold-soft: #C9A961;
+    }
+  }
+  :root[data-theme="dark"] {
+    --shell-bg: #1A1815;
+    --panel: #232019;
+    --panel-line: #35302680;
+    --panel-ink: #ECE7DA;
+    --panel-muted: #A39C89;
+    --field-bg: #1C1A15;
+    --field-line: #443E30;
+    --gold-soft: #C9A961;
+  }
+  :root[data-theme="light"] {
+    --shell-bg: #E9E5DC;
+    --panel: #FFFFFF;
+    --panel-line: #E4DFD3;
+    --panel-ink: #26241F;
+    --panel-muted: #6E6A5F;
+    --field-bg: #FBFAF7;
+    --field-line: #D9D3C5;
+    --gold-soft: #B0894F;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--shell-bg);
+    color: var(--panel-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    min-height: 100vh;
+  }
+
+  /* ---------- Control panel ---------- */
+  .controls {
+    background: var(--panel);
+    border-right: 1px solid var(--panel-line);
+    padding: 22px 22px 40px;
+    overflow-y: auto;
+    max-height: 100vh;
+    position: sticky;
+    top: 0;
+  }
+  .brandbar {
+    display: flex; align-items: center; gap: 11px;
+    padding-bottom: 16px; margin-bottom: 18px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .brandbar .mark { width: 30px; height: 30px; flex: none; }
+  .brandbar h1 {
+    font-family: var(--serif);
+    font-size: 15px; letter-spacing: 1.5px;
+    text-transform: uppercase; margin: 0; font-weight: 600;
+  }
+  .brandbar .sub {
+    font-size: 10.5px; letter-spacing: .5px; margin: 2px 0 0;
+    color: var(--panel-muted); text-transform: uppercase;
+  }
+  .proto-tag {
+    margin-left: auto; font-size: 9.5px; letter-spacing: .8px;
+    text-transform: uppercase; color: var(--gold);
+    border: 1px solid var(--gold-line); border-radius: 999px;
+    padding: 3px 8px; white-space: nowrap;
+  }
+
+  .group { margin-bottom: 20px; }
+  .group > legend, .group-title {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--gold); font-weight: 700; margin: 0 0 10px;
+  }
+  fieldset { border: 0; padding: 0; margin: 0; }
+
+  label.field { display: block; margin-bottom: 11px; }
+  label.field > span {
+    display: block; font-size: 11px; color: var(--panel-muted);
+    margin-bottom: 4px; letter-spacing: .3px;
+  }
+  input, select, textarea {
+    width: 100%; font-family: var(--sans); font-size: 13.5px;
+    color: var(--panel-ink); background: var(--field-bg);
+    border: 1px solid var(--field-line); border-radius: 8px;
+    padding: 8px 10px; transition: border-color .15s, box-shadow .15s;
+  }
+  textarea { resize: vertical; min-height: 54px; }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--field-focus);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--field-focus) 18%, transparent);
+  }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Item rows */
+  .items-head, .item-row {
+    display: grid;
+    grid-template-columns: 26px 1fr 96px 30px;
+    gap: 8px; align-items: center;
+  }
+  .items-head {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+    color: var(--panel-muted); margin-bottom: 7px; padding: 0 2px;
+  }
+  .item-row { margin-bottom: 8px; }
+  .item-row .sr {
+    font-variant-numeric: tabular-nums; text-align: center;
+    font-size: 12.5px; color: var(--panel-muted);
+  }
+  .item-row input.stock { text-transform: uppercase; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums; text-align: center; }
+  .del {
+    border: 1px solid var(--field-line); background: var(--field-bg);
+    color: var(--panel-muted); border-radius: 7px; height: 34px;
+    cursor: pointer; font-size: 15px; line-height: 1; padding: 0;
+  }
+  .del:hover { color: #b23; border-color: #d9a9a9; }
+
+  button.ghost {
+    width: 100%; margin-top: 4px; background: transparent;
+    border: 1px dashed var(--field-line); color: var(--gold);
+    border-radius: 8px; padding: 9px; cursor: pointer;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .3px;
+  }
+  button.ghost:hover { border-color: var(--gold-soft); background: color-mix(in srgb, var(--gold) 6%, transparent); }
+
+  .actions { display: flex; gap: 10px; margin-top: 22px; }
+  button.primary {
+    flex: 1; background: var(--gold); color: #fff; border: 0;
+    border-radius: 9px; padding: 12px; font-size: 13.5px; font-weight: 650;
+    letter-spacing: .4px; cursor: pointer;
+  }
+  button.primary:hover { background: #785621; }
+  button.secondary {
+    background: transparent; border: 1px solid var(--field-line);
+    color: var(--panel-ink); border-radius: 9px; padding: 12px 14px;
+    font-size: 13px; cursor: pointer; font-weight: 550;
+  }
+  button.secondary:hover { border-color: var(--gold-soft); }
+
+  /* ---------- Preview stage ---------- */
+  .stage {
+    padding: 34px; display: flex; justify-content: center;
+    align-items: flex-start; overflow-x: auto;
+  }
+
+  /* ---------- The Memo (paper) ---------- */
+  .memo {
+    background: var(--paper); color: var(--paper-ink);
+    width: 210mm; min-height: 297mm; padding: 16mm 15mm 14mm;
+    box-shadow: 0 12px 40px rgba(40,34,20,.22);
+    font-size: 12px; line-height: 1.45; position: relative;
+  }
+  .memo .letterhead {
+    display: flex; align-items: center; gap: 16px;
+    padding-bottom: 12px;
+  }
+  .memo .letterhead .mark { width: 54px; height: 54px; flex: none; }
+  .memo .lh-text { flex: 1; }
+  .memo .lh-text h2 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 30px; letter-spacing: 4px; margin: 0;
+    text-transform: uppercase; color: var(--paper-ink);
+  }
+  .memo .lh-text .tagline {
+    font-family: var(--serif); font-style: italic;
+    font-size: 12px; letter-spacing: 1px; color: var(--gold);
+    margin: 3px 0 0;
+  }
+  .memo .lh-text .addr {
+    font-size: 10.5px; color: var(--paper-muted); margin: 7px 0 0;
+    letter-spacing: .2px; max-width: 62ch;
+  }
+  .memo .doc-title {
+    text-align: center; margin: 4px 0 14px;
+    font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--paper-muted);
+  }
+  .rule-gold { height: 2px; background: var(--gold);
+    background: linear-gradient(90deg, var(--gold), var(--gold-soft)); border: 0; margin: 0; }
+  .rule-hair { height: 1px; background: var(--paper-rule); border: 0; opacity: .6; }
+
+  .meta {
+    display: grid; grid-template-columns: 1.15fr .85fr;
+    gap: 4px 34px; margin: 14px 0 12px;
+  }
+  .mrow { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; }
+  .mrow .lab {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .8px;
+    color: var(--paper-muted); min-width: 74px; font-weight: 600;
+  }
+  .mrow .val {
+    flex: 1; border-bottom: 1px dotted var(--paper-rule);
+    min-height: 15px; font-size: 12.5px; padding-bottom: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .mrow .val.strong { font-weight: 650; letter-spacing: .5px; }
+  .purpose-pill {
+    display: inline-block; font-size: 11px; font-weight: 650;
+    letter-spacing: .6px; color: var(--gold); border: 1px solid var(--gold-line);
+    border-radius: 4px; padding: 1px 9px; text-transform: uppercase;
+  }
+  .comment-line { margin: 2px 0 14px; }
+  .comment-line .lab {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .8px;
+    color: var(--paper-muted); font-weight: 600;
+  }
+  .comment-line .val {
+    border-bottom: 1px dotted var(--paper-rule); min-height: 15px;
+    font-size: 12px; margin-top: 3px; white-space: pre-wrap;
+  }
+
+  table.items { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  table.items th {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--paper-ink); background: color-mix(in srgb, var(--gold) 12%, var(--paper));
+    border: 1px solid var(--paper-rule); padding: 7px 9px; text-align: left;
+    font-weight: 700;
+  }
+  table.items th.sr, table.items td.sr { width: 46px; text-align: center; }
+  table.items th.stock, table.items td.stock { width: 150px; text-align: center; }
+  table.items td {
+    border: 1px solid var(--paper-line); padding: 7px 9px;
+    font-size: 12.5px; height: 26px;
+  }
+  table.items td.stock {
+    font-variant-numeric: tabular-nums; letter-spacing: 2px;
+    font-weight: 600; text-transform: uppercase;
+  }
+  table.items tr.empty td { color: transparent; }
+  table.items tfoot td {
+    border: 1px solid var(--paper-rule); font-weight: 700;
+    background: color-mix(in srgb, var(--gold) 7%, var(--paper));
+  }
+  table.items tfoot .totlab { text-align: right; text-transform: uppercase;
+    letter-spacing: 1px; font-size: 10.5px; }
+  table.items tfoot .totval { text-align: center; font-size: 13px;
+    font-variant-numeric: tabular-nums; }
+
+  .terms { margin-top: 16px; }
+  .terms h3 {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--paper-ink); margin: 0 0 3px; font-weight: 700;
+  }
+  .terms .jur { font-size: 9.5px; color: var(--paper-muted); font-style: italic; margin: 0 0 6px; }
+  .terms ol {
+    margin: 0; padding-left: 16px; font-size: 9.8px; line-height: 1.5;
+    color: var(--paper-muted); columns: 1;
+  }
+  .terms ol li { margin-bottom: 2px; }
+
+  .signs {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 60px;
+    margin-top: 34px;
+  }
+  .sign .line { border-top: 1px solid var(--paper-ink); padding-top: 5px; }
+  .sign .who {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px;
+    font-weight: 650; color: var(--paper-ink);
+  }
+  .sign .for { font-size: 9.5px; color: var(--paper-muted); margin-top: 2px;
+    font-family: var(--serif); font-style: italic; letter-spacing: .3px; }
+
+  .theme-toggle {
+    position: fixed; top: 16px; right: 18px; z-index: 20;
+    background: var(--panel); border: 1px solid var(--panel-line);
+    color: var(--panel-muted); border-radius: 999px; width: 36px; height: 36px;
+    cursor: pointer; font-size: 15px; line-height: 1;
+  }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .controls { position: static; max-height: none; }
+    .memo { width: 100%; min-height: 0; padding: 20px; }
+    .stage { padding: 16px; }
+  }
+
+  /* ---------- Print ---------- */
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .app { display: block; }
+    .stage { padding: 0; display: block; overflow: visible; }
+    .memo { width: auto; min-height: auto; box-shadow: none; padding: 12mm; }
+    @page { size: A4; margin: 8mm; }
+  }
+</style>
+
+<!-- Diamond monogram, reused via <use> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="ssdiamond">
+      <polygon points="32,4 56,24 32,60 8,24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+      <line x1="8" y1="24" x2="56" y2="24" stroke="currentColor" stroke-width="1.6"/>
+      <line x1="20" y1="24" x2="32" y2="60" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="44" y1="24" x2="32" y2="60" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="20" y1="24" x2="32" y2="4" stroke="currentColor" stroke-width="1.2"/>
+      <line x1="44" y1="24" x2="32" y2="4" stroke="currentColor" stroke-width="1.2"/>
+    </g>
+  </defs>
+</svg>
+
+<button class="theme-toggle no-print" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme">◑</button>
+
+<div class="app">
+  <!-- ============ CONTROLS ============ -->
+  <aside class="controls no-print">
+    <div class="brandbar">
+      <svg class="mark" viewBox="0 0 64 64" style="color:var(--gold)"><use href="#ssdiamond"/></svg>
+      <div>
+        <h1>Seyaa Solitaire</h1>
+        <p class="sub">Memo Generator</p>
+      </div>
+      <span class="proto-tag">Prototype</span>
+    </div>
+
+    <fieldset class="group">
+      <legend>Recipient</legend>
+      <label class="field"><span>To</span><input id="f_to" placeholder="Recipient name / firm"></label>
+      <label class="field"><span>Through</span><input id="f_through" placeholder="Broker / angadia / person"></label>
+      <label class="field"><span>Mobile Number</span><input id="f_mobile" inputmode="tel" placeholder="+91 "></label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Memo Details</legend>
+      <div class="two">
+        <label class="field"><span>Memo No.</span><input id="f_memono" readonly></label>
+        <label class="field"><span>Date</span><input id="f_date" type="date"></label>
+      </div>
+      <label class="field"><span>Purpose</span>
+        <select id="f_purpose">
+          <option>Sell</option>
+          <option>Memo</option>
+          <option>Repair</option>
+          <option>Export</option>
+        </select>
+      </label>
+      <label class="field"><span>Comment</span><textarea id="f_comment" placeholder="Optional note…"></textarea></label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Jewellery Items</legend>
+      <div class="items-head">
+        <span>#</span><span>Type</span><span style="text-align:center">Stock No.</span><span></span>
+      </div>
+      <div id="itemRows"></div>
+      <button class="ghost" id="addRow">+ Add item</button>
+    </fieldset>
+
+    <div class="actions">
+      <button class="primary" id="printBtn">Print / Save Memo</button>
+      <button class="secondary" id="newBtn">New</button>
+    </div>
+  </aside>
+
+  <!-- ============ PREVIEW ============ -->
+  <main class="stage">
+    <div class="memo" id="memo">
+      <div class="letterhead">
+        <svg class="mark" viewBox="0 0 64 64" style="color:var(--gold)"><use href="#ssdiamond"/></svg>
+        <div class="lh-text">
+          <h2>Seyaa Solitaire</h2>
+          <p class="tagline">Fine Diamond Jewellery</p>
+          <p class="addr">DE-8082, Bharat Diamond Bourse, Bandra Kurla Complex, Bandra East, Mumbai&nbsp;–&nbsp;400051</p>
+        </div>
+      </div>
+      <hr class="rule-gold">
+      <p class="doc-title">Delivery Memo</p>
+
+      <div class="meta">
+        <div>
+          <div class="mrow"><span class="lab">To</span><span class="val" id="v_to"></span></div>
+          <div class="mrow"><span class="lab">Through</span><span class="val" id="v_through"></span></div>
+          <div class="mrow"><span class="lab">Mobile</span><span class="val" id="v_mobile"></span></div>
+        </div>
+        <div>
+          <div class="mrow"><span class="lab">Memo No.</span><span class="val strong" id="v_memono"></span></div>
+          <div class="mrow"><span class="lab">Date</span><span class="val" id="v_date"></span></div>
+          <div class="mrow"><span class="lab">Purpose</span><span class="val"><span class="purpose-pill" id="v_purpose">Sell</span></span></div>
+        </div>
+      </div>
+
+      <div class="comment-line">
+        <span class="lab">Comment</span>
+        <div class="val" id="v_comment"></div>
+      </div>
+
+      <table class="items">
+        <thead>
+          <tr><th class="sr">Sr.</th><th>Type</th><th class="stock">Stock No.</th></tr>
+        </thead>
+        <tbody id="v_rows"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2" class="totlab">Total Jewellery (pcs)</td>
+            <td class="totval stock" id="v_total">0</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="terms">
+        <h3>Acknowledgement of Entrustment</h3>
+        <p class="jur">Subject to Mumbai Jurisdiction.</p>
+        <ol>
+          <li>The goods have been entrusted to me for the purpose of being shown to intending purchasers for approval / inspection.</li>
+          <li>The goods remain your property and I have no right or interest in them.</li>
+          <li>I agree not to sell, pledge, mortgage, hypothecate the said goods or otherwise deal with them in any manner till a sale note signed by you is passed or the full price is paid by you.</li>
+          <li>The goods are to be returned to you forthwith whenever demanded back.</li>
+          <li>I am responsible to you for the return of the said goods in the same condition as I have received them, and they are at my risk in all respects until I return them to you.</li>
+        </ol>
+      </div>
+
+      <div class="signs">
+        <div class="sign">
+          <div class="line"><div class="who">Receiver's Signature</div></div>
+        </div>
+        <div class="sign">
+          <div class="line"><div class="who">Authorised Signatory</div><div class="for">For Seyaa Solitaire</div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var TYPES = ["Ring", "Earrings", "Pendant", "Bracelet", "Necklace", "Necklace Set"];
+  var rowsEl = document.getElementById("itemRows");
+
+  /* ---- Memo number (running serial per Indian fiscal year) ---- */
+  function fyString(d) {
+    var y = d.getFullYear(), m = d.getMonth(); // Apr = 3
+    var start = (m >= 3) ? y : y - 1;
+    return String(start).slice(2) + "-" + String(start + 1).slice(2);
+  }
+  function pad(n, w) { n = String(n); while (n.length < w) n = "0" + n; return n; }
+  function currentSeq() { return parseInt(localStorage.getItem("ss_memo_seq") || "0", 10); }
+  function previewMemoNo() {
+    var d = getDate();
+    return "SS/" + fyString(d) + "/" + pad(currentSeq() + 1, 3);
+  }
+  function commitSeq() { localStorage.setItem("ss_memo_seq", String(currentSeq() + 1)); }
+
+  function getDate() {
+    var v = document.getElementById("f_date").value;
+    if (!v) return new Date();
+    var p = v.split("-");
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+  }
+  function fmtDate(d) {
+    var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return pad(d.getDate(), 2) + " " + mo[d.getMonth()] + " " + d.getFullYear();
+  }
+
+  /* ---- Item rows ---- */
+  function typeOptions() {
+    return TYPES.map(function (t) { return '<option>' + t + '</option>'; }).join("");
+  }
+  function addRow(type, stock) {
+    var row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML =
+      '<span class="sr"></span>' +
+      '<select class="type"><option value="">—</option>' + typeOptions() + '</select>' +
+      '<input class="stock" maxlength="6" placeholder="——————" ' +
+        'pattern="[A-Za-z0-9]{1,6}" autocomplete="off">' +
+      '<button class="del" title="Remove" aria-label="Remove item">×</button>';
+    rowsEl.appendChild(row);
+    if (type) row.querySelector(".type").value = type;
+    if (stock) row.querySelector(".stock").value = stock;
+    var stk = row.querySelector(".stock");
+    stk.addEventListener("input", function () {
+      this.value = this.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6);
+      render();
+    });
+    row.querySelector(".type").addEventListener("change", render);
+    row.querySelector(".del").addEventListener("click", function () {
+      row.remove();
+      if (!rowsEl.children.length) addRow();
+      render();
+    });
+    renumber();
+  }
+  function renumber() {
+    Array.prototype.forEach.call(rowsEl.children, function (r, i) {
+      r.querySelector(".sr").textContent = i + 1;
+    });
+  }
+
+  /* ---- Render memo ---- */
+  function setVal(id, val, placeholder) {
+    document.getElementById(id).textContent = val || "";
+  }
+  function render() {
+    renumber();
+    setVal("v_to", document.getElementById("f_to").value);
+    setVal("v_through", document.getElementById("f_through").value);
+    setVal("v_mobile", document.getElementById("f_mobile").value);
+    setVal("v_comment", document.getElementById("f_comment").value);
+    document.getElementById("v_purpose").textContent = document.getElementById("f_purpose").value;
+    document.getElementById("v_date").textContent = fmtDate(getDate());
+
+    var memoNo = previewMemoNo();
+    document.getElementById("f_memono").value = memoNo;
+    document.getElementById("v_memono").textContent = memoNo;
+
+    // Build item rows (fill to a minimum of 6 lines for a clean sheet)
+    var body = document.getElementById("v_rows");
+    body.innerHTML = "";
+    var count = 0;
+    Array.prototype.forEach.call(rowsEl.children, function (r) {
+      var type = r.querySelector(".type").value;
+      var stock = r.querySelector(".stock").value;
+      if (!type && !stock) return;
+      if (stock) count++;
+      var tr = document.createElement("tr");
+      tr.innerHTML = '<td class="sr">' + (count || "") + '</td>' +
+        '<td>' + escapeHtml(type) + '</td>' +
+        '<td class="stock">' + escapeHtml(stock) + '</td>';
+      body.appendChild(tr);
+    });
+    var filled = body.children.length;
+    for (var i = filled; i < 6; i++) {
+      var er = document.createElement("tr");
+      er.className = "empty";
+      er.innerHTML = '<td class="sr">' + (i + 1) + '</td><td>·</td><td class="stock">·</td>';
+      body.appendChild(er);
+    }
+    document.getElementById("v_total").textContent = count;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  /* ---- Wire up ---- */
+  ["f_to","f_through","f_mobile","f_comment","f_purpose","f_date"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", render);
+    document.getElementById(id).addEventListener("change", render);
+  });
+  document.getElementById("addRow").addEventListener("click", function () { addRow(); render(); });
+
+  document.getElementById("printBtn").addEventListener("click", function () {
+    commitSeq();
+    render();
+    window.print();
+  });
+  document.getElementById("newBtn").addEventListener("click", function () {
+    ["f_to","f_through","f_mobile","f_comment"].forEach(function (id) {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("f_purpose").value = "Sell";
+    setToday();
+    rowsEl.innerHTML = "";
+    for (var i = 0; i < 3; i++) addRow();
+    render();
+  });
+
+  function setToday() {
+    var d = new Date();
+    document.getElementById("f_date").value =
+      d.getFullYear() + "-" + pad(d.getMonth() + 1, 2) + "-" + pad(d.getDate(), 2);
+  }
+
+  /* ---- Theme toggle ---- */
+  document.getElementById("themeToggle").addEventListener("click", function () {
+    var root = document.documentElement;
+    var cur = root.getAttribute("data-theme");
+    var isDark = cur ? cur === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.setAttribute("data-theme", isDark ? "light" : "dark");
+  });
+
+  /* ---- Seed ---- */
+  setToday();
+  addRow("Ring", "SS1024");
+  addRow("Pendant", "SS3391");
+  addRow();
+  render();
+})();
+</script>
