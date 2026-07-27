@@ -144,7 +144,7 @@ export function formatDate(dateInput: string): string {
 // when, and by whom. A piece with no event is still out.
 // ---------------------------------------------------------------------------
 
-export type StockOutcome = "returned" | "sold" | "exchanged" | "lost";
+export type StockOutcome = "returned" | "delivered" | "sold" | "exchanged" | "lost";
 
 export type StockEvent = {
   id: string;
@@ -167,6 +167,7 @@ export function eventDate(e: StockEvent): string {
 
 export const STOCK_OUTCOMES: { value: StockOutcome; label: string; hint: string }[] = [
   { value: "returned", label: "Returned", hint: "Came back to you and is in stock again" },
+  { value: "delivered", label: "Delivered", hint: "Handed over for good — not coming back, not yet billed" },
   { value: "sold", label: "Sold", hint: "Kept by the party and billed" },
   { value: "exchanged", label: "Exchanged", hint: "Swapped for a different stock number" },
   { value: "lost", label: "Lost / damaged", hint: "Written off, with a note" },

@@ -297,6 +297,7 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .out-tag { font-size: 12px; font-weight: 600; }
 .out-tag.open      { color: #A35C09; }
 .out-tag.returned  { color: #2C6E49; }
+.out-tag.delivered { color: #2A6F97; }
 .out-tag.sold      { color: var(--gold); }
 .out-tag.exchanged { color: #6A5AA8; }
 .out-tag.lost      { color: #B23; }

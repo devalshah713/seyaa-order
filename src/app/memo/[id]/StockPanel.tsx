@@ -126,12 +126,18 @@ export default function StockPanel({
                       placeholder="Replaced by stock no."
                     />
                   )}
-                  {(s.outcome === "lost" || s.outcome === "sold") && (
+                  {(s.outcome === "lost" || s.outcome === "sold" || s.outcome === "delivered") && (
                     <input
                       className="sp-extra"
                       value={s.note}
                       onChange={(e) => set(l.stockNo, { note: e.target.value })}
-                      placeholder={s.outcome === "lost" ? "What happened?" : "Bill / invoice no. (optional)"}
+                      placeholder={
+                        s.outcome === "lost"
+                          ? "What happened?"
+                          : s.outcome === "delivered"
+                            ? "Delivered to / reference (optional)"
+                            : "Bill / invoice no. (optional)"
+                      }
                     />
                   )}
                 </td>
