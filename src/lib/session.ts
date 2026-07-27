@@ -14,7 +14,18 @@ export type Session = {
 };
 
 export const SESSION_COOKIE = "seyaa_session";
-export const SESSION_MAX_AGE = 60 * 60 * 12; // 12 hours
+
+// A working day plus room either side. The previous 12 hours expired on people
+// mid-memo: the save is a background request, so instead of being sent to the
+// sign-in page they got a bare "Unauthorized" and lost what they had typed.
+export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
+// Past the halfway mark a session is renewed on the next request, so someone
+// who keeps working is never signed out from under themselves. Only genuine
+// inactivity runs the clock out.
+export function needsRenewal(s: Session): boolean {
+  return s.exp - Math.floor(Date.now() / 1000) < SESSION_MAX_AGE / 2;
+}
 
 function b64urlFromBytes(bytes: Uint8Array): string {
   let bin = "";

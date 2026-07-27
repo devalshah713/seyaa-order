@@ -76,6 +76,7 @@ export default function MemoForm({
   const [memoNo, setMemoNo] = useState(initial?.memoNo ?? (gold ? "SG/…" : "SS/…"));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [expired, setExpired] = useState(false);
 
   const isReceipt = gold && /receipt/i.test(purpose);
 
@@ -163,12 +164,21 @@ export default function MemoForm({
     };
 
     setSaving(true);
+    setExpired(false);
     try {
       const res = await fetch(editing ? `/api/memos/${initial!.id}` : "/api/memos", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      // Signed out while the form was open. Say so plainly and leave every
+      // field exactly as typed — signing in again is a new tab, so nothing
+      // entered here is lost.
+      if (res.status === 401) {
+        setExpired(true);
+        setSaving(false);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the memo.");
       router.push(`/memo/${data.memo.id}`);
@@ -290,6 +300,16 @@ export default function MemoForm({
             {saving ? "Saving…" : editing ? "Update Memo" : "Save Memo"}
           </button>
         </div>
+        {expired && (
+          <div className="session-expired">
+            <strong>You were signed out.</strong>
+            <p>
+              Nothing you have typed is lost.{" "}
+              <a href="/login" target="_blank" rel="noopener noreferrer">Sign in again in a new tab</a>,
+              come back here, and press Save Memo.
+            </p>
+          </div>
+        )}
         {error && <p className="save-error">{error}</p>}
       </aside>
 

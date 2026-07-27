@@ -7,7 +7,13 @@
 //     no browser and no session, so it authenticates with the backup secret
 //     instead. That covers /api/backup and the per-memo PDF downloads.
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import {
+  SESSION_COOKIE,
+  SESSION_MAX_AGE,
+  needsRenewal,
+  signSession,
+  verifySession,
+} from "@/lib/session";
 
 const PUBLIC_PATHS = ["/login"];
 const PUBLIC_APIS = ["/api/auth/login", "/api/auth/setup", "/api/auth/status"];
@@ -44,7 +50,25 @@ export async function middleware(req: NextRequest) {
   const secret = process.env.AUTH_SECRET;
   if (secret) {
     const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value, secret);
-    if (session) return NextResponse.next();
+    if (session) {
+      const res = NextResponse.next();
+      // Slide the expiry forward for anyone still working, so a long day at
+      // the desk never ends in a failed save.
+      if (needsRenewal(session)) {
+        const fresh = await signSession(
+          { uid: session.uid, username: session.username, role: session.role },
+          secret
+        );
+        res.cookies.set(SESSION_COOKIE, fresh, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "lax",
+          path: "/",
+          maxAge: SESSION_MAX_AGE,
+        });
+      }
+      return res;
+    }
   }
 
   // APIs get a flat 401 — a redirect would only confuse a fetch() caller.
