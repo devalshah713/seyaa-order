@@ -1,28 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateMemo, deleteMemo, type MemoItem } from "@/lib/memoStore";
-import { parseCodes, PURPOSES } from "@/lib/memoFormat";
+import { updateMemo, deleteMemo, getMemo } from "@/lib/memoStore";
+import { parseMemoBody } from "@/lib/memoInput";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function str(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
-}
 function message(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong.";
-}
-function normalizeItems(raw: unknown): MemoItem[] {
-  const arr = Array.isArray(raw) ? raw : [];
-  return arr
-    .map((it) => {
-      const src = it as { type?: unknown; stockNos?: unknown };
-      const type = typeof src.type === "string" ? src.type : "";
-      const codes = Array.isArray(src.stockNos)
-        ? parseCodes(src.stockNos.join(","))
-        : parseCodes(String(src.stockNos ?? ""));
-      return { type, stockNos: codes };
-    })
-    .filter((it) => it.type || it.stockNos.length > 0);
 }
 
 export async function PATCH(
@@ -36,27 +20,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const items = normalizeItems(body.items);
-  if (!items.length) {
-    return NextResponse.json(
-      { error: "Add at least one item with a type or stock number." },
-      { status: 400 }
-    );
-  }
-  const purpose = PURPOSES.includes(body.purpose as (typeof PURPOSES)[number])
-    ? (body.purpose as string)
-    : PURPOSES[0];
+  // The memo's own kind decides how the body is read — an edit can't move a
+  // memo from one book to the other.
+  const existing = await getMemo(params.id).catch(() => null);
+  if (!existing) return NextResponse.json({ error: "Memo not found." }, { status: 404 });
+
+  const parsed = parseMemoBody(body, existing.kind);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   try {
-    const memo = await updateMemo(params.id, {
-      to: str(body.to),
-      through: str(body.through),
-      mobile: str(body.mobile),
-      date: str(body.date),
-      purpose,
-      comment: str(body.comment),
-      items,
-    });
+    const memo = await updateMemo(params.id, parsed.value);
     if (!memo) return NextResponse.json({ error: "Memo not found." }, { status: 404 });
     return NextResponse.json({ memo });
   } catch (err) {

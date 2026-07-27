@@ -35,6 +35,7 @@ export default async function MemoViewPage({
         <MemoSheet
           data={{
             memoNo: memo.memoNo,
+            kind: memo.kind,
             to: memo.to,
             through: memo.through,
             mobile: memo.mobile,
@@ -42,6 +43,8 @@ export default async function MemoViewPage({
             purpose: memo.purpose,
             comment: memo.comment,
             items: memo.items,
+            goldItems: memo.goldItems,
+            againstMemoNo: memo.againstMemoNo,
           }}
         />
       </div>

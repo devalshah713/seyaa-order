@@ -8,15 +8,33 @@
 // saved in the very same instant the second simply retries onto a fresh read.
 import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
-import { fyFromInput, memoIdFor, memoNoFor, todayInput } from "./memoFormat";
+import {
+  counterKey,
+  fyFromInput,
+  memoIdForKind,
+  memoNoForKind,
+  todayInput,
+  type MemoKind,
+} from "./memoFormat";
 
 const DB_PATH = "memos/db.json";
 
 export type MemoItem = { type: string; stockNos: string[] };
 
+// A row on a gold memo: what was sent, at what purity, and how much of it.
+// fineWt is derived (gross x touch) but stored so a saved memo always prints
+// exactly the figures it was signed with.
+export type GoldItem = {
+  description: string;
+  touch: number; // percentage, e.g. 91.60
+  grossWt: number; // grams
+  fineWt: number; // grams
+};
+
 export type Memo = {
-  id: string; // URL-safe, e.g. "SS-26-27-001"
-  memoNo: string; // printed, e.g. "SS/26-27/001"
+  id: string; // URL-safe, e.g. "SS-26-27-001" or "SG-26-27-001"
+  memoNo: string; // printed, e.g. "SS/26-27/001" or "SG/26-27/001"
+  kind: MemoKind; // memos saved before gold existed are read as "jewellery"
   fy: string;
   seq: number;
   to: string;
@@ -25,14 +43,21 @@ export type Memo = {
   date: string; // yyyy-mm-dd
   purpose: string;
   comment: string;
-  items: MemoItem[];
+  items: MemoItem[]; // jewellery rows (empty on a gold memo)
+  goldItems: GoldItem[]; // gold rows (empty on a jewellery memo)
+  againstMemoNo?: string; // on a Receipt: the Issue memo it settles
   totalPcs: number;
+  totalGrossWt: number;
+  totalFineWt: number;
   createdAt: string; // ISO
   updatedAt?: string; // ISO — set on create and every edit; drives incremental backup
   driveLink?: string; // Google Drive webViewLink, once uploaded
 };
 
-export type NewMemo = Omit<Memo, "id" | "memoNo" | "fy" | "seq" | "totalPcs" | "createdAt">;
+export type NewMemo = Omit<
+  Memo,
+  "id" | "memoNo" | "fy" | "seq" | "totalPcs" | "totalGrossWt" | "totalFineWt" | "createdAt"
+>;
 
 export type DB = { counters: Record<string, number>; memos: Memo[] };
 
@@ -59,7 +84,7 @@ async function readDB(token: string): Promise<DB> {
       return { counters: {}, memos: [] };
     }
     const db = (await new Response(result.stream).json()) as Partial<DB>;
-    return { counters: db.counters || {}, memos: db.memos || [] };
+    return { counters: db.counters || {}, memos: (db.memos || []).map(normalize) };
   } catch (err) {
     // First run: the DB blob doesn't exist yet.
     if (err instanceof BlobNotFoundError) return { counters: {}, memos: [] };
@@ -81,18 +106,43 @@ function totalOf(items: MemoItem[]): number {
   return items.reduce((n, it) => n + it.stockNos.length, 0);
 }
 
+function sumBy(rows: GoldItem[], pick: (r: GoldItem) => number): number {
+  // Weights add in milligrams to avoid float drift across many rows.
+  return Math.round(rows.reduce((n, r) => n + (pick(r) || 0), 0) * 1000) / 1000;
+}
+
+// Memos written before gold memos existed have no kind and no gold fields.
+// Fill them in on read so the rest of the app never has to special-case age.
+function normalize(m: Memo): Memo {
+  return {
+    ...m,
+    kind: m.kind === "gold" ? "gold" : "jewellery",
+    items: m.items || [],
+    goldItems: m.goldItems || [],
+    totalPcs: m.totalPcs || 0,
+    totalGrossWt: m.totalGrossWt || 0,
+    totalFineWt: m.totalFineWt || 0,
+  };
+}
+
 export async function createMemo(input: NewMemo): Promise<Memo> {
   const token = requireToken();
   const db = await readDB(token);
 
   const date = input.date || todayInput();
   const fy = fyFromInput(date);
-  const seq = (db.counters[fy] || 0) + 1;
-  db.counters[fy] = seq;
+  const kind: MemoKind = input.kind === "gold" ? "gold" : "jewellery";
+  const key = counterKey(kind, fy);
+  const seq = (db.counters[key] || 0) + 1;
+  db.counters[key] = seq;
+
+  const items = kind === "gold" ? [] : input.items || [];
+  const goldItems = kind === "gold" ? input.goldItems || [] : [];
 
   const memo: Memo = {
-    id: memoIdFor(fy, seq),
-    memoNo: memoNoFor(fy, seq),
+    id: memoIdForKind(kind, fy, seq),
+    memoNo: memoNoForKind(kind, fy, seq),
+    kind,
     fy,
     seq,
     to: input.to,
@@ -101,8 +151,12 @@ export async function createMemo(input: NewMemo): Promise<Memo> {
     date,
     purpose: input.purpose,
     comment: input.comment,
-    items: input.items,
-    totalPcs: totalOf(input.items),
+    items,
+    goldItems,
+    againstMemoNo: input.againstMemoNo || undefined,
+    totalPcs: totalOf(items),
+    totalGrossWt: sumBy(goldItems, (r) => r.grossWt),
+    totalFineWt: sumBy(goldItems, (r) => r.fineWt),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -112,11 +166,21 @@ export async function createMemo(input: NewMemo): Promise<Memo> {
 }
 
 // Next serial for a given date's fiscal year — for the live form preview only.
-export async function peekNextMemoNo(dateInput: string): Promise<string> {
+export async function peekNextMemoNo(dateInput: string, kind: MemoKind = "jewellery"): Promise<string> {
   const token = requireToken();
   const db = await readDB(token);
   const fy = fyFromInput(dateInput || todayInput());
-  return memoNoFor(fy, (db.counters[fy] || 0) + 1);
+  return memoNoForKind(kind, fy, (db.counters[counterKey(kind, fy)] || 0) + 1);
+}
+
+// Issue memos a Receipt can be booked against, newest first.
+export async function listOpenIssues(): Promise<{ memoNo: string; to: string; date: string }[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  return db.memos
+    .filter((m) => m.kind === "gold" && m.purpose === "Issue to Factory")
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map((m) => ({ memoNo: m.memoNo, to: m.to, date: m.date }));
 }
 
 export async function listMemos(): Promise<Memo[]> {
@@ -140,6 +204,10 @@ export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | nul
   const idx = db.memos.findIndex((m) => m.id === id);
   if (idx === -1) return null;
   const existing = db.memos[idx];
+  // A memo never changes kind — it keeps the number it was issued under, and
+  // that number says which book it belongs to.
+  const items = existing.kind === "gold" ? [] : patch.items || [];
+  const goldItems = existing.kind === "gold" ? patch.goldItems || [] : [];
   const updated: Memo = {
     ...existing,
     to: patch.to,
@@ -148,8 +216,12 @@ export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | nul
     date: patch.date || existing.date,
     purpose: patch.purpose,
     comment: patch.comment,
-    items: patch.items,
-    totalPcs: totalOf(patch.items),
+    items,
+    goldItems,
+    againstMemoNo: patch.againstMemoNo || undefined,
+    totalPcs: totalOf(items),
+    totalGrossWt: sumBy(goldItems, (r) => r.grossWt),
+    totalFineWt: sumBy(goldItems, (r) => r.fineWt),
     updatedAt: new Date().toISOString(),
     // Content changed — drop the stale Drive link so the memo re-uploads fresh.
     driveLink: undefined,

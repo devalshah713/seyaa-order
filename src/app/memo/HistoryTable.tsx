@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { formatDate } from "@/lib/memoFormat";
+import { fmtWeight, formatDate } from "@/lib/memoFormat";
 import type { Memo } from "@/lib/memoStore";
 
 export default function HistoryTable({ memos }: { memos: Memo[] }) {
@@ -16,9 +16,10 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
     if (!needle) return memos;
     return memos.filter((m) => {
       const hay = [
-        m.memoNo, m.to, m.through, m.mobile, m.purpose,
+        m.memoNo, m.to, m.through, m.mobile, m.purpose, m.againstMemoNo || "",
         ...m.items.map((it) => it.type),
         ...m.items.flatMap((it) => it.stockNos),
+        ...(m.goldItems || []).map((r) => r.description),
       ].join(" ").toLowerCase();
       return hay.includes(needle);
     });
@@ -48,7 +49,7 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
         className="search"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search memo no., recipient, stock number…"
+        placeholder="Search memo no., recipient, stock number, gold description…"
       />
       {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
       <table className="history">
@@ -58,18 +59,25 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
             <th>Date</th>
             <th>To</th>
             <th>Purpose</th>
-            <th className="num">Pcs</th>
+            <th className="num">Qty</th>
             <th className="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
           {filtered.map((m) => (
             <tr key={m.id} onClick={() => router.push(`/memo/${m.id}`)}>
-              <td className="memono">{m.memoNo}</td>
+              <td className="memono">
+                {m.memoNo}
+                {m.kind === "gold" && <span className="kind-tag">Gold</span>}
+              </td>
               <td>{formatDate(m.date)}</td>
               <td>{m.to || "—"}</td>
               <td>{m.purpose}</td>
-              <td className="num">{m.totalPcs}</td>
+              <td className="num">
+                {m.kind === "gold"
+                  ? `${fmtWeight(m.totalFineWt)} g fine`
+                  : `${m.totalPcs} ${m.totalPcs === 1 ? "pc" : "pcs"}`}
+              </td>
               <td className="row-actions" onClick={(e) => e.stopPropagation()}>
                 <a href={`/api/memos/${m.id}/pdf`} className="rowbtn" title="Download PDF">PDF</a>
                 {m.driveLink && (

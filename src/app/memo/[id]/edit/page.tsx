@@ -14,6 +14,7 @@ export default async function EditMemoPage({ params }: { params: { id: string } 
       initial={{
         id: memo.id,
         memoNo: memo.memoNo,
+        kind: memo.kind,
         to: memo.to,
         through: memo.through,
         mobile: memo.mobile,
@@ -21,6 +22,8 @@ export default async function EditMemoPage({ params }: { params: { id: string } 
         purpose: memo.purpose,
         comment: memo.comment,
         items: memo.items,
+        goldItems: memo.goldItems,
+        againstMemoNo: memo.againstMemoNo,
       }}
     />
   );

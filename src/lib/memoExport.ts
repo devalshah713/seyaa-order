@@ -3,20 +3,28 @@ import ExcelJS from "exceljs";
 import type { Memo } from "./memoStore";
 import { formatDate } from "./memoFormat";
 
-// Human-readable Excel export of all memos. Two sheets:
-//  - "Memos": one row per memo (summary).
+// Human-readable Excel export of all memos. Three sheets:
+//  - "Memos": one row per memo, jewellery and gold together (summary).
 //  - "Items": one row per stock number (so a stock number is findable with Ctrl-F).
+//  - "Gold":  one row per gold line, for weight totals and factory reconciliation.
 // Follows the app's existing exceljs export pattern (frozen bold header, then
 // writeBuffer() normalized to a clean ArrayBuffer slice).
 
 const MEMO_HEADERS = [
-  "Memo No", "Date", "Purpose", "To", "Through", "Mobile",
-  "Total Pcs", "Stock Numbers", "Comment", "Created At",
+  "Memo No", "Kind", "Date", "Purpose", "To / Factory", "Through", "Mobile",
+  "Total Pcs", "Gross Wt (g)", "Fine Wt (g)", "Against", "Stock Numbers",
+  "Comment", "Created At",
 ];
-const MEMO_WIDTHS = [16, 14, 12, 26, 22, 16, 10, 46, 30, 22];
+const MEMO_WIDTHS = [16, 11, 14, 20, 26, 22, 16, 10, 13, 13, 16, 46, 30, 22];
 
 const ITEM_HEADERS = ["Memo No", "Date", "Type", "Stock No"];
 const ITEM_WIDTHS = [16, 14, 16, 14];
+
+const GOLD_HEADERS = [
+  "Memo No", "Date", "Purpose", "Factory", "Description",
+  "Touch", "Gross Wt (g)", "Fine Wt (g)", "Against",
+];
+const GOLD_WIDTHS = [16, 14, 20, 26, 28, 10, 13, 13, 16];
 
 function styleHeader(ws: ExcelJS.Worksheet, titles: string[], widths: number[]) {
   ws.columns = titles.map((_, i) => ({
@@ -45,14 +53,19 @@ export async function buildMemoWorkbook(memos: Memo[]): Promise<ArrayBuffer> {
   let r = 2;
   for (const m of rows) {
     const stockNos = m.items.flatMap((it) => it.stockNos);
+    const isGold = m.kind === "gold";
     summary.getRow(r++).values = [
       m.memoNo,
+      isGold ? "Gold" : "Jewellery",
       formatDate(m.date),
       m.purpose,
       m.to,
       m.through,
       m.mobile,
-      m.totalPcs,
+      isGold ? "" : m.totalPcs,
+      isGold ? m.totalGrossWt : "",
+      isGold ? m.totalFineWt : "",
+      m.againstMemoNo || "",
       stockNos.join(", "),
       m.comment,
       m.createdAt,
@@ -67,6 +80,25 @@ export async function buildMemoWorkbook(memos: Memo[]): Promise<ArrayBuffer> {
       for (const stockNo of it.stockNos) {
         items.getRow(ir++).values = [m.memoNo, formatDate(m.date), it.type, stockNo];
       }
+    }
+  }
+
+  const gold = wb.addWorksheet("Gold", { views: [{ state: "frozen", ySplit: 1 }] });
+  styleHeader(gold, GOLD_HEADERS, GOLD_WIDTHS);
+  let gr = 2;
+  for (const m of rows) {
+    for (const g of m.goldItems || []) {
+      gold.getRow(gr++).values = [
+        m.memoNo,
+        formatDate(m.date),
+        m.purpose,
+        m.to,
+        g.description,
+        g.touch,
+        g.grossWt,
+        g.fineWt,
+        m.againstMemoNo || "",
+      ];
     }
   }
 

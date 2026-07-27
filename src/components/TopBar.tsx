@@ -29,6 +29,7 @@ export default function TopBar({ user }: Props) {
       {user && (
         <nav>
           <Link href="/memo/new" className={path === "/memo/new" ? "active" : ""}>New Memo</Link>
+          <Link href="/memo/new/gold" className={path === "/memo/new/gold" ? "active" : ""}>Gold Memo</Link>
           <Link href="/memo" className={on("/memo") ? "active" : ""}>History</Link>
           {user.role === "admin" && (
             <Link href="/admin/users" className={on("/admin/users") ? "active" : ""}>Users</Link>

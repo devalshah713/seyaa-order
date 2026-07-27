@@ -31,6 +31,7 @@ export default async function HistoryPage() {
     <div className="wrap">
       <div className="page-head">
         <h1>Memo History</h1>
+        <Link href="/memo/new/gold" className="btn">+ Gold Memo</Link>
         <Link href="/memo/new" className="btn btn-primary">+ New Memo</Link>
       </div>
       {error ? (

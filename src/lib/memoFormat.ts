@@ -12,6 +12,25 @@ export const JEWELLERY_TYPES = [
 
 export const PURPOSES = ["Sell", "Memo", "Repair", "Export"] as const;
 
+// Two kinds of memo share one layout, terms and signature block. Jewellery
+// moves as counted pieces with stock numbers; gold moves as weight at a purity,
+// out to a factory and back again.
+export type MemoKind = "jewellery" | "gold";
+
+export const GOLD_PURPOSES = ["Issue to Factory", "Receipt from Factory"] as const;
+
+// Common shapes sent out for casting or manufacturing. Free text is allowed
+// too — this is only to save typing the usual ones.
+export const GOLD_FORMS = [
+  "Fine Gold Bar",
+  "Casting Grain",
+  "Sheet",
+  "Wire",
+  "Scrap / Old Gold",
+  "Findings",
+  "Finished Casting",
+] as const;
+
 export const COMPANY = {
   name: "Seyaa Solitaire",
   tagline: "Fine Diamond Jewellery",
@@ -39,6 +58,61 @@ export function memoNoFor(fy: string, seq: number): string {
 
 export function memoIdFor(fy: string, seq: number): string {
   return `SS-${fy}-${pad(seq)}`;
+}
+
+// Gold runs its own book: SG/26-27/001 alongside SS/26-27/001, so the two
+// sequences stay independent and separately auditable.
+export function goldMemoNoFor(fy: string, seq: number): string {
+  return `SG/${fy}/${pad(seq)}`;
+}
+
+export function goldMemoIdFor(fy: string, seq: number): string {
+  return `SG-${fy}-${pad(seq)}`;
+}
+
+export function memoNoForKind(kind: MemoKind, fy: string, seq: number): string {
+  return kind === "gold" ? goldMemoNoFor(fy, seq) : memoNoFor(fy, seq);
+}
+
+export function memoIdForKind(kind: MemoKind, fy: string, seq: number): string {
+  return kind === "gold" ? goldMemoIdFor(fy, seq) : memoIdFor(fy, seq);
+}
+
+// Counter key for a kind. Jewellery keeps the bare fiscal year it has always
+// used so existing numbering is untouched; gold gets its own namespace.
+export function counterKey(kind: MemoKind, fy: string): string {
+  return kind === "gold" ? `G:${fy}` : fy;
+}
+
+// Touch is written either as a percentage (91.60) or per mille (916). Accept
+// both: anything above 100 is read as per mille.
+export function normalizeTouch(raw: string | number): number {
+  const n = typeof raw === "number" ? raw : parseFloat(String(raw).replace(/[^0-9.]/g, ""));
+  if (!isFinite(n) || n <= 0) return 0;
+  return n > 100 ? n / 10 : n;
+}
+
+export function parseWeight(raw: string | number): number {
+  const n = typeof raw === "number" ? raw : parseFloat(String(raw).replace(/[^0-9.]/g, ""));
+  return isFinite(n) && n > 0 ? n : 0;
+}
+
+// Fine (pure) weight = gross x touch. Rounded to milligrams, which is the
+// finest a trade scale reads.
+export function fineWeight(gross: string | number, touch: string | number): number {
+  const g = parseWeight(gross);
+  const t = normalizeTouch(touch);
+  if (!g || !t) return 0;
+  return Math.round(((g * t) / 100) * 1000) / 1000;
+}
+
+// Weights print to 3 decimals; blank rather than "0.000" when empty.
+export function fmtWeight(n: number): string {
+  return n > 0 ? n.toFixed(3) : "";
+}
+
+export function fmtTouch(n: number): string {
+  return n > 0 ? n.toFixed(2) : "";
 }
 
 // Parse a yyyy-mm-dd input into a local Date (falls back to today).
