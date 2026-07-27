@@ -27,7 +27,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     if (format === "xlsx") {
       const db = await exportDb();
-      const buffer = await buildMemoWorkbook(db.memos);
+      const buffer = await buildMemoWorkbook(db.memos, db.events);
       return new NextResponse(buffer, {
         status: 200,
         headers: {

@@ -8,13 +8,17 @@
 // saved in the very same instant the second simply retries onto a fresh read.
 import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { randomUUID } from "node:crypto";
 import {
   counterKey,
   fyFromInput,
+  linesFor,
   memoIdForKind,
   memoNoForKind,
   todayInput,
   type MemoKind,
+  type StockEvent,
+  type StockOutcome,
 } from "./memoFormat";
 
 const DB_PATH = "memos/db.json";
@@ -59,7 +63,13 @@ export type NewMemo = Omit<
   "id" | "memoNo" | "fy" | "seq" | "totalPcs" | "totalGrossWt" | "totalFineWt" | "createdAt"
 >;
 
-export type DB = { counters: Record<string, number>; memos: Memo[] };
+export type { StockEvent, StockOutcome } from "./memoFormat";
+
+export type DB = {
+  counters: Record<string, number>;
+  memos: Memo[];
+  events: StockEvent[];
+};
 
 export function isStorageConfigured(): boolean {
   return !!process.env.BLOB_READ_WRITE_TOKEN;
@@ -81,13 +91,17 @@ async function readDB(token: string): Promise<DB> {
     // rejected). useCache:false so a just-saved memo is visible immediately.
     const result = await get(DB_PATH, { access: "private", token, useCache: false });
     if (!result || result.statusCode !== 200 || !result.stream) {
-      return { counters: {}, memos: [] };
+      return { counters: {}, memos: [], events: [] };
     }
     const db = (await new Response(result.stream).json()) as Partial<DB>;
-    return { counters: db.counters || {}, memos: (db.memos || []).map(normalize) };
+    return {
+      counters: db.counters || {},
+      memos: (db.memos || []).map(normalize),
+      events: db.events || [],
+    };
   } catch (err) {
     // First run: the DB blob doesn't exist yet.
-    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [] };
+    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [], events: [] };
     throw err;
   }
 }
@@ -196,6 +210,129 @@ export async function getMemo(id: string): Promise<Memo | null> {
   return db.memos.find((m) => m.id === id) || null;
 }
 
+export async function listEvents(): Promise<StockEvent[]> {
+  const token = requireToken();
+  return (await readDB(token)).events;
+}
+
+export async function getMemoWithEvents(
+  id: string
+): Promise<{ memo: Memo; events: StockEvent[] } | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const memo = db.memos.find((m) => m.id === id);
+  if (!memo) return null;
+  return { memo, events: db.events.filter((e) => e.memoId === id) };
+}
+
+export type NewStockEvent = {
+  stockNo: string;
+  outcome: StockOutcome;
+  replacedBy?: string;
+  note?: string;
+};
+
+// Append outcomes for one memo. Nothing is overwritten: recording the same
+// stock number twice leaves both entries, and the later one becomes current.
+export async function recordStockEvents(
+  memoId: string,
+  entries: NewStockEvent[],
+  by: string
+): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const memo = db.memos.find((m) => m.id === memoId);
+  if (!memo) return { ok: false, error: "Memo not found." };
+
+  const onMemo = new Set(memo.items.flatMap((it) => it.stockNos));
+  const at = new Date().toISOString();
+
+  for (const e of entries) {
+    if (!onMemo.has(e.stockNo)) {
+      return { ok: false, error: `${e.stockNo} is not on memo ${memo.memoNo}.` };
+    }
+    if (e.outcome === "exchanged" && !e.replacedBy) {
+      return { ok: false, error: `Give the replacement stock number for ${e.stockNo}.` };
+    }
+    db.events.push({
+      id: randomUUID(),
+      memoId,
+      memoNo: memo.memoNo,
+      stockNo: e.stockNo,
+      outcome: e.outcome,
+      replacedBy: e.replacedBy || undefined,
+      note: e.note || undefined,
+      at,
+      by,
+    });
+  }
+
+  await writeDB(db, token);
+  return { ok: true, added: entries.length };
+}
+
+export type LedgerEntry = {
+  memoId: string;
+  memoNo: string;
+  kind: MemoKind;
+  to: string;
+  date: string;
+  type: string;
+  outcome: StockOutcome | null;
+  event?: StockEvent;
+};
+
+// Everywhere a stock number has been: every memo it went out on, newest first,
+// with what became of it each time.
+export async function stockHistory(stockNo: string): Promise<LedgerEntry[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const wanted = stockNo.trim().toUpperCase();
+  const out: LedgerEntry[] = [];
+
+  for (const m of db.memos) {
+    const line = linesFor(m.id, m.items, db.events).find((l) => l.stockNo === wanted);
+    if (!line) continue;
+    out.push({
+      memoId: m.id,
+      memoNo: m.memoNo,
+      kind: m.kind,
+      to: m.to,
+      date: m.date,
+      type: line.type,
+      outcome: line.outcome,
+      event: line.event,
+    });
+  }
+  return out.sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+// Every stock number the business has ever put on a memo, with where it is now.
+export async function stockIndex(): Promise<
+  { stockNo: string; type: string; memos: number; current: StockOutcome | null; lastMemoNo: string; lastDate: string }[]
+> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const byStock = new Map<string, { type: string; memos: number; current: StockOutcome | null; lastMemoNo: string; lastDate: string }>();
+
+  const chronological = [...db.memos].sort((a, b) => (a.date < b.date ? -1 : 1));
+  for (const m of chronological) {
+    for (const line of linesFor(m.id, m.items, db.events)) {
+      const prev = byStock.get(line.stockNo);
+      byStock.set(line.stockNo, {
+        type: line.type || prev?.type || "",
+        memos: (prev?.memos || 0) + 1,
+        current: line.outcome, // latest memo wins, so this is where it stands now
+        lastMemoNo: m.memoNo,
+        lastDate: m.date,
+      });
+    }
+  }
+  return [...byStock.entries()]
+    .map(([stockNo, v]) => ({ stockNo, ...v }))
+    .sort((a, b) => (a.lastDate < b.lastDate ? 1 : -1));
+}
+
 // Update an existing memo's details. The identity fields (id, memoNo, seq, fy,
 // createdAt) are preserved — a memo keeps its number even if the date changes.
 export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | null> {
@@ -264,6 +401,9 @@ export async function importDb(db: DB): Promise<void> {
   const safe: DB = {
     counters: db && typeof db.counters === "object" && db.counters ? db.counters : {},
     memos: Array.isArray(db?.memos) ? db.memos : [],
+    // Restoring must bring the movement history back too, or a restore would
+    // quietly reset every piece to "still out" and lose the audit trail.
+    events: Array.isArray(db?.events) ? db.events : [],
   };
   await writeDB(safe, token);
 }

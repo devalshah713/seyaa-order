@@ -135,6 +135,83 @@ export function formatDate(dateInput: string): string {
   return pad(d.getDate(), 2) + " " + MONTHS[d.getMonth()] + " " + d.getFullYear();
 }
 
+// ---------------------------------------------------------------------------
+// Stock movement
+//
+// A memo records goods going out. What became of each individual piece is kept
+// as an append-only list of events: correcting a mistake adds another event
+// rather than editing the old one, so the trail always shows what was recorded,
+// when, and by whom. A piece with no event is still out.
+// ---------------------------------------------------------------------------
+
+export type StockOutcome = "returned" | "sold" | "exchanged" | "lost";
+
+export type StockEvent = {
+  id: string;
+  memoId: string;
+  memoNo: string;
+  stockNo: string;
+  outcome: StockOutcome;
+  replacedBy?: string; // for "exchanged": the stock number given instead
+  note?: string;
+  at: string; // ISO
+  by: string; // username that recorded it
+};
+
+export const STOCK_OUTCOMES: { value: StockOutcome; label: string; hint: string }[] = [
+  { value: "returned", label: "Returned", hint: "Came back to you and is in stock again" },
+  { value: "sold", label: "Sold", hint: "Kept by the party and billed" },
+  { value: "exchanged", label: "Exchanged", hint: "Swapped for a different stock number" },
+  { value: "lost", label: "Lost / damaged", hint: "Written off, with a note" },
+];
+
+export function outcomeLabel(o: StockOutcome | null): string {
+  return STOCK_OUTCOMES.find((x) => x.value === o)?.label ?? "Still out";
+}
+
+export type StockLine = {
+  stockNo: string;
+  type: string;
+  outcome: StockOutcome | null; // null: still out
+  event?: StockEvent;
+};
+
+// Current state of every piece on a memo. Later events win, so a correction
+// recorded afterwards supersedes an earlier mistake without erasing it.
+export function linesFor(
+  memoId: string,
+  items: { type: string; stockNos: string[] }[],
+  events: StockEvent[]
+): StockLine[] {
+  const latest = new Map<string, StockEvent>();
+  for (const e of events) {
+    if (e.memoId !== memoId) continue;
+    const prev = latest.get(e.stockNo);
+    if (!prev || prev.at <= e.at) latest.set(e.stockNo, e);
+  }
+  return items.flatMap((it) =>
+    it.stockNos.map((stockNo) => {
+      const event = latest.get(stockNo);
+      return { stockNo, type: it.type, outcome: event?.outcome ?? null, event };
+    })
+  );
+}
+
+export type MemoStatus = "out" | "partial" | "closed";
+
+export function statusOf(lines: StockLine[]): MemoStatus {
+  if (!lines.length) return "closed";
+  const settled = lines.filter((l) => l.outcome).length;
+  if (settled === 0) return "out";
+  return settled === lines.length ? "closed" : "partial";
+}
+
+export function statusLabel(s: MemoStatus, lines: StockLine[]): string {
+  if (s === "closed") return "Closed";
+  if (s === "out") return "Out";
+  return `${lines.filter((l) => l.outcome).length} of ${lines.length} settled`;
+}
+
 // Split a free-text box into clean, 6-char alphanumeric stock codes.
 export function parseCodes(raw: string): string[] {
   return String(raw)

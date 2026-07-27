@@ -2,10 +2,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { fmtWeight, formatDate } from "@/lib/memoFormat";
+import { fmtWeight, formatDate, linesFor, statusLabel, statusOf, type StockEvent } from "@/lib/memoFormat";
 import type { Memo } from "@/lib/memoStore";
 
-export default function HistoryTable({ memos }: { memos: Memo[] }) {
+export default function HistoryTable({ memos, events }: { memos: Memo[]; events: StockEvent[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -60,6 +60,7 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
             <th>To</th>
             <th>Purpose</th>
             <th className="num">Qty</th>
+            <th>Status</th>
             <th className="actions-col">Actions</th>
           </tr>
         </thead>
@@ -78,6 +79,15 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
                   ? `${fmtWeight(m.totalFineWt)} g fine`
                   : `${m.totalPcs} ${m.totalPcs === 1 ? "pc" : "pcs"}`}
               </td>
+              <td>
+                {m.kind === "gold" ? (
+                  <span className="status-pill closed">—</span>
+                ) : (() => {
+                  const lines = linesFor(m.id, m.items, events);
+                  const st = statusOf(lines);
+                  return <span className={`status-pill ${st}`}>{statusLabel(st, lines)}</span>;
+                })()}
+              </td>
               <td className="row-actions" onClick={(e) => e.stopPropagation()}>
                 <a href={`/api/memos/${m.id}/pdf`} className="rowbtn" title="Download PDF">PDF</a>
                 {m.driveLink && (
@@ -95,7 +105,7 @@ export default function HistoryTable({ memos }: { memos: Memo[] }) {
             </tr>
           ))}
           {filtered.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
+            <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
           )}
         </tbody>
       </table>

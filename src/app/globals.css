@@ -278,6 +278,52 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .session-expired p { margin: 0; font-size: 12.5px; color: var(--panel-muted); line-height: 1.55; }
 .session-expired a { color: var(--gold); font-weight: 600; }
 
+/* ---------- Stock movement & audit trail ---------- */
+.stock-panel {
+  background: var(--panel); border: 1px solid var(--panel-line);
+  border-radius: 10px; padding: 20px 22px; margin-top: 26px;
+}
+.sp-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.sp-head h2 { font-family: var(--serif); font-size: 19px; margin: 0; color: var(--panel-ink); flex: 1; }
+
+.status-pill {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
+  border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+}
+.status-pill.out     { color: #A35C09; background: color-mix(in srgb, #A35C09 12%, transparent); }
+.status-pill.partial { color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.status-pill.closed  { color: #2C6E49; background: color-mix(in srgb, #2C6E49 13%, transparent); }
+
+.out-tag { font-size: 12px; font-weight: 600; }
+.out-tag.open      { color: #A35C09; }
+.out-tag.returned  { color: #2C6E49; }
+.out-tag.sold      { color: var(--gold); }
+.out-tag.exchanged { color: #6A5AA8; }
+.out-tag.lost      { color: #B23; }
+
+.ev-meta { display: block; font-size: 11px; color: var(--panel-muted); margin-top: 3px; }
+
+.stock-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.stock-table th {
+  text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--panel-muted); font-weight: 600; padding: 7px 10px;
+  border-bottom: 1px solid var(--panel-line);
+}
+.stock-table td { padding: 9px 10px; border-bottom: 1px solid var(--panel-line); vertical-align: top; }
+.stock-table tr.settled { opacity: .72; }
+.stock-table .sn { font-family: var(--mono, ui-monospace, Consolas, monospace); font-weight: 600; }
+.stock-table select { width: 100%; max-width: 210px; }
+.sp-extra { margin-top: 6px; width: 100%; max-width: 210px; }
+
+.sp-actions { display: flex; align-items: center; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.sp-hint { margin: 0; font-size: 11.5px; color: var(--panel-muted); line-height: 1.5; flex: 1; min-width: 220px; }
+
+.ledger-row td { background: var(--field-bg); }
+.ledger { margin: 0; padding: 4px 0 4px 18px; font-size: 13px; }
+.ledger li { margin-bottom: 9px; line-height: 1.55; }
+.ledger li:last-child { margin-bottom: 0; }
+.lg-date { display: inline-block; min-width: 96px; color: var(--panel-muted); font-size: 12px; }
+
 /* ---------- Gold memo ---------- */
 .items.gold .desc { text-align: left; }
 .items.gold .touch { width: 68px; text-align: right; font-variant-numeric: tabular-nums; }

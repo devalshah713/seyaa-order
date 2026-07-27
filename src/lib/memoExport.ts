@@ -1,7 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import type { Memo } from "./memoStore";
-import { formatDate } from "./memoFormat";
+import { formatDate, linesFor, outcomeLabel, type StockEvent } from "./memoFormat";
 
 // Human-readable Excel export of all memos. Three sheets:
 //  - "Memos": one row per memo, jewellery and gold together (summary).
@@ -17,8 +17,11 @@ const MEMO_HEADERS = [
 ];
 const MEMO_WIDTHS = [16, 11, 14, 20, 26, 22, 16, 10, 13, 13, 16, 46, 30, 22];
 
-const ITEM_HEADERS = ["Memo No", "Date", "Type", "Stock No"];
-const ITEM_WIDTHS = [16, 14, 16, 14];
+const ITEM_HEADERS = ["Memo No", "Date", "Type", "Stock No", "Status", "Settled On", "By", "Replaced By", "Note"];
+const ITEM_WIDTHS = [16, 14, 16, 14, 14, 14, 14, 14, 30];
+
+const TRAIL_HEADERS = ["Recorded At", "By", "Memo No", "Stock No", "Outcome", "Replaced By", "Note"];
+const TRAIL_WIDTHS = [22, 16, 16, 14, 14, 14, 34];
 
 const GOLD_HEADERS = [
   "Memo No", "Date", "Purpose", "Factory", "Description",
@@ -40,7 +43,10 @@ function styleHeader(ws: ExcelJS.Worksheet, titles: string[], widths: number[]) 
   });
 }
 
-export async function buildMemoWorkbook(memos: Memo[]): Promise<ArrayBuffer> {
+export async function buildMemoWorkbook(
+  memos: Memo[],
+  events: StockEvent[] = []
+): Promise<ArrayBuffer> {
   // Oldest-first for a tidy ledger.
   const rows = [...memos].sort((a, b) =>
     a.memoNo.localeCompare(b.memoNo, undefined, { numeric: true })
@@ -76,10 +82,19 @@ export async function buildMemoWorkbook(memos: Memo[]): Promise<ArrayBuffer> {
   styleHeader(items, ITEM_HEADERS, ITEM_WIDTHS);
   let ir = 2;
   for (const m of rows) {
-    for (const it of m.items) {
-      for (const stockNo of it.stockNos) {
-        items.getRow(ir++).values = [m.memoNo, formatDate(m.date), it.type, stockNo];
-      }
+    for (const line of linesFor(m.id, m.items, events)) {
+      const e = line.event;
+      items.getRow(ir++).values = [
+        m.memoNo,
+        formatDate(m.date),
+        line.type,
+        line.stockNo,
+        outcomeLabel(line.outcome),
+        e ? new Date(e.at).toISOString().slice(0, 10) : "",
+        e?.by || "",
+        e?.replacedBy || "",
+        e?.note || "",
+      ];
     }
   }
 
@@ -100,6 +115,23 @@ export async function buildMemoWorkbook(memos: Memo[]): Promise<ArrayBuffer> {
         m.againstMemoNo || "",
       ];
     }
+  }
+
+  // Every movement ever recorded, oldest first — the audit trail itself, so a
+  // backup taken today can answer "who marked this returned, and when".
+  const trail = wb.addWorksheet("Audit Trail", { views: [{ state: "frozen", ySplit: 1 }] });
+  styleHeader(trail, TRAIL_HEADERS, TRAIL_WIDTHS);
+  let tr = 2;
+  for (const e of [...events].sort((a, b) => (a.at < b.at ? -1 : 1))) {
+    trail.getRow(tr++).values = [
+      e.at,
+      e.by,
+      e.memoNo,
+      e.stockNo,
+      outcomeLabel(e.outcome),
+      e.replacedBy || "",
+      e.note || "",
+    ];
   }
 
   const out = await wb.xlsx.writeBuffer();

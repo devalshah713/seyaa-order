@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listMemos, isStorageConfigured, type Memo } from "@/lib/memoStore";
+import { listMemos, listEvents, isStorageConfigured, type Memo, type StockEvent } from "@/lib/memoStore";
 import HistoryTable from "./HistoryTable";
 
 export const metadata = { title: "Memo History — Seyaa Solitaire" };
@@ -20,9 +20,10 @@ export default async function HistoryPage() {
   }
 
   let memos: Memo[] = [];
+  let events: StockEvent[] = [];
   let error = "";
   try {
-    memos = await listMemos();
+    [memos, events] = await Promise.all([listMemos(), listEvents()]);
   } catch (err) {
     error = err instanceof Error ? err.message : "Could not load memos.";
   }
@@ -42,7 +43,7 @@ export default async function HistoryPage() {
           <Link href="/memo/new" className="btn btn-primary">Create a Memo</Link>
         </div>
       ) : (
-        <HistoryTable memos={memos} />
+        <HistoryTable memos={memos} events={events} />
       )}
     </div>
   );

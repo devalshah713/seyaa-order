@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import MemoSheet from "@/components/MemoSheet";
-import { getMemo } from "@/lib/memoStore";
+import { getMemoWithEvents } from "@/lib/memoStore";
+import { linesFor } from "@/lib/memoFormat";
 import { isDriveConfigured } from "@/lib/googleDrive";
 import MemoActions from "./MemoActions";
+import StockPanel from "./StockPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +16,12 @@ export default async function MemoViewPage({
   params: { id: string };
   searchParams: { pdf?: string };
 }) {
-  const memo = await getMemo(params.id).catch(() => null);
-  if (!memo) notFound();
+  const found = await getMemoWithEvents(params.id).catch(() => null);
+  if (!found) notFound();
+  const { memo, events } = found;
+  // Gold moves by weight, so the piece-by-piece return tracking only applies
+  // to jewellery memos.
+  const lines = memo.kind === "gold" ? [] : linesFor(memo.id, memo.items, events);
 
   // ?pdf=1 is the render target used by the PDF generator — no action bar, so
   // it never re-triggers the Drive auto-upload.
@@ -48,6 +54,11 @@ export default async function MemoViewPage({
           }}
         />
       </div>
+      {!forPdf && lines.length > 0 && (
+        <div className="wrap no-print">
+          <StockPanel memoId={memo.id} lines={lines} />
+        </div>
+      )}
     </>
   );
 }
