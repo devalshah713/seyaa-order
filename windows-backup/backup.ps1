@@ -9,7 +9,7 @@
 # =====================================================================
 
 # ---- EDIT THESE TWO ----
-$BaseUrl = "https://seyaa-order-deval-seyaa.vercel.app"
+$BaseUrl = "https://seyaa-order.vercel.app"
 $Token   = "PASTE_YOUR_BACKUP_TOKEN_HERE"
 # ------------------------
 
@@ -48,10 +48,14 @@ try {
     $file = Join-Path $pdfDir $safe
     $need = -not (Test-Path $file)
     if (-not $need -and $m.updatedAt) {
-      if ([datetime]$m.updatedAt -gt (Get-Item $file).LastWriteTimeUtc) { $need = $true }
+      # Both sides in local (IST) time. [datetime] on a "...Z" string already
+      # returns local, so the file side must be LastWriteTime -- not
+      # LastWriteTimeUtc, which drifts by +5:30 and re-fetches unchanged PDFs.
+      if ([datetime]$m.updatedAt -gt (Get-Item $file).LastWriteTime) { $need = $true }
     }
     if ($need) {
-      Invoke-WebRequest -Uri "$BaseUrl/api/memos/$($m.id)/pdf" `
+      # The PDF route sits behind the login gate too, so send the same token.
+      Invoke-WebRequest -Uri "$BaseUrl/api/memos/$($m.id)/pdf" -Headers $headers `
         -OutFile $file -UseBasicParsing
       $new++
     } else { $skip++ }
