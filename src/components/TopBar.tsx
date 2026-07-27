@@ -1,14 +1,24 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Logo from "./Logo";
 import ThemeToggle from "./ThemeToggle";
 import { COMPANY } from "@/lib/memoFormat";
+import type { Role } from "@/lib/session";
 
-export default function TopBar() {
+type Props = { user: { username: string; role: Role } | null };
+
+export default function TopBar({ user }: Props) {
   const path = usePathname();
+  const router = useRouter();
   const on = (href: string) =>
     href === "/memo" ? path === "/memo" || path.startsWith("/memo/") && path !== "/memo/new" : path === href;
+
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <header className="topbar no-print">
@@ -16,11 +26,18 @@ export default function TopBar() {
       <Link href="/" className="brand" style={{ textDecoration: "none" }}>
         {COMPANY.name}
       </Link>
-      <nav>
-        <Link href="/memo/new" className={path === "/memo/new" ? "active" : ""}>New Memo</Link>
-        <Link href="/memo" className={on("/memo") ? "active" : ""}>History</Link>
-        <ThemeToggle />
-      </nav>
+      {user && (
+        <nav>
+          <Link href="/memo/new" className={path === "/memo/new" ? "active" : ""}>New Memo</Link>
+          <Link href="/memo" className={on("/memo") ? "active" : ""}>History</Link>
+          {user.role === "admin" && (
+            <Link href="/admin/users" className={on("/admin/users") ? "active" : ""}>Users</Link>
+          )}
+          <ThemeToggle />
+          <span className="whoami" title={user.role === "admin" ? "Admin" : "User"}>{user.username}</span>
+          <button type="button" className="signout" onClick={signOut}>Sign out</button>
+        </nav>
+      )}
     </header>
   );
 }
