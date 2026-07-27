@@ -230,6 +230,7 @@ export type NewStockEvent = {
   outcome: StockOutcome;
   replacedBy?: string;
   note?: string;
+  onDate?: string; // yyyy-mm-dd
 };
 
 // Append outcomes for one memo. Nothing is overwritten: recording the same
@@ -262,6 +263,7 @@ export async function recordStockEvents(
       outcome: e.outcome,
       replacedBy: e.replacedBy || undefined,
       note: e.note || undefined,
+      onDate: e.onDate || at.slice(0, 10),
       at,
       by,
     });

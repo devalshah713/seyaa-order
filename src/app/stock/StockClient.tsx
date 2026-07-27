@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { formatDate, outcomeLabel, type StockOutcome } from "@/lib/memoFormat";
+import { eventDate, formatDate, outcomeLabel, type StockEvent, type StockOutcome } from "@/lib/memoFormat";
 
 type Row = {
   stockNo: string;
@@ -19,7 +19,7 @@ type Entry = {
   date: string;
   type: string;
   outcome: StockOutcome | null;
-  event?: { at: string; by: string; replacedBy?: string; note?: string };
+  event?: StockEvent;
 };
 
 export default function StockClient({ rows }: { rows: Row[] }) {
@@ -99,7 +99,10 @@ export default function StockClient({ rows }: { rows: Row[] }) {
                                 <span className={`out-tag ${h.outcome || "open"}`}>{outcomeLabel(h.outcome)}</span>
                                 {h.event && (
                                   <span className="ev-meta">
-                                    recorded by {h.event.by} on {new Date(h.event.at).toLocaleDateString()}
+                                    on {formatDate(eventDate(h.event))} · recorded by {h.event.by}
+                                    {eventDate(h.event) !== h.event.at.slice(0, 10) && (
+                                      <> (keyed in {new Date(h.event.at).toLocaleDateString()})</>
+                                    )}
                                     {h.event.replacedBy && <> · replaced by {h.event.replacedBy}</>}
                                     {h.event.note && <> · {h.event.note}</>}
                                   </span>

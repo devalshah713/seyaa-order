@@ -1,7 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import type { Memo } from "./memoStore";
-import { formatDate, linesFor, outcomeLabel, type StockEvent } from "./memoFormat";
+import { eventDate, formatDate, linesFor, outcomeLabel, type StockEvent } from "./memoFormat";
 
 // Human-readable Excel export of all memos. Three sheets:
 //  - "Memos": one row per memo, jewellery and gold together (summary).
@@ -17,11 +17,11 @@ const MEMO_HEADERS = [
 ];
 const MEMO_WIDTHS = [16, 11, 14, 20, 26, 22, 16, 10, 13, 13, 16, 46, 30, 22];
 
-const ITEM_HEADERS = ["Memo No", "Date", "Type", "Stock No", "Status", "Settled On", "By", "Replaced By", "Note"];
-const ITEM_WIDTHS = [16, 14, 16, 14, 14, 14, 14, 14, 30];
+const ITEM_HEADERS = ["Memo No", "Date", "Type", "Stock No", "Status", "Movement Date", "By", "Replaced By", "Note"];
+const ITEM_WIDTHS = [16, 14, 16, 14, 14, 15, 14, 14, 30];
 
-const TRAIL_HEADERS = ["Recorded At", "By", "Memo No", "Stock No", "Outcome", "Replaced By", "Note"];
-const TRAIL_WIDTHS = [22, 16, 16, 14, 14, 14, 34];
+const TRAIL_HEADERS = ["Movement Date", "Recorded At", "By", "Memo No", "Stock No", "Outcome", "Replaced By", "Note"];
+const TRAIL_WIDTHS = [15, 22, 16, 16, 14, 14, 14, 34];
 
 const GOLD_HEADERS = [
   "Memo No", "Date", "Purpose", "Factory", "Description",
@@ -90,7 +90,7 @@ export async function buildMemoWorkbook(
         line.type,
         line.stockNo,
         outcomeLabel(line.outcome),
-        e ? new Date(e.at).toISOString().slice(0, 10) : "",
+        e ? eventDate(e) : "",
         e?.by || "",
         e?.replacedBy || "",
         e?.note || "",
@@ -124,6 +124,7 @@ export async function buildMemoWorkbook(
   let tr = 2;
   for (const e of [...events].sort((a, b) => (a.at < b.at ? -1 : 1))) {
     trail.getRow(tr++).values = [
+      eventDate(e),
       e.at,
       e.by,
       e.memoNo,

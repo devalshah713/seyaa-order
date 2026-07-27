@@ -154,9 +154,16 @@ export type StockEvent = {
   outcome: StockOutcome;
   replacedBy?: string; // for "exchanged": the stock number given instead
   note?: string;
-  at: string; // ISO
+  onDate?: string; // yyyy-mm-dd — when the goods actually moved
+  at: string; // ISO — when it was keyed in, which can be a day or two later
   by: string; // username that recorded it
 };
+
+// The date the movement happened. Falls back to the recording time for events
+// saved before the two were kept apart.
+export function eventDate(e: StockEvent): string {
+  return e.onDate || e.at.slice(0, 10);
+}
 
 export const STOCK_OUTCOMES: { value: StockOutcome; label: string; hint: string }[] = [
   { value: "returned", label: "Returned", hint: "Came back to you and is in stock again" },

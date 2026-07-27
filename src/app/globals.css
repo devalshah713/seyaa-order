@@ -315,7 +315,13 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .stock-table select { width: 100%; max-width: 210px; }
 .sp-extra { margin-top: 6px; width: 100%; max-width: 210px; }
 
-.sp-actions { display: flex; align-items: center; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.sp-actions { display: flex; align-items: flex-end; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.sp-date { display: block; }
+.sp-date > span {
+  display: block; font-size: 11px; color: var(--panel-muted);
+  letter-spacing: .05em; text-transform: uppercase; margin-bottom: 5px;
+}
+.sp-date input { width: 170px; }
 .sp-hint { margin: 0; font-size: 11.5px; color: var(--panel-muted); line-height: 1.5; flex: 1; min-width: 220px; }
 
 .ledger-row td { background: var(--field-bg); }

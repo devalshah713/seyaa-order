@@ -27,6 +27,11 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
+  // One date for the batch — goods normally come back together. Anything that
+  // isn't a plain yyyy-mm-dd is dropped so the store falls back to today.
+  const rawDate = typeof body.onDate === "string" ? body.onDate.trim() : "";
+  const onDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined;
+
   const raw = Array.isArray(body.entries) ? body.entries : [];
   const entries: NewStockEvent[] = [];
   for (const r of raw) {
@@ -39,6 +44,7 @@ export async function POST(
       outcome: outcome as StockOutcome,
       replacedBy: parseCodes(String(src.replacedBy ?? ""))[0],
       note: typeof src.note === "string" ? src.note.trim().slice(0, 300) : undefined,
+      onDate,
     });
   }
 

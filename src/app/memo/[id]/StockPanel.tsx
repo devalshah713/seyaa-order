@@ -3,9 +3,12 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   STOCK_OUTCOMES,
+  eventDate,
+  formatDate,
   outcomeLabel,
   statusLabel,
   statusOf,
+  todayInput,
   type StockLine,
   type StockOutcome,
 } from "@/lib/memoFormat";
@@ -23,6 +26,7 @@ export default function StockPanel({
 }) {
   const router = useRouter();
   const [staged, setStaged] = useState<Record<string, Staged>>({});
+  const [onDate, setOnDate] = useState(todayInput());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,6 +51,7 @@ export default function StockPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          onDate,
           entries: pending.map(([stockNo, s]) => ({
             stockNo,
             outcome: s.outcome,
@@ -97,7 +102,7 @@ export default function StockPanel({
                   <span className={`out-tag ${l.outcome || "open"}`}>{outcomeLabel(l.outcome)}</span>
                   {l.event && (
                     <div className="ev-meta">
-                      {l.event.by} · {new Date(l.event.at).toLocaleDateString()}
+                      {formatDate(eventDate(l.event))} · {l.event.by}
                       {l.event.replacedBy && <> · → {l.event.replacedBy}</>}
                       {l.event.note && <> · {l.event.note}</>}
                     </div>
@@ -139,12 +144,17 @@ export default function StockPanel({
       {error && <p className="save-error">{error}</p>}
 
       <div className="sp-actions">
+        <label className="sp-date">
+          <span>Movement date</span>
+          <input type="date" value={onDate} onChange={(e) => setOnDate(e.target.value)} />
+        </label>
         <button className="btn btn-primary" onClick={record} disabled={busy || !pending.length}>
           {busy ? "Recording…" : pending.length ? `Record ${pending.length} change${pending.length === 1 ? "" : "s"}` : "Record"}
         </button>
         <p className="sp-hint">
-          Entries are only added, never replaced — recording a piece again leaves the earlier entry
-          in the trail and makes the new one current.
+          The date the goods actually moved — set it back if you are entering this after the fact.
+          Entries are only added, never replaced, so recording a piece again leaves the earlier
+          entry in the trail and makes the new one current.
         </p>
       </div>
     </div>
