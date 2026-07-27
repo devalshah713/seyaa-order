@@ -3,14 +3,12 @@
 // accounts yet, so this same screen switches into "create the admin" mode —
 // that is how the first password gets set, by the owner, on their own machine.
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
 import { COMPANY } from "@/lib/memoFormat";
 
 type Mode = "loading" | "login" | "setup" | "unconfigured";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>("loading");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -55,9 +53,13 @@ export default function LoginPage() {
         setBusy(false);
         return;
       }
+      // Deliberately a full page load, not router.replace(). The user reached
+      // this screen via a middleware redirect, and that redirect is sitting in
+      // the client router cache — a soft navigation just replays it and bounces
+      // straight back here with the button stuck on "Please wait…". A real
+      // navigation re-runs middleware with the cookie that was just set.
       const next = new URLSearchParams(window.location.search).get("next");
-      router.replace(next && next.startsWith("/") ? next : "/");
-      router.refresh();
+      window.location.assign(next && next.startsWith("/") ? next : "/");
     } catch {
       setError("Could not reach the server.");
       setBusy(false);

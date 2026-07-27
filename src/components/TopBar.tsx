@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Logo from "./Logo";
 import ThemeToggle from "./ThemeToggle";
 import { COMPANY } from "@/lib/memoFormat";
@@ -10,14 +10,14 @@ type Props = { user: { username: string; role: Role } | null };
 
 export default function TopBar({ user }: Props) {
   const path = usePathname();
-  const router = useRouter();
   const on = (href: string) =>
     href === "/memo" ? path === "/memo" || path.startsWith("/memo/") && path !== "/memo/new" : path === href;
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
+    // Full load for the same reason as sign-in: a soft navigation would keep
+    // the cached signed-in pages around after the cookie is gone.
+    window.location.assign("/login");
   }
 
   return (
