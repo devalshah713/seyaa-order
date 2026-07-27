@@ -274,6 +274,9 @@ td.row-actions { text-align: right; white-space: nowrap; }
   background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
   padding: 32px 30px 28px; width: 100%; max-width: 380px; text-align: center;
 }
+/* The logo img carries display:block, so text-align on the card can't reach
+   it — centre it with auto margins instead. */
+.auth-card .mark { margin: 0 auto; }
 .auth-card h1 { font-family: var(--serif); font-size: 22px; margin: 12px 0 4px; color: var(--panel-ink); }
 .auth-muted { color: var(--panel-muted); font-size: 13px; margin: 0 0 22px; }
 .auth-card label.field { text-align: left; }
