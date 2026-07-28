@@ -5,28 +5,53 @@ import {
   GOLD_COLORS,
   ORDER_STATUSES,
   formatDate,
-  orderStatusLabel,
   type OrderStatus,
 } from "@/lib/memoFormat";
 import type { Order } from "@/lib/memoStore";
 
-const empty = {
+type Draft = {
+  customer: string;
+  productName: string;
+  goldColor: string;
+  diamondCts: string;
+  pcs: string;
+  stockNo: string;
+  status: OrderStatus;
+};
+
+const empty: Draft = {
   customer: "",
   productName: "",
   goldColor: "",
   diamondCts: "",
   pcs: "1",
   stockNo: "",
-  status: "in_production" as OrderStatus,
+  status: "in_production",
 };
+
+const draftOf = (o: Order): Draft => ({
+  customer: o.customer || "",
+  productName: o.productName || "",
+  goldColor: o.goldColor || "",
+  diamondCts: o.diamondCts ? String(o.diamondCts) : "",
+  pcs: String(o.pcs || 1),
+  stockNo: o.stockNo || "",
+  status: o.status,
+});
 
 export default function OrdersClient({ orders }: { orders: Order[] }) {
   const router = useRouter();
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState<Draft>(empty);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showDelivered, setShowDelivered] = useState(false);
+
+  // Inline edit: one row at a time, with its own working copy so Cancel
+  // genuinely discards rather than half-applying.
+  const [editingId, setEditingId] = useState("");
+  const [draft, setDraft] = useState<Draft>(empty);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -38,9 +63,8 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
     });
   }, [orders, q, showDelivered]);
 
-  function set(patch: Partial<typeof empty>) {
-    setForm((f) => ({ ...f, ...patch }));
-  }
+  const set = (patch: Partial<Draft>) => setForm((f) => ({ ...f, ...patch }));
+  const setD = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -64,19 +88,47 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
     }
   }
 
-  async function setStatus(o: Order, status: OrderStatus) {
-    setError("");
-    const res = await fetch(`/api/orders/${o.id}`, {
+  async function patch(id: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/orders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      setError(d.error || "Could not update the status.");
-      return;
+      throw new Error(d.error || "Could not save the order.");
     }
-    router.refresh();
+  }
+
+  function startEdit(o: Order) {
+    setError("");
+    setEditingId(o.id);
+    setDraft(draftOf(o));
+  }
+
+  async function saveEdit(id: string) {
+    setError("");
+    if (!draft.productName.trim()) { setError("Give the order a product name."); return; }
+    setSavingEdit(true);
+    try {
+      await patch(id, draft);
+      setEditingId("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the order.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function setStatus(o: Order, status: OrderStatus) {
+    setError("");
+    try {
+      await patch(o.id, { status });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update the status.");
+    }
   }
 
   async function remove(o: Order) {
@@ -130,42 +182,90 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
       {filtered.length === 0 ? (
         <p className="empty-state">No orders to show.</p>
       ) : (
-        <table className="history">
+        <table className="history orders-table">
           <thead>
             <tr>
               <th>Order</th><th>Product</th><th>Gold</th>
               <th className="num">Cts</th><th className="num">Pcs</th>
-              <th>Status</th><th className="actions-col" />
+              <th>Status</th><th className="actions-col">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((o) => (
-              <tr key={o.id}>
-                <td className="memono">
-                  {o.orderNo}
-                  <div className="ev-meta">{formatDate(o.createdAt.slice(0, 10))}</div>
-                </td>
-                <td>
-                  <strong>{o.productName}</strong>
-                  {o.customer && <div className="ev-meta">{o.customer}</div>}
-                  {o.stockNo && <div className="ev-meta">remake of {o.stockNo}</div>}
-                </td>
-                <td>{o.goldColor || "—"}</td>
-                <td className="num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>
-                <td className="num">{o.pcs}</td>
-                <td>
-                  <select value={o.status}
-                    onChange={(e) => setStatus(o, e.target.value as OrderStatus)}>
-                    {ORDER_STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="row-actions">
-                  <button className="rowbtn danger" onClick={() => remove(o)}>Delete</button>
-                </td>
-              </tr>
-            ))}
+            {filtered.map((o) => {
+              const editing = editingId === o.id;
+              return (
+                <tr key={o.id} className={editing ? "editing" : ""}>
+                  <td className="memono">
+                    {o.orderNo}
+                    <div className="ev-meta">{formatDate(o.createdAt.slice(0, 10))}</div>
+                  </td>
+
+                  {editing ? (
+                    <>
+                      <td>
+                        <input className="ed" value={draft.productName}
+                          onChange={(e) => setD({ productName: e.target.value })} placeholder="Product" />
+                        <input className="ed" value={draft.customer}
+                          onChange={(e) => setD({ customer: e.target.value })} placeholder="Customer" />
+                        <input className="ed" value={draft.stockNo}
+                          onChange={(e) => setD({ stockNo: e.target.value })} placeholder="Stock No. (remake)" />
+                      </td>
+                      <td>
+                        <input className="ed" list="gold-colors" value={draft.goldColor}
+                          onChange={(e) => setD({ goldColor: e.target.value })} placeholder="Gold" />
+                      </td>
+                      <td className="num">
+                        <input className="ed num" value={draft.diamondCts} inputMode="decimal"
+                          onChange={(e) => setD({ diamondCts: e.target.value })} />
+                      </td>
+                      <td className="num">
+                        <input className="ed num" value={draft.pcs} inputMode="numeric"
+                          onChange={(e) => setD({ pcs: e.target.value })} />
+                      </td>
+                      <td>
+                        <select value={draft.status}
+                          onChange={(e) => setD({ status: e.target.value as OrderStatus })}>
+                          {ORDER_STATUSES.map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="row-actions">
+                        <button className="rowbtn" onClick={() => saveEdit(o.id)} disabled={savingEdit}>
+                          {savingEdit ? "Saving…" : "Save"}
+                        </button>
+                        <button className="rowbtn" onClick={() => setEditingId("")} disabled={savingEdit}>
+                          Cancel
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>
+                        <strong>{o.productName}</strong>
+                        {o.customer && <div className="ev-meta">{o.customer}</div>}
+                        {o.stockNo && <div className="ev-meta">remake of {o.stockNo}</div>}
+                      </td>
+                      <td>{o.goldColor || "—"}</td>
+                      <td className="num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>
+                      <td className="num">{o.pcs}</td>
+                      <td>
+                        <select value={o.status}
+                          onChange={(e) => setStatus(o, e.target.value as OrderStatus)}>
+                          {ORDER_STATUSES.map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="row-actions">
+                        <button className="rowbtn" onClick={() => startEdit(o)}>Edit</button>
+                        <button className="rowbtn danger" onClick={() => remove(o)}>Delete</button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
