@@ -165,6 +165,16 @@ export const GOLD_COLORS = [
   "Three Tone",
 ] as const;
 
+// A note against an order — "customer wants 18 inch", "delayed, stones short".
+// Append-only, like the stock trail: a later note supersedes an earlier one in
+// meaning, but never erases it.
+export type OrderComment = {
+  id: string;
+  text: string;
+  at: string; // ISO
+  by: string; // username
+};
+
 export function orderNoFor(fy: string, seq: number): string {
   return `ORD/${fy}/${pad(seq)}`;
 }

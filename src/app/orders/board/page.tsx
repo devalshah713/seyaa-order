@@ -68,6 +68,11 @@ export default async function BoardPage() {
                         <strong>{o.productName}</strong>
                         {o.customer && <span className="b-cust">{o.customer}</span>}
                         {o.stockNo && <span className="b-stock">remake of {o.stockNo}</span>}
+                        {/* Only the newest note — the board is a status at a
+                            glance, not the whole conversation. */}
+                        {o.comments?.length > 0 && (
+                          <span className="b-note">{o.comments[o.comments.length - 1].text}</span>
+                        )}
                       </td>
                       <td className="bw-mid">{o.goldColor || "—"}</td>
                       <td className="bw-num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>

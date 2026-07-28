@@ -53,6 +53,11 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
   const [draft, setDraft] = useState<Draft>(empty);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Notes panel: one order open at a time.
+  const [openNotes, setOpenNotes] = useState("");
+  const [note, setNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return orders.filter((o) => {
@@ -128,6 +133,27 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update the status.");
+    }
+  }
+
+  async function addNote(id: string) {
+    if (!note.trim()) return;
+    setError("");
+    setSavingNote(true);
+    try {
+      const res = await fetch(`/api/orders/${id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: note }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not save the note.");
+      setNote("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the note.");
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -258,6 +284,12 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                         </select>
                       </td>
                       <td className="row-actions">
+                        <button
+                          className={`rowbtn${o.comments?.length ? " has-notes" : ""}`}
+                          onClick={() => { setOpenNotes(openNotes === o.id ? "" : o.id); setNote(""); }}
+                        >
+                          Notes{o.comments?.length ? ` (${o.comments.length})` : ""}
+                        </button>
                         <button className="rowbtn" onClick={() => startEdit(o)}>Edit</button>
                         <button className="rowbtn danger" onClick={() => remove(o)}>Delete</button>
                       </td>
@@ -265,6 +297,45 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                   )}
                 </tr>
               );
+            }).flatMap((rowEl, i) => {
+              const o = filtered[i];
+              if (openNotes !== o.id) return [rowEl];
+              const notes = [...(o.comments || [])].reverse();
+              return [
+                rowEl,
+                <tr key={`${o.id}-notes`} className="notes-row">
+                  <td colSpan={7}>
+                    <div className="notes">
+                      {notes.length === 0 ? (
+                        <p className="auth-muted">No notes yet.</p>
+                      ) : (
+                        <ol className="note-list">
+                          {notes.map((c) => (
+                            <li key={c.id}>
+                              <span className="note-text">{c.text}</span>
+                              <span className="ev-meta">
+                                {c.by} · {new Date(c.at).toLocaleString()}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                      <div className="note-add">
+                        <input
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addNote(o.id); } }}
+                          placeholder="Add a note — e.g. customer wants 18 inch"
+                        />
+                        <button className="btn btn-primary" onClick={() => addNote(o.id)}
+                          disabled={savingNote || !note.trim()}>
+                          {savingNote ? "Saving…" : "Add note"}
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>,
+              ];
             })}
           </tbody>
         </table>

@@ -19,6 +19,7 @@ import {
   orderNoFor,
   todayInput,
   type MemoKind,
+  type OrderComment,
   type OrderStatus,
   type StockEvent,
   type StockOutcome,
@@ -82,11 +83,12 @@ export type Order = {
   pcs: number;
   stockNo?: string; // set when an existing piece is being remade
   status: OrderStatus;
+  comments: OrderComment[];
   createdAt: string;
   updatedAt?: string;
 };
 
-export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt">;
+export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt" | "comments">;
 
 export type DB = {
   counters: Record<string, number>;
@@ -242,7 +244,28 @@ export async function getMemo(id: string): Promise<Memo | null> {
 export async function listOrders(): Promise<Order[]> {
   const token = requireToken();
   const db = await readDB(token);
-  return db.orders.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return db.orders
+    .map((o) => ({ ...o, comments: o.comments || [] })) // orders saved before comments existed
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+// Notes are only ever added. Editing an order does not touch them, so the
+// history of what was said about a piece survives any later correction.
+export async function addOrderComment(
+  id: string,
+  text: string,
+  by: string
+): Promise<Order | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const i = db.orders.findIndex((o) => o.id === id);
+  if (i === -1) return null;
+
+  const comments = db.orders[i].comments || [];
+  comments.push({ id: randomUUID(), text, at: new Date().toISOString(), by });
+  db.orders[i] = { ...db.orders[i], comments };
+  await writeDB(db, token);
+  return db.orders[i];
 }
 
 export async function createOrder(input: NewOrder): Promise<Order> {
@@ -267,6 +290,7 @@ export async function createOrder(input: NewOrder): Promise<Order> {
     pcs: input.pcs,
     stockNo: input.stockNo || undefined,
     status: input.status,
+    comments: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -287,6 +311,8 @@ export async function updateOrder(
     ...db.orders[i],
     ...patch,
     stockNo: (patch.stockNo ?? db.orders[i].stockNo) || undefined,
+    // An edit changes the order's details, never its notes.
+    comments: db.orders[i].comments || [],
     updatedAt: new Date().toISOString(),
   };
   await writeDB(db, token);
