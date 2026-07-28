@@ -277,6 +277,14 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                         <strong>{o.productName}</strong>
                         {o.customer && <div className="ev-meta">{o.customer}</div>}
                         {o.stockNo && <div className="ev-meta">remake of {o.stockNo}</div>}
+                        {/* Notes read in the row itself — the point of a note is
+                            being seen without going looking for it. */}
+                        {(o.comments || []).slice().reverse().map((c) => (
+                          <div key={c.id} className="row-note">
+                            {c.text}
+                            <em>{c.by} · {new Date(c.at).toLocaleDateString()}</em>
+                          </div>
+                        ))}
                       </td>
                       <td>{o.goldColor || "—"}</td>
                       <td className="num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>
@@ -291,10 +299,10 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                       </td>
                       <td className="row-actions">
                         <button
-                          className={`rowbtn${o.comments?.length ? " has-notes" : ""}`}
+                          className="rowbtn"
                           onClick={() => { setOpenNotes(openNotes === o.id ? "" : o.id); setNote(""); }}
                         >
-                          Notes{o.comments?.length ? ` (${o.comments.length})` : ""}
+                          + Note
                         </button>
                         <button className="rowbtn" onClick={() => startEdit(o)}>Edit</button>
                         <button className="rowbtn danger" onClick={() => remove(o)}>Delete</button>
@@ -305,39 +313,31 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
               );
             }).flatMap((rowEl, i) => {
               const o = filtered[i];
+              // The notes themselves are in the row above; this strip is only
+              // for writing a new one.
               if (openNotes !== o.id) return [rowEl];
-              const notes = [...(o.comments || [])].reverse();
               return [
                 rowEl,
-                <tr key={`${o.id}-notes`} className="notes-row">
+                <tr key={`${o.id}-add`} className="notes-row">
                   <td colSpan={7}>
-                    <div className="notes">
-                      {notes.length === 0 ? (
-                        <p className="auth-muted">No notes yet.</p>
-                      ) : (
-                        <ol className="note-list">
-                          {notes.map((c) => (
-                            <li key={c.id}>
-                              <span className="note-text">{c.text}</span>
-                              <span className="ev-meta">
-                                {c.by} · {new Date(c.at).toLocaleString()}
-                              </span>
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                      <div className="note-add">
-                        <input
-                          value={note}
-                          onChange={(e) => setNote(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addNote(o.id); } }}
-                          placeholder="Add a note — e.g. customer wants 18 inch"
-                        />
-                        <button className="btn btn-primary" onClick={() => addNote(o.id)}
-                          disabled={savingNote || !note.trim()}>
-                          {savingNote ? "Saving…" : "Add note"}
-                        </button>
-                      </div>
+                    <div className="note-add">
+                      <input
+                        autoFocus
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); void addNote(o.id); }
+                          if (e.key === "Escape") { setOpenNotes(""); setNote(""); }
+                        }}
+                        placeholder={`Note on ${o.orderNo} — e.g. customer wants 18 inch`}
+                      />
+                      <button className="btn btn-primary" onClick={() => addNote(o.id)}
+                        disabled={savingNote || !note.trim()}>
+                        {savingNote ? "Saving…" : "Add note"}
+                      </button>
+                      <button className="btn" onClick={() => { setOpenNotes(""); setNote(""); }}>
+                        Cancel
+                      </button>
                     </div>
                   </td>
                 </tr>,

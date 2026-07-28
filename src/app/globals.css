@@ -317,19 +317,21 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .orders-table input.ed.num { text-align: right; font-variant-numeric: tabular-nums; }
 .orders-table .row-actions { white-space: nowrap; }
 
-/* Notes log under an order row. */
-.notes-row td { background: var(--field-bg); padding: 0 !important; }
-.notes { padding: 14px 16px 16px; }
-.note-list { margin: 0 0 14px; padding: 0; list-style: none; }
-.note-list li {
-  padding: 8px 12px; margin-bottom: 7px; background: var(--panel);
-  border: 1px solid var(--panel-line); border-radius: 7px;
+/* Notes sit in the order row itself, always visible. */
+.row-note {
+  margin-top: 6px; padding: 5px 10px; font-size: 12.5px; line-height: 1.45;
+  color: var(--panel-ink); background: var(--field-bg);
+  border-left: 2px solid var(--gold-line); border-radius: 0 5px 5px 0;
 }
-.note-list li:last-child { margin-bottom: 0; }
-.note-text { display: block; font-size: 13.5px; color: var(--panel-ink); line-height: 1.5; }
-.note-add { display: flex; gap: 10px; }
+.row-note em {
+  display: block; font-style: normal; font-size: 11px;
+  color: var(--panel-muted); margin-top: 1px;
+}
+
+/* The strip that appears only while writing a new note. */
+.notes-row td { background: var(--field-bg); }
+.note-add { display: flex; gap: 10px; align-items: center; }
 .note-add input { flex: 1; }
-.rowbtn.has-notes { border-color: var(--gold-line); color: var(--gold); font-weight: 600; }
 
 /* ---------- Shareable order board (screenshotted to PNG) ---------- */
 .board {
