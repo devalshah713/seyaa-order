@@ -294,12 +294,17 @@ td.row-actions { text-align: right; white-space: nowrap; }
 
 /* ---------- Orders ---------- */
 .order-add {
-  display: grid; grid-template-columns: 1.6fr 1.3fr 1fr .8fr .6fr 1fr auto; gap: 12px; align-items: end;
+  display: grid; grid-template-columns: 1.6fr 1.3fr 1fr .8fr .55fr 1fr; gap: 12px 14px;
+  align-items: end;
   background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
   padding: 18px 20px; margin-bottom: 20px;
 }
 .order-add label.field { margin-bottom: 0; }
 .order-add label.field em { font-style: normal; opacity: .65; }
+/* The comment runs the full width on its own line, with the button beside it —
+   it needs room for a real sentence, not a 120px box. */
+.order-add .oa-comment { grid-column: 1 / -1; }
+.order-add > button { grid-column: 1 / -1; justify-self: end; }
 @media (max-width: 980px) { .order-add { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .order-add { grid-template-columns: 1fr; } }
 

@@ -268,7 +268,13 @@ export async function addOrderComment(
   return db.orders[i];
 }
 
-export async function createOrder(input: NewOrder): Promise<Order> {
+// `firstNote` lets an order be created with its opening comment in one write,
+// so a note typed on the add form is saved atomically with the order itself
+// rather than as a second call that could fail on its own.
+export async function createOrder(
+  input: NewOrder,
+  firstNote?: { text: string; by: string }
+): Promise<Order> {
   const token = requireToken();
   const db = await readDB(token);
 
@@ -290,7 +296,9 @@ export async function createOrder(input: NewOrder): Promise<Order> {
     pcs: input.pcs,
     stockNo: input.stockNo || undefined,
     status: input.status,
-    comments: [],
+    comments: firstNote?.text
+      ? [{ id: randomUUID(), text: firstNote.text, at: now, by: firstNote.by }]
+      : [],
     createdAt: now,
     updatedAt: now,
   };

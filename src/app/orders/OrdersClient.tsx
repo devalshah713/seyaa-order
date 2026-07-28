@@ -17,6 +17,7 @@ type Draft = {
   pcs: string;
   stockNo: string;
   status: OrderStatus;
+  comment: string; // only used by the add form — becomes the order's first note
 };
 
 const empty: Draft = {
@@ -27,6 +28,7 @@ const empty: Draft = {
   pcs: "1",
   stockNo: "",
   status: "in_production",
+  comment: "",
 };
 
 const draftOf = (o: Order): Draft => ({
@@ -37,6 +39,7 @@ const draftOf = (o: Order): Draft => ({
   pcs: String(o.pcs || 1),
   stockNo: o.stockNo || "",
   status: o.status,
+  comment: "", // notes are added from the log, never rewritten by an edit
 });
 
 export default function OrdersClient({ orders }: { orders: Order[] }) {
@@ -188,6 +191,9 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
         <label className="field"><span>Stock No. <em>(remake)</em></span>
           <input value={form.stockNo} onChange={(e) => set({ stockNo: e.target.value })}
             placeholder="optional" /></label>
+        <label className="field oa-comment"><span>Comment <em>(optional)</em></span>
+          <input value={form.comment} onChange={(e) => set({ comment: e.target.value })}
+            placeholder="e.g. wants it by Friday — saved as the first note" /></label>
         <button type="submit" className="btn btn-primary" disabled={busy}>
           {busy ? "Adding…" : "Add order"}
         </button>

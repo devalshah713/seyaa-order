@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createOrder, listOrders } from "@/lib/memoStore";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/memoFormat";
+import { currentSession } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,16 +38,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const status = VALID.has(String(body.status)) ? (body.status as OrderStatus) : "in_production";
 
+  // An opening note is optional; when given it is attributed like any other.
+  const note = str(body.comment, 500);
+  const session = await currentSession();
+
   try {
-    const order = await createOrder({
-      customer: str(body.customer),
-      productName,
-      goldColor: str(body.goldColor, 40),
-      diamondCts: num(body.diamondCts),
-      pcs: Math.round(num(body.pcs)) || 1,
-      stockNo: str(body.stockNo, 20).toUpperCase(),
-      status,
-    });
+    const order = await createOrder(
+      {
+        customer: str(body.customer),
+        productName,
+        goldColor: str(body.goldColor, 40),
+        diamondCts: num(body.diamondCts),
+        pcs: Math.round(num(body.pcs)) || 1,
+        stockNo: str(body.stockNo, 20).toUpperCase(),
+        status,
+      },
+      note ? { text: note, by: session?.username || "unknown" } : undefined
+    );
     return NextResponse.json({ order }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: msg(err) }, { status: 503 });
