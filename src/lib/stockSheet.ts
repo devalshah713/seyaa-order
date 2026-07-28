@@ -13,7 +13,15 @@ const SHEETS = [
   { name: "Sheet B", id: "1sWcfksBvp42a91q4LIkbx6qYZpi3AHv4DESshysvM-Y" },
 ];
 
-const TAB = "STOCK";
+// The STOCK tab. Both files carry the same internal tab id because the second
+// was copied from the first.
+//
+// This must be the /export endpoint, NOT /gviz/tq. gviz infers a type per
+// column from the first rows it sees: column A opens with ~2,500 plain numbers,
+// so it typed the column numeric and returned *empty* for every alphanumeric
+// code below — silently hiding 2,464 pieces, including everything from A1000
+// onwards. /export returns the displayed text and does no such inference.
+const STOCK_GID = "92413194";
 
 // The sheets are ~1.6 MB together, so re-fetching on every keystroke would be
 // unusable. A short window keeps it effectively live while staying responsive.
@@ -89,7 +97,7 @@ function columnIndex(header: string[], wanted: string[]): number {
 }
 
 async function fetchSheet(id: string): Promise<StockRow[]> {
-  const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(TAB)}`;
+  const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${STOCK_GID}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Stock sheet ${id} returned ${res.status}`);
 
@@ -99,8 +107,12 @@ async function fetchSheet(id: string): Promise<StockRow[]> {
   const header = rows[0];
   const srCol = columnIndex(header, ["Sr. No.", "SrNo", "Sr No"]);
   const locCol = columnIndex(header, ["LOCATION", "Location"]);
+  // If the tab id ever changes this reads some other tab, so fail loudly
+  // rather than quietly returning nothing and blocking every memo.
   if (srCol === -1 || locCol === -1) {
-    throw new Error(`Stock sheet ${id} is missing a "Sr. No." or "LOCATION" column`);
+    throw new Error(
+      `Stock sheet ${id}: the STOCK tab (gid ${STOCK_GID}) has no "Sr. No." / "LOCATION" column — the tab may have moved.`
+    );
   }
 
   const out: StockRow[] = [];
