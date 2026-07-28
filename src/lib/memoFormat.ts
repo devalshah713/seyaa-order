@@ -157,6 +157,14 @@ export function orderStatusLabel(s: OrderStatus): string {
 // Delivered orders leave the shared board; these are the ones still live.
 export const OPEN_STATUSES: OrderStatus[] = ["in_production", "shipped"];
 
+// One tall image of everything becomes unreadable once WhatsApp scales it to
+// a phone's width, so the board is split into parts of this size.
+export const ORDERS_PER_IMAGE = 9;
+
+export function imagePartCount(openOrders: number): number {
+  return Math.max(1, Math.ceil(openOrders / ORDERS_PER_IMAGE));
+}
+
 export const GOLD_COLORS = [
   "Yellow",
   "White",

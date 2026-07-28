@@ -63,12 +63,20 @@ try {
   }
   Log ("PDFs: {0} downloaded, {1} up-to-date." -f $new, $skip)
 
-  # 4) Order status board as a dated PNG, ready to share on WhatsApp.
+  # 4) Order status board as dated PNGs, ready to share on WhatsApp. A long
+  #    board is split into parts; the first response reports how many there
+  #    are, so fetch that then collect the rest.
   #    Non-fatal: a failure here must not lose the data backup above.
   try {
-    Invoke-WebRequest -Uri "$BaseUrl/api/orders/image" -Headers $headers `
-      -OutFile (Join-Path $orderDir "orders-$today.png") -UseBasicParsing
-    Log "Saved orders-$today.png"
+    $first = Invoke-WebRequest -Uri "$BaseUrl/api/orders/image?part=1" -Headers $headers `
+      -OutFile (Join-Path $orderDir "orders-$today-1.png") -UseBasicParsing -PassThru
+    $parts = 1
+    if ($first.Headers['x-total-parts']) { $parts = [int]$first.Headers['x-total-parts'] }
+    for ($p = 2; $p -le $parts; $p++) {
+      Invoke-WebRequest -Uri "$BaseUrl/api/orders/image?part=$p" -Headers $headers `
+        -OutFile (Join-Path $orderDir "orders-$today-$p.png") -UseBasicParsing
+    }
+    Log ("Saved order board: {0} image(s)." -f $parts)
   } catch {
     Log ("Order image skipped: " + $_.Exception.Message)
   }

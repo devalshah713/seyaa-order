@@ -335,15 +335,16 @@ td.row-actions { text-align: right; white-space: nowrap; }
 
 /* ---------- Shareable order board (screenshotted to PNG) ---------- */
 .board {
-  width: 760px; margin: 0 auto; background: var(--paper); color: var(--paper-ink);
-  padding: 30px 32px 26px; font-family: var(--sans);
+  width: 820px; margin: 0 auto; background: var(--paper); color: var(--paper-ink);
+  padding: 32px 34px 28px; font-family: var(--sans);
   /* The shared image is a single artefact — keep it light regardless of the
      viewer's theme, so it reads the same for everyone in the group. */
   color-scheme: light;
 }
 .board-head { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid var(--paper-rule); padding-bottom: 16px; }
-.board-head h1 { font-family: var(--serif); font-size: 27px; margin: 0; letter-spacing: -.01em; }
-.board-head p { margin: 3px 0 0; font-size: 14px; color: var(--paper-muted); }
+.board-head h1 { font-family: var(--serif); font-size: 30px; margin: 0; letter-spacing: -.01em; }
+.board-head p { margin: 4px 0 0; font-size: 15px; color: var(--paper-muted); }
+.board-head p strong { color: var(--paper-ink); }
 
 .board-group { margin-top: 22px; }
 .board-group h2 {
@@ -356,28 +357,29 @@ td.row-actions { text-align: right; white-space: nowrap; }
   margin-left: auto; background: rgba(0,0,0,.14); border-radius: 999px;
   padding: 1px 9px; font-size: 12px; letter-spacing: 0;
 }
-.board table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.board table { width: 100%; border-collapse: collapse; font-size: 17px; }
 .board th {
-  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
-  color: var(--paper-muted); font-weight: 700; padding: 5px 9px; border-bottom: 1px solid var(--paper-line);
+  text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--paper-muted); font-weight: 700; padding: 6px 9px; border-bottom: 1px solid var(--paper-line);
 }
-.board td { padding: 9px; border-bottom: 1px solid var(--paper-line); vertical-align: top; }
+.board td { padding: 11px 9px; border-bottom: 1px solid var(--paper-line); vertical-align: top; }
 .board tbody tr:last-child td { border-bottom: 0; }
-.board .bw-no  { width: 42px; color: var(--paper-muted); font-variant-numeric: tabular-nums; }
-.board .bw-mid { width: 92px; }
-.board .bw-num { width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
-.b-cust, .b-stock { display: block; font-size: 12.5px; color: var(--paper-muted); margin-top: 2px; }
+.board .bw-no  { width: 46px; color: var(--paper-muted); font-variant-numeric: tabular-nums; }
+.board .bw-mid { width: 96px; }
+.board .bw-num { width: 66px; text-align: right; font-variant-numeric: tabular-nums; }
+.b-cust, .b-stock { display: block; font-size: 14px; color: var(--paper-muted); margin-top: 3px; }
 .b-stock { font-style: italic; }
 .b-note {
-  display: block; font-size: 12.5px; margin-top: 5px; padding: 5px 9px;
+  display: block; font-size: 14px; margin-top: 6px; padding: 6px 10px;
   background: rgba(140,106,46,.10); border-left: 2px solid var(--paper-rule);
   border-radius: 0 4px 4px 0; color: var(--paper-ink); line-height: 1.45;
 }
-/* Who and when, so a note on a shared board can be traced back. */
+/* Who wrote it, so a note on a shared board can be traced back. */
 .b-note em {
-  display: block; font-style: normal; font-size: 11px;
+  display: block; font-style: normal; font-size: 12.5px;
   color: var(--paper-muted); margin-top: 2px;
 }
+.board-foot em { font-style: normal; opacity: .75; }
 .board-empty { text-align: center; padding: 40px 0; color: var(--paper-muted); font-size: 16px; }
 .board-foot {
   display: flex; justify-content: space-between; margin-top: 22px; padding-top: 12px;

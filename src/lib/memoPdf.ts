@@ -72,17 +72,20 @@ export async function renderMemoPdf(origin: string, id: string): Promise<Buffer>
 //
 // Sized for a phone screen and rendered at 2x so the text stays sharp after
 // WhatsApp re-compresses it.
-export async function renderOrderBoardPng(origin: string): Promise<Buffer> {
+export async function renderOrderBoardPng(origin: string, part = 1): Promise<Buffer> {
   let browser;
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();
-    await page.setViewport({ width: 760, height: 1200, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 820, height: 1200, deviceScaleFactor: 2 });
 
     const cookie = await rendererCookie(origin);
     if (cookie) await page.setCookie(cookie);
 
-    await page.goto(`${origin}/orders/board`, { waitUntil: "networkidle0", timeout: 30000 });
+    await page.goto(`${origin}/orders/board?part=${part}`, {
+      waitUntil: "networkidle0",
+      timeout: 30000,
+    });
 
     // Photograph the board itself, not the viewport. A full-page shot pads the
     // image out to the viewport height, leaving a long empty tail below a short

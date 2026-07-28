@@ -8,7 +8,9 @@ import { listOrders } from "@/lib/memoStore";
 import {
   COMPANY,
   OPEN_STATUSES,
+  ORDERS_PER_IMAGE,
   formatDate,
+  imagePartCount,
   orderStatusLabel,
   todayInput,
   type OrderStatus,
@@ -18,9 +20,20 @@ import Logo from "@/components/Logo";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Order Board — Seyaa Solitaire" };
 
-export default async function BoardPage() {
+export default async function BoardPage({
+  searchParams,
+}: {
+  searchParams: { part?: string };
+}) {
   const all = await listOrders().catch(() => []);
-  const open = all.filter((o) => OPEN_STATUSES.includes(o.status));
+  const everyOpen = all.filter((o) => OPEN_STATUSES.includes(o.status));
+
+  // Split into readable parts. Each image is a self-contained page with its
+  // own totals for the orders it shows, plus the overall figure, so a single
+  // part still makes sense on its own in a group chat.
+  const parts = imagePartCount(everyOpen.length);
+  const part = Math.min(Math.max(parseInt(searchParams.part || "1", 10) || 1, 1), parts);
+  const open = everyOpen.slice((part - 1) * ORDERS_PER_IMAGE, part * ORDERS_PER_IMAGE);
 
   const groups: { status: OrderStatus; rows: typeof open }[] = OPEN_STATUSES.map((s) => ({
     status: s,
@@ -29,6 +42,8 @@ export default async function BoardPage() {
 
   const totalPcs = open.reduce((n, o) => n + (o.pcs || 0), 0);
   const totalCts = Math.round(open.reduce((n, o) => n + (o.diamondCts || 0), 0) * 100) / 100;
+  const allPcs = everyOpen.reduce((n, o) => n + (o.pcs || 0), 0);
+  const allCts = Math.round(everyOpen.reduce((n, o) => n + (o.diamondCts || 0), 0) * 100) / 100;
 
   return (
     <div className="board">
@@ -36,7 +51,10 @@ export default async function BoardPage() {
         <Logo height={46} className="mark" />
         <div>
           <h1>{COMPANY.name}</h1>
-          <p>Order Status · {formatDate(todayInput())}</p>
+          <p>
+            Order Status · {formatDate(todayInput())}
+            {parts > 1 && <> · <strong>Part {part} of {parts}</strong></>}
+          </p>
         </div>
       </div>
 
@@ -93,8 +111,22 @@ export default async function BoardPage() {
       )}
 
       <div className="board-foot">
-        <span>{open.length} open order{open.length === 1 ? "" : "s"}</span>
-        <span>{totalPcs} pcs · {totalCts.toFixed(2)} cts</span>
+        {parts > 1 ? (
+          <>
+            <span>
+              {open.length} shown here · <strong>{everyOpen.length} open in total</strong>
+            </span>
+            <span>
+              {totalPcs} pcs · {totalCts.toFixed(2)} cts
+              <em> (all {parts} parts: {allPcs} pcs · {allCts.toFixed(2)} cts)</em>
+            </span>
+          </>
+        ) : (
+          <>
+            <span>{open.length} open order{open.length === 1 ? "" : "s"}</span>
+            <span>{totalPcs} pcs · {totalCts.toFixed(2)} cts</span>
+          </>
+        )}
       </div>
     </div>
   );
