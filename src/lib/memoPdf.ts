@@ -83,7 +83,15 @@ export async function renderOrderBoardPng(origin: string): Promise<Buffer> {
     if (cookie) await page.setCookie(cookie);
 
     await page.goto(`${origin}/orders/board`, { waitUntil: "networkidle0", timeout: 30000 });
-    const shot = await page.screenshot({ type: "png", fullPage: true });
+
+    // Photograph the board itself, not the viewport. A full-page shot pads the
+    // image out to the viewport height, leaving a long empty tail below a short
+    // board; framing the element gives an image exactly as tall as its content
+    // whether there are three orders or thirty.
+    const board = await page.$(".board");
+    const shot = board
+      ? await board.screenshot({ type: "png" })
+      : await page.screenshot({ type: "png", fullPage: true });
     return Buffer.from(shot);
   } finally {
     if (browser) await browser.close();
