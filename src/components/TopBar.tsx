@@ -10,6 +10,9 @@ type Props = { user: { username: string; role: Role } | null };
 
 export default function TopBar({ user }: Props) {
   const path = usePathname();
+  // The order board is screenshotted for sharing — the app chrome must not
+  // appear in the image.
+  if (path === "/orders/board") return null;
   const on = (href: string) =>
     href === "/memo" ? path === "/memo" || path.startsWith("/memo/") && path !== "/memo/new" : path === href;
 
@@ -30,6 +33,7 @@ export default function TopBar({ user }: Props) {
         <nav>
           <Link href="/memo/new" className={path === "/memo/new" ? "active" : ""}>New Memo</Link>
           <Link href="/memo/new/gold" className={path === "/memo/new/gold" ? "active" : ""}>Gold Memo</Link>
+          <Link href="/orders" className={path === "/orders" ? "active" : ""}>Orders</Link>
           <Link href="/memo" className={on("/memo") ? "active" : ""}>History</Link>
           <Link href="/stock/sheet" className={path === "/stock/sheet" ? "active" : ""}>Available</Link>
           <Link href="/stock" className={path === "/stock" ? "active" : ""}>Stock</Link>

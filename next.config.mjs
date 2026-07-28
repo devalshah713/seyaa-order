@@ -14,6 +14,7 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "/api/memos/[id]/pdf": ["./node_modules/@sparticuz/chromium/bin/**"],
       "/api/memos/[id]/drive": ["./node_modules/@sparticuz/chromium/bin/**"],
+      "/api/orders/image": ["./node_modules/@sparticuz/chromium/bin/**"],
     },
   },
 };

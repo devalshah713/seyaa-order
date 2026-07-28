@@ -67,6 +67,29 @@ export async function renderMemoPdf(origin: string, id: string): Promise<Buffer>
   }
 }
 
+// The order board as a PNG, for sharing into a WhatsApp group. Same browser
+// and same session trick as the PDF path; only the output differs.
+//
+// Sized for a phone screen and rendered at 2x so the text stays sharp after
+// WhatsApp re-compresses it.
+export async function renderOrderBoardPng(origin: string): Promise<Buffer> {
+  let browser;
+  try {
+    browser = await launchBrowser();
+    const page = await browser.newPage();
+    await page.setViewport({ width: 760, height: 1200, deviceScaleFactor: 2 });
+
+    const cookie = await rendererCookie(origin);
+    if (cookie) await page.setCookie(cookie);
+
+    await page.goto(`${origin}/orders/board`, { waitUntil: "networkidle0", timeout: 30000 });
+    const shot = await page.screenshot({ type: "png", fullPage: true });
+    return Buffer.from(shot);
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
 // Absolute origin of the deployment from the incoming request headers.
 export function originFromHeaders(headers: Headers): string {
   const proto = headers.get("x-forwarded-proto") || "http";

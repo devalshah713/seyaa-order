@@ -136,6 +136,44 @@ export function formatDate(dateInput: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Orders
+//
+// Orders arrive over WhatsApp and are keyed in here. They are separate from
+// memos: a memo moves existing stock, an order is something still being made.
+// ---------------------------------------------------------------------------
+
+export type OrderStatus = "in_production" | "shipped" | "delivered";
+
+export const ORDER_STATUSES: { value: OrderStatus; label: string }[] = [
+  { value: "in_production", label: "In Production" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+];
+
+export function orderStatusLabel(s: OrderStatus): string {
+  return ORDER_STATUSES.find((x) => x.value === s)?.label ?? "In Production";
+}
+
+// Delivered orders leave the shared board; these are the ones still live.
+export const OPEN_STATUSES: OrderStatus[] = ["in_production", "shipped"];
+
+export const GOLD_COLORS = [
+  "Yellow",
+  "White",
+  "Rose",
+  "Two Tone",
+  "Three Tone",
+] as const;
+
+export function orderNoFor(fy: string, seq: number): string {
+  return `ORD/${fy}/${pad(seq)}`;
+}
+
+export function orderIdFor(fy: string, seq: number): string {
+  return `ORD-${fy}-${pad(seq)}`;
+}
+
+// ---------------------------------------------------------------------------
 // Stock movement
 //
 // A memo records goods going out. What became of each individual piece is kept

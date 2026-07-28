@@ -15,8 +15,11 @@ import {
   linesFor,
   memoIdForKind,
   memoNoForKind,
+  orderIdFor,
+  orderNoFor,
   todayInput,
   type MemoKind,
+  type OrderStatus,
   type StockEvent,
   type StockOutcome,
 } from "./memoFormat";
@@ -65,10 +68,31 @@ export type NewMemo = Omit<
 
 export type { StockEvent, StockOutcome } from "./memoFormat";
 
+// An order taken over WhatsApp: something still being made, as opposed to a
+// memo, which moves stock that already exists.
+export type Order = {
+  id: string;
+  orderNo: string;
+  fy: string;
+  seq: number;
+  customer: string;
+  productName: string;
+  goldColor: string;
+  diamondCts: number; // total carat weight
+  pcs: number;
+  stockNo?: string; // set when an existing piece is being remade
+  status: OrderStatus;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt">;
+
 export type DB = {
   counters: Record<string, number>;
   memos: Memo[];
   events: StockEvent[];
+  orders: Order[];
 };
 
 export function isStorageConfigured(): boolean {
@@ -91,17 +115,18 @@ async function readDB(token: string): Promise<DB> {
     // rejected). useCache:false so a just-saved memo is visible immediately.
     const result = await get(DB_PATH, { access: "private", token, useCache: false });
     if (!result || result.statusCode !== 200 || !result.stream) {
-      return { counters: {}, memos: [], events: [] };
+      return { counters: {}, memos: [], events: [], orders: [] };
     }
     const db = (await new Response(result.stream).json()) as Partial<DB>;
     return {
       counters: db.counters || {},
       memos: (db.memos || []).map(normalize),
       events: db.events || [],
+      orders: db.orders || [],
     };
   } catch (err) {
     // First run: the DB blob doesn't exist yet.
-    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [], events: [] };
+    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [], events: [], orders: [] };
     throw err;
   }
 }
@@ -208,6 +233,74 @@ export async function getMemo(id: string): Promise<Memo | null> {
   const token = requireToken();
   const db = await readDB(token);
   return db.memos.find((m) => m.id === id) || null;
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+export async function listOrders(): Promise<Order[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  return db.orders.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+export async function createOrder(input: NewOrder): Promise<Order> {
+  const token = requireToken();
+  const db = await readDB(token);
+
+  const fy = fyFromInput(todayInput());
+  const key = `O:${fy}`;
+  const seq = (db.counters[key] || 0) + 1;
+  db.counters[key] = seq;
+
+  const now = new Date().toISOString();
+  const order: Order = {
+    id: orderIdFor(fy, seq),
+    orderNo: orderNoFor(fy, seq),
+    fy,
+    seq,
+    customer: input.customer,
+    productName: input.productName,
+    goldColor: input.goldColor,
+    diamondCts: input.diamondCts,
+    pcs: input.pcs,
+    stockNo: input.stockNo || undefined,
+    status: input.status,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.orders.push(order);
+  await writeDB(db, token);
+  return order;
+}
+
+export async function updateOrder(
+  id: string,
+  patch: Partial<NewOrder>
+): Promise<Order | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const i = db.orders.findIndex((o) => o.id === id);
+  if (i === -1) return null;
+  db.orders[i] = {
+    ...db.orders[i],
+    ...patch,
+    stockNo: (patch.stockNo ?? db.orders[i].stockNo) || undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeDB(db, token);
+  return db.orders[i];
+}
+
+export async function deleteOrder(id: string): Promise<boolean> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const before = db.orders.length;
+  db.orders = db.orders.filter((o) => o.id !== id);
+  if (db.orders.length === before) return false;
+  await writeDB(db, token);
+  return true;
 }
 
 export async function listEvents(): Promise<StockEvent[]> {
@@ -406,6 +499,9 @@ export async function importDb(db: DB): Promise<void> {
     // Restoring must bring the movement history back too, or a restore would
     // quietly reset every piece to "still out" and lose the audit trail.
     events: Array.isArray(db?.events) ? db.events : [],
+    // Same reasoning as events: a restore that dropped this would erase the
+    // whole order book.
+    orders: Array.isArray(db?.orders) ? db.orders : [],
   };
   await writeDB(safe, token);
 }

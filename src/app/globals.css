@@ -292,6 +292,55 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .sheet-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--panel-muted); white-space: nowrap; }
 .sheet-toggle input { width: auto; }
 
+/* ---------- Orders ---------- */
+.order-add {
+  display: grid; grid-template-columns: 1.6fr 1.3fr 1fr .8fr .6fr 1fr auto; gap: 12px; align-items: end;
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 20px;
+}
+.order-add label.field { margin-bottom: 0; }
+.order-add label.field em { font-style: normal; opacity: .65; }
+@media (max-width: 980px) { .order-add { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .order-add { grid-template-columns: 1fr; } }
+
+/* ---------- Shareable order board (screenshotted to PNG) ---------- */
+.board {
+  width: 760px; margin: 0 auto; background: var(--paper); color: var(--paper-ink);
+  padding: 30px 32px 24px; font-family: var(--sans);
+}
+.board-head { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid var(--paper-rule); padding-bottom: 16px; }
+.board-head h1 { font-family: var(--serif); font-size: 27px; margin: 0; letter-spacing: -.01em; }
+.board-head p { margin: 3px 0 0; font-size: 14px; color: var(--paper-muted); }
+
+.board-group { margin-top: 22px; }
+.board-group h2 {
+  display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .1em; margin: 0 0 8px; padding: 7px 12px; border-radius: 6px;
+}
+.board-group h2.bg-in_production { background: #F6E7D0; color: #8A4B06; }
+.board-group h2.bg-shipped       { background: #DCE9F5; color: #1F5B85; }
+.bg-count {
+  margin-left: auto; background: rgba(0,0,0,.14); border-radius: 999px;
+  padding: 1px 9px; font-size: 12px; letter-spacing: 0;
+}
+.board table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.board th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--paper-muted); font-weight: 700; padding: 5px 9px; border-bottom: 1px solid var(--paper-line);
+}
+.board td { padding: 9px; border-bottom: 1px solid var(--paper-line); vertical-align: top; }
+.board tbody tr:last-child td { border-bottom: 0; }
+.board .bw-no  { width: 42px; color: var(--paper-muted); font-variant-numeric: tabular-nums; }
+.board .bw-mid { width: 92px; }
+.board .bw-num { width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
+.b-cust, .b-stock { display: block; font-size: 12.5px; color: var(--paper-muted); margin-top: 2px; }
+.b-stock { font-style: italic; }
+.board-empty { text-align: center; padding: 40px 0; color: var(--paper-muted); font-size: 16px; }
+.board-foot {
+  display: flex; justify-content: space-between; margin-top: 22px; padding-top: 12px;
+  border-top: 2px solid var(--paper-rule); font-size: 13px; color: var(--paper-muted);
+}
+
 /* ---------- Stock movement & audit trail ---------- */
 .stock-panel {
   background: var(--panel); border: 1px solid var(--panel-line);

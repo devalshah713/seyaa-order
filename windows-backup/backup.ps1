@@ -18,6 +18,7 @@ $ErrorActionPreference = "Stop"
 $today   = Get-Date -Format "yyyy-MM-dd"
 $dataDir = Join-Path $Root "data\$today"
 $pdfDir  = Join-Path $Root "PDFs"
+$orderDir = Join-Path $Root "OrderBoards"
 $logFile = Join-Path $Root "backup.log"
 $headers = @{ "x-backup-token" = $Token }
 
@@ -28,7 +29,7 @@ function Log($msg) {
 }
 
 try {
-  New-Item -ItemType Directory -Force -Path $Root, $dataDir, $pdfDir | Out-Null
+  New-Item -ItemType Directory -Force -Path $Root, $dataDir, $pdfDir, $orderDir | Out-Null
 
   # 1) Restorable data file
   Invoke-WebRequest -Uri "$BaseUrl/api/backup?format=json" -Headers $headers `
@@ -60,7 +61,19 @@ try {
       $new++
     } else { $skip++ }
   }
-  Log ("PDFs: {0} downloaded, {1} up-to-date. Backup complete." -f $new, $skip)
+  Log ("PDFs: {0} downloaded, {1} up-to-date." -f $new, $skip)
+
+  # 4) Order status board as a dated PNG, ready to share on WhatsApp.
+  #    Non-fatal: a failure here must not lose the data backup above.
+  try {
+    Invoke-WebRequest -Uri "$BaseUrl/api/orders/image" -Headers $headers `
+      -OutFile (Join-Path $orderDir "orders-$today.png") -UseBasicParsing
+    Log "Saved orders-$today.png"
+  } catch {
+    Log ("Order image skipped: " + $_.Exception.Message)
+  }
+
+  Log "Backup complete."
 }
 catch {
   Log ("ERROR: " + $_.Exception.Message)
