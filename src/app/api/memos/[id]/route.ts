@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateMemo, deleteMemo, getMemo } from "@/lib/memoStore";
 import { parseMemoBody } from "@/lib/memoInput";
+import { assertMemoable } from "@/lib/stockSheet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +28,9 @@ export async function PATCH(
 
   const parsed = parseMemoBody(body, existing.kind);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+  const gate = await assertMemoable(parsed.value.items.flatMap((it) => it.stockNos));
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 400 });
 
   try {
     const memo = await updateMemo(params.id, parsed.value);

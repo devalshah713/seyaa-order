@@ -77,6 +77,9 @@ export default function MemoForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [expired, setExpired] = useState(false);
+  // Live verdict per stock number from the Google stock sheets.
+  const [checks, setChecks] = useState<Record<string, { canMemo: boolean; reason: string; location: string }>>({});
+  const [checkError, setCheckError] = useState("");
 
   const isReceipt = gold && /receipt/i.test(purpose);
 
@@ -104,6 +107,41 @@ export default function MemoForm({
   const sheetItems = useMemo(
     () => items.map((it) => ({ type: it.type, stockNos: parseCodes(it.stock) })),
     [items]
+  );
+
+  // Check typed stock numbers against the sheets, debounced so it doesn't fire
+  // on every keystroke. Jewellery only — gold memos have no stock numbers.
+  const allCodes = useMemo(
+    () => (gold ? [] : sheetItems.flatMap((it) => it.stockNos)),
+    [gold, sheetItems]
+  );
+  const codesKey = allCodes.join(",");
+  useEffect(() => {
+    if (!codesKey) { setChecks({}); setCheckError(""); return; }
+    const t = setTimeout(() => {
+      fetch("/api/stock-sheet/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes: codesKey.split(",") }),
+      })
+        .then(async (r) => {
+          const d = await r.json();
+          if (!r.ok) { setCheckError(d.error || "Could not read the stock sheets."); return; }
+          setCheckError("");
+          const next: Record<string, { canMemo: boolean; reason: string; location: string }> = {};
+          for (const c of d.checks || []) {
+            next[c.stockNo] = { canMemo: c.canMemo, reason: c.reason, location: c.location };
+          }
+          setChecks(next);
+        })
+        .catch(() => setCheckError("Could not reach the stock sheets."));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [codesKey]);
+
+  const blockedCodes = useMemo(
+    () => allCodes.filter((c) => checks[c] && !checks[c].canMemo),
+    [allCodes, checks]
   );
 
   const sheetGold = useMemo(
@@ -287,6 +325,18 @@ export default function MemoForm({
                   <textarea className="stock" spellCheck={false} value={it.stock}
                     onChange={(e) => setItem(it.key, { stock: e.target.value })}
                     placeholder="SS1024, SS1025, SS1026 …" />
+                  {(() => {
+                    const codes = parseCodes(it.stock);
+                    const bad = codes.filter((c) => checks[c] && !checks[c].canMemo);
+                    if (!bad.length) return null;
+                    return (
+                      <ul className="stock-block">
+                        {bad.map((c) => (
+                          <li key={c}><strong>{c}</strong> — {checks[c].reason}</li>
+                        ))}
+                      </ul>
+                    );
+                  })()}
                   <p className="hint">Comma-separated · each up to 6 letters/numbers</p>
                 </div>
               );
@@ -296,10 +346,17 @@ export default function MemoForm({
         )}
 
         <div className="actions">
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+          <button className="btn btn-primary" onClick={save} disabled={saving || blockedCodes.length > 0}>
             {saving ? "Saving…" : editing ? "Update Memo" : "Save Memo"}
           </button>
         </div>
+        {blockedCodes.length > 0 && (
+          <p className="save-error">
+            {blockedCodes.length} piece{blockedCodes.length === 1 ? " is" : "s are"} not available in
+            India. Only stock located in INDIA can go out on a memo.
+          </p>
+        )}
+        {checkError && <p className="save-error">{checkError}</p>}
         {expired && (
           <div className="session-expired">
             <strong>You were signed out.</strong>
