@@ -76,7 +76,7 @@ export default async function BoardPage() {
                           .map((c) => (
                             <span key={c.id} className="b-note">
                               {c.text}
-                              <em>{c.by} · {formatDate(c.at.slice(0, 10))}</em>
+                              <em>{c.by}</em>
                             </span>
                           ))}
                       </td>

@@ -282,7 +282,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                         {(o.comments || []).slice().reverse().map((c) => (
                           <div key={c.id} className="row-note">
                             {c.text}
-                            <em>{c.by} · {new Date(c.at).toLocaleDateString()}</em>
+                            <em>{c.by}</em>
                           </div>
                         ))}
                       </td>
