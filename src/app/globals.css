@@ -367,9 +367,14 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .b-cust, .b-stock { display: block; font-size: 12.5px; color: var(--paper-muted); margin-top: 2px; }
 .b-stock { font-style: italic; }
 .b-note {
-  display: block; font-size: 12.5px; margin-top: 5px; padding: 4px 9px;
+  display: block; font-size: 12.5px; margin-top: 5px; padding: 5px 9px;
   background: rgba(140,106,46,.10); border-left: 2px solid var(--paper-rule);
-  border-radius: 0 4px 4px 0; color: var(--paper-ink);
+  border-radius: 0 4px 4px 0; color: var(--paper-ink); line-height: 1.45;
+}
+/* Who and when, so a note on a shared board can be traced back. */
+.b-note em {
+  display: block; font-style: normal; font-size: 11px;
+  color: var(--paper-muted); margin-top: 2px;
 }
 .board-empty { text-align: center; padding: 40px 0; color: var(--paper-muted); font-size: 16px; }
 .board-foot {

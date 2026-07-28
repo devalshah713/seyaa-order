@@ -68,11 +68,17 @@ export default async function BoardPage() {
                         <strong>{o.productName}</strong>
                         {o.customer && <span className="b-cust">{o.customer}</span>}
                         {o.stockNo && <span className="b-stock">remake of {o.stockNo}</span>}
-                        {/* Only the newest note — the board is a status at a
-                            glance, not the whole conversation. */}
-                        {o.comments?.length > 0 && (
-                          <span className="b-note">{o.comments[o.comments.length - 1].text}</span>
-                        )}
+                        {/* Every note, newest first, so the current position
+                            reads immediately under the product. */}
+                        {(o.comments || [])
+                          .slice()
+                          .reverse()
+                          .map((c) => (
+                            <span key={c.id} className="b-note">
+                              {c.text}
+                              <em>{c.by} · {formatDate(c.at.slice(0, 10))}</em>
+                            </span>
+                          ))}
                       </td>
                       <td className="bw-mid">{o.goldColor || "—"}</td>
                       <td className="bw-num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>
