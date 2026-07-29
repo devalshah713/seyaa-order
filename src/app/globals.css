@@ -292,6 +292,18 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .sheet-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--panel-muted); white-space: nowrap; }
 .sheet-toggle input { width: auto; }
 
+/* Per-column filters in the history header. */
+.history .filter-row th {
+  padding: 0 8px 9px; border-bottom: 1px solid var(--panel-line);
+  font-weight: 400; text-transform: none; letter-spacing: 0;
+}
+.history .filter-row select,
+.history .filter-row input {
+  width: 100%; font-size: 12px; padding: 4px 7px; margin: 0;
+}
+.history .filter-row th input[type="date"] + input[type="date"] { margin-top: 4px; }
+.history .filter-row .rowbtn { float: right; }
+
 /* Jewellery / Gold filter above the memo history. */
 .kind-tabs { display: inline-flex; gap: 4px; margin-bottom: 14px; padding: 4px;
   background: var(--panel); border: 1px solid var(--panel-line); border-radius: 9px; }

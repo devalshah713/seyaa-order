@@ -2,13 +2,26 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { fmtWeight, formatDate, linesFor, statusLabel, statusOf, type StockEvent } from "@/lib/memoFormat";
+import {
+  fmtWeight,
+  formatDate,
+  linesFor,
+  statusLabel,
+  statusOf,
+  type MemoStatus,
+  type StockEvent,
+} from "@/lib/memoFormat";
 import type { Memo } from "@/lib/memoStore";
 
 export default function HistoryTable({ memos, events }: { memos: Memo[]; events: StockEvent[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<"all" | "jewellery" | "gold">("all");
+  const [fTo, setFTo] = useState("");
+  const [fPurpose, setFPurpose] = useState("");
+  const [fStatus, setFStatus] = useState<"" | MemoStatus>("");
+  const [fFrom, setFFrom] = useState("");
+  const [fUntil, setFUntil] = useState("");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
 
@@ -21,10 +34,40 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
     [memos]
   );
 
+  // Status is derived from the stock events, so work it out once per memo
+  // rather than inside both the filter and the render.
+  const withStatus = useMemo(
+    () =>
+      memos.map((m) => {
+        if (m.kind === "gold") return { memo: m, status: null as MemoStatus | null, lines: [] };
+        const lines = linesFor(m.id, m.items, events);
+        return { memo: m, status: statusOf(lines), lines };
+      }),
+    [memos, events]
+  );
+
+  const options = useMemo(() => {
+    const src = kind === "all" ? withStatus : withStatus.filter((r) =>
+      kind === "gold" ? r.memo.kind === "gold" : r.memo.kind !== "gold");
+    const uniq = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return {
+      to: uniq(src.map((r) => r.memo.to)),
+      purpose: uniq(src.map((r) => r.memo.purpose)),
+    };
+  }, [withStatus, kind]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const byKind =
-      kind === "all" ? memos : memos.filter((m) => (kind === "gold" ? m.kind === "gold" : m.kind !== "gold"));
+    let rows = kind === "all" ? withStatus : withStatus.filter((r) =>
+      kind === "gold" ? r.memo.kind === "gold" : r.memo.kind !== "gold");
+
+    if (fTo) rows = rows.filter((r) => r.memo.to === fTo);
+    if (fPurpose) rows = rows.filter((r) => r.memo.purpose === fPurpose);
+    if (fStatus) rows = rows.filter((r) => r.status === fStatus);
+    if (fFrom) rows = rows.filter((r) => r.memo.date >= fFrom);
+    if (fUntil) rows = rows.filter((r) => r.memo.date <= fUntil);
+
+    const byKind = rows.map((r) => r.memo);
     if (!needle) return byKind;
     return byKind.filter((m) => {
       const hay = [
@@ -35,7 +78,12 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
       ].join(" ").toLowerCase();
       return hay.includes(needle);
     });
-  }, [q, memos, kind]);
+  }, [q, withStatus, kind, fTo, fPurpose, fStatus, fFrom, fUntil]);
+
+  const anyFilter = fTo || fPurpose || fStatus || fFrom || fUntil;
+  function clearFilters() {
+    setFTo(""); setFPurpose(""); setFStatus(""); setFFrom(""); setFUntil("");
+  }
 
   async function del(m: Memo) {
     if (!window.confirm(`Delete memo ${m.memoNo}? This cannot be undone.`)) return;
@@ -94,6 +142,45 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
             <th className="num">Qty</th>
             <th>Status</th>
             <th className="actions-col">Actions</th>
+          </tr>
+          {/* Filters sit under their own column so it is obvious what each one
+              acts on. Options come from the memos actually present, narrowed
+              by the Jewellery/Gold tab above. */}
+          <tr className="filter-row">
+            <th />
+            <th>
+              <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)}
+                aria-label="From date" title="From date" />
+              <input type="date" value={fUntil} onChange={(e) => setFUntil(e.target.value)}
+                aria-label="To date" title="To date" />
+            </th>
+            <th>
+              <select value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="Filter by recipient">
+                <option value="">All</option>
+                {options.to.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </th>
+            <th>
+              <select value={fPurpose} onChange={(e) => setFPurpose(e.target.value)} aria-label="Filter by purpose">
+                <option value="">All</option>
+                {options.purpose.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </th>
+            <th />
+            <th>
+              <select value={fStatus} onChange={(e) => setFStatus(e.target.value as "" | MemoStatus)}
+                aria-label="Filter by status">
+                <option value="">All</option>
+                <option value="out">Out</option>
+                <option value="partial">Part settled</option>
+                <option value="closed">Closed</option>
+              </select>
+            </th>
+            <th className="actions-col">
+              {anyFilter && (
+                <button type="button" className="rowbtn" onClick={clearFilters}>Clear</button>
+              )}
+            </th>
           </tr>
         </thead>
         <tbody>
