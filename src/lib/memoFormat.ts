@@ -136,6 +136,28 @@ export function formatDate(dateInput: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Parties
+//
+// The people and firms goods are issued to. Kept as a controlled list because
+// free text produced "Ghanshyam bhai" and "Ghamshyam bhai" as separate parties,
+// which makes a ledger impossible to total honestly. Admins curate the list;
+// everyone else picks from it.
+// ---------------------------------------------------------------------------
+
+export type Party = {
+  id: string;
+  name: string;
+  createdAt: string;
+  createdBy: string;
+};
+
+// Names are compared with case, spacing and punctuation ignored, so
+// "seyya soli ( hardik)" cannot be added alongside "Seyya Soli (Hardik)".
+export function partyKey(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// ---------------------------------------------------------------------------
 // Orders
 //
 // Orders arrive over WhatsApp and are keyed in here. They are separate from

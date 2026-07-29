@@ -17,10 +17,12 @@ import {
   memoNoForKind,
   orderIdFor,
   orderNoFor,
+  partyKey,
   todayInput,
   type MemoKind,
   type OrderComment,
   type OrderStatus,
+  type Party,
   type StockEvent,
   type StockOutcome,
 } from "./memoFormat";
@@ -95,6 +97,7 @@ export type DB = {
   memos: Memo[];
   events: StockEvent[];
   orders: Order[];
+  parties: Party[];
 };
 
 export function isStorageConfigured(): boolean {
@@ -117,7 +120,7 @@ async function readDB(token: string): Promise<DB> {
     // rejected). useCache:false so a just-saved memo is visible immediately.
     const result = await get(DB_PATH, { access: "private", token, useCache: false });
     if (!result || result.statusCode !== 200 || !result.stream) {
-      return { counters: {}, memos: [], events: [], orders: [] };
+      return { counters: {}, memos: [], events: [], orders: [], parties: [] };
     }
     const db = (await new Response(result.stream).json()) as Partial<DB>;
     return {
@@ -125,10 +128,11 @@ async function readDB(token: string): Promise<DB> {
       memos: (db.memos || []).map(normalize),
       events: db.events || [],
       orders: db.orders || [],
+      parties: db.parties || [],
     };
   } catch (err) {
     // First run: the DB blob doesn't exist yet.
-    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [], events: [], orders: [] };
+    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [], events: [], orders: [], parties: [] };
     throw err;
   }
 }
@@ -235,6 +239,122 @@ export async function getMemo(id: string): Promise<Memo | null> {
   const token = requireToken();
   const db = await readDB(token);
   return db.memos.find((m) => m.id === id) || null;
+}
+
+// ---------------------------------------------------------------------------
+// Parties
+// ---------------------------------------------------------------------------
+
+export async function listParties(): Promise<Party[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  return db.parties.slice().sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function createParty(
+  name: string,
+  by: string
+): Promise<{ ok: true; party: Party } | { ok: false; error: string }> {
+  const clean = name.trim().replace(/\s+/g, " ");
+  if (clean.length < 2) return { ok: false, error: "Give the party a name." };
+
+  const token = requireToken();
+  const db = await readDB(token);
+  const existing = db.parties.find((p) => partyKey(p.name) === partyKey(clean));
+  if (existing) {
+    return { ok: false, error: `Already on the list as "${existing.name}".` };
+  }
+
+  const party: Party = {
+    id: randomUUID(),
+    name: clean,
+    createdAt: new Date().toISOString(),
+    createdBy: by,
+  };
+  db.parties.push(party);
+  await writeDB(db, token);
+  return { ok: true, party };
+}
+
+export async function renameParty(
+  id: string,
+  name: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const clean = name.trim().replace(/\s+/g, " ");
+  if (clean.length < 2) return { ok: false, error: "Give the party a name." };
+
+  const token = requireToken();
+  const db = await readDB(token);
+  const i = db.parties.findIndex((p) => p.id === id);
+  if (i === -1) return { ok: false, error: "Party not found." };
+  if (db.parties.some((p) => p.id !== id && partyKey(p.name) === partyKey(clean))) {
+    return { ok: false, error: "Another party already has that name." };
+  }
+  db.parties[i] = { ...db.parties[i], name: clean };
+  await writeDB(db, token);
+  return { ok: true };
+}
+
+export async function deleteParty(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const party = db.parties.find((p) => p.id === id);
+  if (!party) return { ok: false, error: "Party not found." };
+
+  // A party named on an existing memo stays on the list — removing it would
+  // leave that memo pointing at something the list no longer knows about.
+  const used = db.memos.filter((m) => partyKey(m.to) === partyKey(party.name)).length;
+  if (used > 0) {
+    return {
+      ok: false,
+      error: `${party.name} is on ${used} memo${used === 1 ? "" : "s"} and cannot be removed. Rename it instead.`,
+    };
+  }
+  db.parties = db.parties.filter((p) => p.id !== id);
+  await writeDB(db, token);
+  return { ok: true };
+}
+
+// Gate for saving a memo. Matching ignores case and punctuation, and the
+// stored value is snapped to the list's spelling, so a memo can never record a
+// variant of a name that is already on the list.
+export async function resolveParty(
+  name: string
+): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
+  const token = requireToken();
+  const db = await readDB(token);
+
+  // An empty list means the feature has not been set up yet; refusing every
+  // memo until an admin adds a party would stop the business dead.
+  if (db.parties.length === 0) return { ok: true, name: name.trim() };
+
+  const match = db.parties.find((p) => partyKey(p.name) === partyKey(name));
+  if (!match) {
+    return {
+      ok: false,
+      error: `"${name.trim()}" is not on the party list. Pick an existing party, or ask an admin to add it.`,
+    };
+  }
+  return { ok: true, name: match.name };
+}
+
+// Distinct party names already written on memos that are not on the list —
+// what the free-text era left behind, so an admin can see the variants and
+// add the correct spelling of each.
+export async function unlistedPartyNames(): Promise<{ name: string; memos: number }[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const known = new Set(db.parties.map((p) => partyKey(p.name)));
+  const counts = new Map<string, { name: string; memos: number }>();
+  for (const m of db.memos) {
+    const key = partyKey(m.to);
+    if (!key || known.has(key)) continue;
+    const prev = counts.get(key);
+    counts.set(key, { name: prev?.name || m.to, memos: (prev?.memos || 0) + 1 });
+  }
+  return [...counts.values()].sort((a, b) => b.memos - a.memos);
 }
 
 // ---------------------------------------------------------------------------
@@ -536,6 +656,7 @@ export async function importDb(db: DB): Promise<void> {
     // Same reasoning as events: a restore that dropped this would erase the
     // whole order book.
     orders: Array.isArray(db?.orders) ? db.orders : [],
+    parties: Array.isArray(db?.parties) ? db.parties : [],
   };
   await writeDB(safe, token);
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateMemo, deleteMemo, getMemo } from "@/lib/memoStore";
+import { updateMemo, deleteMemo, getMemo, resolveParty } from "@/lib/memoStore";
 import { parseMemoBody } from "@/lib/memoInput";
 import { assertMemoable } from "@/lib/stockSheet";
 
@@ -31,6 +31,10 @@ export async function PATCH(
 
   const gate = await assertMemoable(parsed.value.items.flatMap((it) => it.stockNos));
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 400 });
+
+  const party = await resolveParty(parsed.value.to);
+  if (!party.ok) return NextResponse.json({ error: party.error }, { status: 400 });
+  parsed.value.to = party.name;
 
   try {
     const memo = await updateMemo(params.id, parsed.value);

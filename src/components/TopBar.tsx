@@ -38,7 +38,10 @@ export default function TopBar({ user }: Props) {
           <Link href="/stock/sheet" className={path === "/stock/sheet" ? "active" : ""}>Available</Link>
           <Link href="/stock" className={path === "/stock" ? "active" : ""}>Stock</Link>
           {user.role === "admin" && (
-            <Link href="/admin/users" className={on("/admin/users") ? "active" : ""}>Users</Link>
+            <>
+              <Link href="/admin/parties" className={path === "/admin/parties" ? "active" : ""}>Parties</Link>
+              <Link href="/admin/users" className={on("/admin/users") ? "active" : ""}>Users</Link>
+            </>
           )}
           <ThemeToggle />
           <span className="whoami" title={user.role === "admin" ? "Admin" : "User"}>{user.username}</span>

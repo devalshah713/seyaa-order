@@ -12,6 +12,7 @@ import {
   normalizeTouch,
   parseCodes,
   parseWeight,
+  partyKey,
   todayInput,
   type MemoKind,
 } from "@/lib/memoFormat";
@@ -80,6 +81,20 @@ export default function MemoForm({
   // Live verdict per stock number from the Google stock sheets.
   const [checks, setChecks] = useState<Record<string, { canMemo: boolean; reason: string; location: string }>>({});
   const [checkError, setCheckError] = useState("");
+  // The controlled party list. Until an admin adds the first one the field
+  // stays free text, so this cannot block work before it is set up.
+  const [parties, setParties] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/parties")
+      .then((r) => r.json())
+      .then((d) => setParties((d.parties || []).map((p: { name: string }) => p.name)))
+      .catch(() => {});
+  }, []);
+
+  const partyOk =
+    parties.length === 0 ||
+    parties.some((p) => partyKey(p) === partyKey(to));
 
   const isReceipt = gold && /receipt/i.test(purpose);
 
@@ -236,7 +251,25 @@ export default function MemoForm({
         <fieldset className="group">
           <legend>{gold ? "Factory" : "Recipient"}</legend>
           <label className="field"><span>{gold ? "Factory / Karigar" : "To"}</span>
-            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder={gold ? "Factory name / karigar" : "Recipient name / firm"} /></label>
+            <input
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              list={parties.length ? "party-list" : undefined}
+              placeholder={parties.length ? "Start typing to search…" : (gold ? "Factory name / karigar" : "Recipient name / firm")}
+              autoComplete="off"
+            />
+          </label>
+          {parties.length > 0 && (
+            <datalist id="party-list">
+              {parties.map((p) => <option key={p} value={p} />)}
+            </datalist>
+          )}
+          {to.trim() !== "" && !partyOk && (
+            <p className="party-warn">
+              <strong>{to.trim()}</strong> is not on the party list. Pick one from the list —
+              only an admin can add a new party.
+            </p>
+          )}
           <label className="field"><span>Through</span>
             <input value={through} onChange={(e) => setThrough(e.target.value)} placeholder="Broker / angadia / person" /></label>
           <label className="field"><span>Mobile Number</span>
@@ -346,7 +379,8 @@ export default function MemoForm({
         )}
 
         <div className="actions">
-          <button className="btn btn-primary" onClick={save} disabled={saving || blockedCodes.length > 0}>
+          <button className="btn btn-primary" onClick={save}
+            disabled={saving || blockedCodes.length > 0 || !partyOk}>
             {saving ? "Saving…" : editing ? "Update Memo" : "Save Memo"}
           </button>
         </div>

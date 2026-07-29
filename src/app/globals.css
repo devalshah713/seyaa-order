@@ -292,6 +292,36 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .sheet-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--panel-muted); white-space: nowrap; }
 .sheet-toggle input { width: auto; }
 
+/* ---------- Parties ---------- */
+.party-add {
+  display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end;
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 20px;
+}
+.party-add label.field { margin-bottom: 0; }
+.party-h { font-family: var(--serif); font-size: 20px; margin: 26px 0 12px; color: var(--panel-ink); }
+
+.unlisted {
+  background: var(--field-bg); border: 1px solid var(--gold-line);
+  border-left: 3px solid var(--gold); border-radius: 9px; padding: 16px 18px;
+}
+.unlisted h2 { font-family: var(--serif); font-size: 17px; margin: 0 0 4px; color: var(--panel-ink); }
+.unlisted > p { margin: 0 0 12px; font-size: 13px; color: var(--panel-muted); line-height: 1.5; }
+.unlisted ul { list-style: none; margin: 0; padding: 0; }
+.unlisted li {
+  display: flex; align-items: center; gap: 10px; padding: 7px 0;
+  border-top: 1px solid var(--panel-line);
+}
+.ul-name { font-weight: 600; color: var(--panel-ink); font-size: 13.5px; }
+.ul-count { font-size: 12px; color: var(--panel-muted); margin-right: auto; }
+
+/* Shown on the memo form when the typed party is not on the list. */
+.party-warn {
+  margin: -6px 0 12px; padding: 8px 11px; font-size: 12.5px; line-height: 1.5;
+  color: var(--panel-ink); background: color-mix(in srgb, #B23 8%, transparent);
+  border: 1px solid color-mix(in srgb, #B23 28%, transparent); border-radius: 7px;
+}
+
 /* Per-column filters in the history header. */
 .history .filter-row th {
   padding: 0 8px 9px; border-bottom: 1px solid var(--panel-line);

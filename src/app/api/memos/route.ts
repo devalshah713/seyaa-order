@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createMemo, listMemos } from "@/lib/memoStore";
+import { createMemo, listMemos, resolveParty } from "@/lib/memoStore";
 import { parseMemoBody } from "@/lib/memoInput";
 import { assertMemoable } from "@/lib/stockSheet";
 
@@ -27,6 +27,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Jewellery only — gold memos carry weights, not stock numbers.
   const gate = await assertMemoable(parsed.value.items.flatMap((it) => it.stockNos));
   if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 400 });
+
+  const party = await resolveParty(parsed.value.to);
+  if (!party.ok) return NextResponse.json({ error: party.error }, { status: 400 });
+  parsed.value.to = party.name;
 
   try {
     return NextResponse.json({ memo: await createMemo(parsed.value) });
