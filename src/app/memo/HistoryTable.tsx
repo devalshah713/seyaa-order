@@ -8,13 +8,25 @@ import type { Memo } from "@/lib/memoStore";
 export default function HistoryTable({ memos, events }: { memos: Memo[]; events: StockEvent[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
+  const [kind, setKind] = useState<"all" | "jewellery" | "gold">("all");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
 
+  const counts = useMemo(
+    () => ({
+      all: memos.length,
+      jewellery: memos.filter((m) => m.kind !== "gold").length,
+      gold: memos.filter((m) => m.kind === "gold").length,
+    }),
+    [memos]
+  );
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return memos;
-    return memos.filter((m) => {
+    const byKind =
+      kind === "all" ? memos : memos.filter((m) => (kind === "gold" ? m.kind === "gold" : m.kind !== "gold"));
+    if (!needle) return byKind;
+    return byKind.filter((m) => {
       const hay = [
         m.memoNo, m.to, m.through, m.mobile, m.purpose, m.againstMemoNo || "",
         ...m.items.map((it) => it.type),
@@ -23,7 +35,7 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
       ].join(" ").toLowerCase();
       return hay.includes(needle);
     });
-  }, [q, memos]);
+  }, [q, memos, kind]);
 
   async function del(m: Memo) {
     if (!window.confirm(`Delete memo ${m.memoNo}? This cannot be undone.`)) return;
@@ -45,6 +57,26 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
 
   return (
     <>
+      {/* The two books are kept separately elsewhere (SS/… and SG/…), so the
+          history should be readable one book at a time too. */}
+      <div className="kind-tabs" role="group" aria-label="Filter memos by type">
+        {([
+          ["all", "All"],
+          ["jewellery", "Jewellery"],
+          ["gold", "Gold"],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={kind === value ? "active" : ""}
+            onClick={() => setKind(value)}
+            aria-pressed={kind === value}
+          >
+            {label}<span>{counts[value]}</span>
+          </button>
+        ))}
+      </div>
+
       <input
         className="search"
         value={q}

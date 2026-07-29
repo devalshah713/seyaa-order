@@ -292,6 +292,22 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .sheet-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--panel-muted); white-space: nowrap; }
 .sheet-toggle input { width: auto; }
 
+/* Jewellery / Gold filter above the memo history. */
+.kind-tabs { display: inline-flex; gap: 4px; margin-bottom: 14px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 9px; }
+.kind-tabs button {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: inherit; font-size: 13px; color: var(--panel-muted);
+  background: transparent; border: 0; border-radius: 6px; padding: 6px 14px; cursor: pointer;
+}
+.kind-tabs button:hover { color: var(--panel-ink); }
+.kind-tabs button.active { background: var(--gold); color: #fff; font-weight: 600; }
+.kind-tabs button span {
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  background: rgba(0,0,0,.10); border-radius: 999px; padding: 1px 7px;
+}
+.kind-tabs button.active span { background: rgba(255,255,255,.24); }
+
 /* ---------- Orders ---------- */
 .order-add {
   display: grid; grid-template-columns: 1.6fr 1.3fr 1fr .8fr .55fr 1fr; gap: 12px 14px;
