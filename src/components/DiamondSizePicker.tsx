@@ -103,12 +103,16 @@ export default function DiamondSizePicker({
             {round ? (
               <label className="field">
                 <span>Sieve size</span>
+                {/* The input holds only the size name. Rewriting it to
+                    "name · mm" mid-type would move the caret under the
+                    user's fingers, so the matched MM is shown beneath. */}
                 <Combo
-                  value={l.mm ? `${l.size} · ${l.mm}` : l.size}
+                  value={l.size}
                   onChange={(v) => pickRound(i, v)}
                   options={roundOptions}
-                  placeholder="+15-15.5 · 3.60MM"
+                  placeholder="+15-15.5"
                 />
+                {l.mm && <p className="dia-hint">{l.mm}</p>}
               </label>
             ) : (
               <div className="two">
@@ -123,8 +127,10 @@ export default function DiamondSizePicker({
                 </label>
                 <label className="field">
                   <span>Pointer (per pc)</span>
+                  {/* Raw while typing — tidying it here would swallow the
+                      decimal point the moment "1." is typed. */}
                   <Combo
-                    value={l.pointer ? trimPointer(l.pointer) : ""}
+                    value={l.pointer}
                     onChange={(v) => set(i, { pointer: v })}
                     options={ptOptions}
                     placeholder="0.25"

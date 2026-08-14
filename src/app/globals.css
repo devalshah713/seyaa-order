@@ -720,3 +720,4 @@ td.row-actions { text-align: right; white-space: nowrap; }
   color: var(--gold); background: color-mix(in srgb, var(--gold) 8%, transparent);
   border-radius: 8px; padding: 8px 10px; word-break: break-word;
 }
+.dia-hint { margin: 5px 2px 0; font-size: 11px; color: var(--gold); font-weight: 600; }
