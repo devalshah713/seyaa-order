@@ -13,7 +13,7 @@ export type PdSheet = {
   seq: number;
 
   photoPath: string; // private blob pathname, served via /api/photo
-  sku: string; // final SKU (auto-built, but editable)
+  sku: string; // design number, entered by the team
 
   // Left column
   product: string;
@@ -42,10 +42,11 @@ export type PdSheet = {
   pdMerchandiser: string;
   remarks: string;
 
-  // SKU segments that aren't derivable from the fields above
-  line: string; // e.g. "SL"
-  caratCode: string; // e.g. "20CT"
-  pointerRange: string; // e.g. "011-015"
+  // Legacy SKU segments from when the design number was auto-built. Kept
+  // optional so sheets saved before that change still load.
+  line?: string;
+  caratCode?: string;
+  pointerRange?: string;
 
   createdAt: string;
   updatedAt: string;
@@ -73,7 +74,6 @@ export function normalizePdInput(body: Record<string, unknown>): NewPdSheet {
     diaWeightPointers: s("diaWeightPointers"), quantity: s("quantity"),
     orderBy: s("orderBy"), deliveryDate: s("deliveryDate"),
     pdMerchandiser: s("pdMerchandiser"), remarks: s("remarks"),
-    line: s("line"), caratCode: s("caratCode"), pointerRange: s("pointerRange"),
   };
 }
 

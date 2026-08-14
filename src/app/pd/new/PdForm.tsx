@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import Combo from "@/components/Combo";
 import { todayInput } from "@/lib/memoFormat";
 import {
   PRODUCTS, CATEGORIES, SUB_CATEGORIES, TYPES, DIA_QUALITIES, DIA_SHAPES,
-  GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, buildSku, sizeLabel,
+  GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, sizeLabel,
 } from "@/lib/pdConfig";
 
 export type PdInitial = {
@@ -20,7 +20,6 @@ export type PdInitial = {
   goldPurity: string; goldColor: string; priceRange: string; diaWeightPointers: string;
   quantity: string; orderBy: string; deliveryDate: string;
   pdMerchandiser: string; remarks: string;
-  line: string; caratCode: string; pointerRange: string;
 };
 
 const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
@@ -31,7 +30,6 @@ const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
   goldPurity: "14KT", goldColor: "White Gold", priceRange: "", diaWeightPointers: "",
   quantity: "", orderBy: "Seyaa Solitaire", deliveryDate: "",
   pdMerchandiser: "", remarks: "",
-  line: "SL", caratCode: "", pointerRange: "",
 };
 
 export default function PdForm({ initial }: { initial?: PdInitial }) {
@@ -44,8 +42,6 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
     assignedDate: initial?.assignedDate || todayInput(),
   });
   const [pdNo, setPdNo] = useState(initial?.pdNo || "PD/…");
-  // Once the user types their own SKU we stop overwriting it.
-  const [skuTouched, setSkuTouched] = useState(!!initial?.sku);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -63,19 +59,6 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       .then((d) => { if (n === latest.current && d.pdNo) setPdNo(d.pdNo); })
       .catch(() => {});
   }, [f.assignedDate, editing]);
-
-  // Auto-built SKU — assembles as fields are filled, until the user overrides it.
-  const autoSku = useMemo(
-    () => buildSku({
-      product: f.product, line: f.line, category: f.category,
-      caratCode: f.caratCode, pointerRange: f.pointerRange,
-      goldColor: f.goldColor, goldPurity: f.goldPurity, zone: f.zone,
-    }),
-    [f.product, f.line, f.category, f.caratCode, f.pointerRange, f.goldColor, f.goldPurity, f.zone]
-  );
-  useEffect(() => {
-    if (!skuTouched) setF((s) => ({ ...s, sku: autoSku }));
-  }, [autoSku, skuTouched]);
 
   async function pickPhoto(file: File) {
     setError("");
@@ -146,28 +129,15 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
         </fieldset>
 
         <fieldset className="group">
-          <legend>SKU</legend>
+          <legend>Design Number</legend>
           <div className="pd-skubox">
-            <div className="cap">SKU No. — builds automatically</div>
+            <div className="cap">SKU No.</div>
             <input
               value={f.sku}
-              onChange={(e) => { setSkuTouched(true); set("sku", e.target.value); }}
+              onChange={(e) => set("sku", e.target.value)}
+              placeholder="SS-NK-SL-KO-20CT-011-015-WG-14KT-USA"
             />
-            <p className="hint">
-              Brand · Product · Line · Category · Carat · Pointers · Gold · Purity · Zone.
-              Type over it to override{skuTouched && !editing ? "" : ""}.
-              {skuTouched && (
-                <> {" "}<button className="linklike" onClick={() => { setSkuTouched(false); set("sku", autoSku); }}>Reset to auto</button></>
-              )}
-            </p>
-          </div>
-          <div className="three">
-            <label className="field"><span>Line</span>
-              <input value={f.line} onChange={(e) => set("line", e.target.value)} placeholder="SL" /></label>
-            <label className="field"><span>Carat code</span>
-              <input value={f.caratCode} onChange={(e) => set("caratCode", e.target.value)} placeholder="20CT" /></label>
-            <label className="field"><span>Pointers</span>
-              <input value={f.pointerRange} onChange={(e) => set("pointerRange", e.target.value)} placeholder="011-015" /></label>
+            <p className="hint">Type the design number exactly as it should print.</p>
           </div>
         </fieldset>
 
