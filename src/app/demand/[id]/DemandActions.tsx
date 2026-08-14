@@ -2,22 +2,18 @@
 import { useState } from "react";
 import Link from "next/link";
 
-export default function PdActions({ id }: { id: string }) {
+export default function DemandActions({ id }: { id: string }) {
   const [downloading, setDownloading] = useState(false);
 
   function downloadPdf() {
     setDownloading(true);
-    window.location.href = `/api/pd/${id}/pdf`;
+    window.location.href = `/api/demand/${id}/pdf`;
     setTimeout(() => setDownloading(false), 4000);
   }
 
   return (
-    <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
-      {/* Carries this design's number and diamond sizes straight into a demand. */}
-      <Link href={`/demand/new?pd=${encodeURIComponent(id)}`} className="btn btn-accent">
-        Issue Diamond Demand
-      </Link>
-      <Link href={`/pd/${id}/edit`} className="btn">Edit</Link>
+    <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+      <Link href={`/demand/${id}/edit`} className="btn">Edit</Link>
       <button className="btn" onClick={() => window.print()}>Print</button>
       <button className="btn btn-primary" onClick={downloadPdf} disabled={downloading}>
         {downloading ? "Preparing PDF…" : "Download PDF"}

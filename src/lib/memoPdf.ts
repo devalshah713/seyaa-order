@@ -72,6 +72,10 @@ export function renderPdSheetPdf(origin: string, id: string): Promise<Buffer> {
   return renderPagePdf(origin, `/pd/${id}?pdf=1`);
 }
 
+export function renderDemandPdf(origin: string, id: string): Promise<Buffer> {
+  return renderPagePdf(origin, `/demand/${id}?pdf=1`);
+}
+
 // The order board as a PNG, for sharing into a WhatsApp group. Same browser
 // and same session trick as the PDF path; only the output differs.
 //

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exportDb } from "@/lib/memoStore";
 import { exportPdDb } from "@/lib/pdStore";
+import { exportDemandDb } from "@/lib/demandStore";
 import { buildMemoWorkbook } from "@/lib/memoExport";
 import { isBackupConfigured, tokenOk } from "@/lib/backup";
 
@@ -44,7 +45,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     // `counters` stay at the top level so existing backups/restores keep working.
     const db = await exportDb();
     const pd = await exportPdDb().catch(() => ({ counters: {}, sheets: [] }));
-    return new NextResponse(JSON.stringify({ ...db, pd }), {
+    const demand = await exportDemandDb().catch(() => ({ counters: {}, demands: [] }));
+    return new NextResponse(JSON.stringify({ ...db, pd, demand }), {
       status: 200,
       headers: {
         "content-type": "application/json",

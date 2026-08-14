@@ -42,7 +42,8 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
   { key: "orders", prefixes: ["/orders", "/api/orders"] },
   { key: "stock", prefixes: ["/stock", "/api/stock", "/api/stock-sheet"] },
   // Photo upload/serving exists for the PD sheet's design image.
-  { key: "pd", prefixes: ["/pd", "/api/pd", "/api/upload", "/api/photo"] },
+  // Diamond demands are raised straight off a PD sheet, so they travel with it.
+  { key: "pd", prefixes: ["/pd", "/api/pd", "/api/upload", "/api/photo", "/demand", "/api/demand"] },
 ];
 
 // The module a path belongs to, or null for shared things (the home page, auth,
