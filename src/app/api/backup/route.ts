@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exportDb } from "@/lib/memoStore";
+import { exportPdDb } from "@/lib/pdStore";
 import { buildMemoWorkbook } from "@/lib/memoExport";
 import { isBackupConfigured, tokenOk } from "@/lib/backup";
 
@@ -39,9 +40,11 @@ export async function GET(req: NextRequest): Promise<Response> {
       });
     }
 
-    // Default: JSON — the restorable database.
+    // Default: JSON — the restorable database (memos + PD sheets). `memos` and
+    // `counters` stay at the top level so existing backups/restores keep working.
     const db = await exportDb();
-    return new NextResponse(JSON.stringify(db), {
+    const pd = await exportPdDb().catch(() => ({ counters: {}, sheets: [] }));
+    return new NextResponse(JSON.stringify({ ...db, pd }), {
       status: 200,
       headers: {
         "content-type": "application/json",

@@ -1,9 +1,8 @@
 import "server-only";
 import { SESSION_COOKIE, signSession } from "./session";
 
-// Shared headless-Chromium PDF rendering. Navigates to the memo's own page so
-// the PDF uses the exact same print CSS as the browser. Used by both the
-// download route and the Google Drive upload.
+// Shared headless-Chromium rendering. Navigates to the page's own URL so the
+// output uses the exact same print CSS as the browser.
 async function launchBrowser() {
   const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   const puppeteer = await import("puppeteer-core");
@@ -27,10 +26,10 @@ async function launchBrowser() {
   });
 }
 
-// The memo page sits behind the login gate, and this browser has no user
-// sitting at it. Mint a session for the renderer itself so the page loads as
-// the memo rather than as the sign-in screen. It is signed with the same
-// secret, so a leaked PDF URL still can't be turned into access.
+// The pages sit behind the login gate, and this browser has no user sitting at
+// it. Mint a session for the renderer itself so the page loads as the document
+// rather than as the sign-in screen. It is signed with the same secret, so a
+// leaked PDF URL still can't be turned into access.
 async function rendererCookie(origin: string) {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return null;
@@ -41,7 +40,8 @@ async function rendererCookie(origin: string) {
   return { name: SESSION_COOKIE, value, url: origin };
 }
 
-export async function renderMemoPdf(origin: string, id: string): Promise<Buffer> {
+// Renders any in-app page to an A4 PDF using its own print CSS.
+export async function renderPagePdf(origin: string, path: string): Promise<Buffer> {
   let browser;
   try {
     browser = await launchBrowser();
@@ -50,12 +50,7 @@ export async function renderMemoPdf(origin: string, id: string): Promise<Buffer>
     const cookie = await rendererCookie(origin);
     if (cookie) await page.setCookie(cookie);
 
-    // ?pdf=1 renders the memo without the action bar, so the render doesn't
-    // re-trigger the client-side auto-upload (which would loop).
-    await page.goto(`${origin}/memo/${id}?pdf=1`, {
-      waitUntil: "networkidle0",
-      timeout: 30000,
-    });
+    await page.goto(`${origin}${path}`, { waitUntil: "networkidle0", timeout: 30000 });
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
@@ -65,6 +60,16 @@ export async function renderMemoPdf(origin: string, id: string): Promise<Buffer>
   } finally {
     if (browser) await browser.close();
   }
+}
+
+export function renderMemoPdf(origin: string, id: string): Promise<Buffer> {
+  // ?pdf=1 renders the memo without the action bar, so the render doesn't
+  // re-trigger the client-side auto-upload (which would loop).
+  return renderPagePdf(origin, `/memo/${id}?pdf=1`);
+}
+
+export function renderPdSheetPdf(origin: string, id: string): Promise<Buffer> {
+  return renderPagePdf(origin, `/pd/${id}?pdf=1`);
 }
 
 // The order board as a PNG, for sharing into a WhatsApp group. Same browser

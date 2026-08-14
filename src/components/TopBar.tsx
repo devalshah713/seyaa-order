@@ -13,8 +13,9 @@ export default function TopBar({ user }: Props) {
   // The order board is screenshotted for sharing — the app chrome must not
   // appear in the image.
   if (path === "/orders/board") return null;
-  const on = (href: string) =>
-    href === "/memo" ? path === "/memo" || path.startsWith("/memo/") && path !== "/memo/new" : path === href;
+  // A section is active for its list page and any detail page under it.
+  const on = (base: string) =>
+    path === base || (path.startsWith(`${base}/`) && path !== `${base}/new`);
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -37,6 +38,7 @@ export default function TopBar({ user }: Props) {
           <Link href="/memo" className={on("/memo") ? "active" : ""}>History</Link>
           <Link href="/stock/sheet" className={path === "/stock/sheet" ? "active" : ""}>Available</Link>
           <Link href="/stock" className={path === "/stock" ? "active" : ""}>Stock</Link>
+          <Link href="/pd" className={on("/pd") ? "active" : ""}>PD Sheets</Link>
           {user.role === "admin" && (
             <>
               <Link href="/admin/parties" className={path === "/admin/parties" ? "active" : ""}>Parties</Link>

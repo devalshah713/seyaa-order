@@ -70,6 +70,9 @@ a { color: inherit; }
 }
 .topbar nav a:hover { background: var(--field-bg); color: var(--panel-ink); }
 .topbar nav a.active { color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent); }
+.topbar .nav-sep { width: 1px; background: var(--panel-line); margin: 4px 6px; align-self: stretch; }
+.linklike { border: 0; background: none; color: var(--gold); cursor: pointer; padding: 0;
+  font-size: inherit; font-weight: 600; text-decoration: underline; }
 
 /* ---------- Generic buttons ---------- */
 .btn {
@@ -209,6 +212,103 @@ table.items tfoot .totval { text-align: center; font-size: 13px; font-variant-nu
 .sign .who { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; font-weight: 650; color: var(--paper-ink); }
 .sign .for { font-size: 9.5px; color: var(--paper-muted); margin-top: 2px; font-family: var(--serif);
   font-style: italic; letter-spacing: .3px; }
+
+/* ---------- PD (Product Development) sheet ---------- */
+.pd-sheet {
+  background: var(--paper); color: var(--paper-ink); width: 210mm; min-height: 297mm;
+  padding: 14mm 16mm; box-shadow: 0 12px 40px rgba(40,34,20,.22);
+  font-size: 11.5px; line-height: 1.4; position: relative;
+}
+.pd-sheet .pd-rail {
+  position: absolute; top: 20mm; bottom: 22mm; width: 3.5px;
+  background: var(--gold-soft); border-radius: 2px;
+}
+.pd-sheet .pd-rail.left { left: 9mm; }
+.pd-sheet .pd-rail.right { right: 9mm; }
+.pd-title {
+  font-family: var(--sans); font-weight: 700; font-size: 21px;
+  text-align: center; margin: 0 0 12px; letter-spacing: .2px;
+}
+.pd-top {
+  display: grid; grid-template-columns: 232px 1fr;
+  border: 1px solid var(--paper-ink); border-bottom: 0;
+}
+.pd-photo {
+  height: 176px; border-right: 1px solid var(--paper-ink);
+  background: #4A86C8; display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.pd-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pd-toplabel {
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 10px; font-size: 11.5px; letter-spacing: .3px;
+}
+
+table.pd-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.pd-table td {
+  border: 1px solid var(--paper-ink); padding: 5px 7px; vertical-align: middle;
+  word-break: break-word;
+}
+table.pd-table col.c-lab { width: 112px; }
+table.pd-table col.c-lab2 { width: 132px; }
+table.pd-table col.c-merch { width: 112px; }
+table.pd-table td.lab { font-weight: 700; font-size: 11px; }
+table.pd-table td.val { font-weight: 600; }
+table.pd-table td.val.accent { color: #C1451B; }
+table.pd-table td.merch { text-align: center; border-left: 1px solid var(--paper-ink); }
+.pd-merch-head { font-weight: 700; font-size: 11px; }
+.pd-merch-name { font-size: 11px; }
+table.pd-table td.val.remarks { font-weight: 600; }
+table.pd-table tr.spacer td { height: 22px; border-top: 1px solid var(--paper-ink); }
+table.pd-table td.sign { height: 62px; vertical-align: top; }
+
+/* Two-pane PD form reuses the memo .app/.controls/.stage shell */
+.pd-skubox {
+  border: 1px solid var(--gold-line); background: color-mix(in srgb, var(--gold) 7%, transparent);
+  border-radius: 9px; padding: 10px 12px; margin-bottom: 12px;
+}
+.pd-skubox .cap {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--gold); font-weight: 700; margin-bottom: 5px;
+}
+.pd-skubox input {
+  font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; letter-spacing: .4px;
+  background: var(--panel);
+}
+.pd-skubox .hint { font-size: 10.5px; color: var(--panel-muted); margin: 6px 2px 0; }
+.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* Photo upload control */
+.photo-drop {
+  border: 1px dashed var(--field-line); border-radius: 9px; padding: 12px;
+  text-align: center; font-size: 12.5px; color: var(--panel-muted); cursor: pointer;
+  background: var(--field-bg);
+}
+.photo-drop:hover { border-color: var(--gold-soft); }
+.photo-prev { display: flex; gap: 10px; align-items: center; }
+.photo-prev img {
+  width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
+  border: 1px solid var(--field-line);
+}
+
+/* Combo (dropdown + free typing) */
+.combo { position: relative; }
+.combo .combo-input { padding-right: 30px; }
+.combo .combo-toggle {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; color: var(--panel-muted);
+  cursor: pointer; font-size: 11px; line-height: 1; padding: 4px;
+}
+.combo-list {
+  position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px);
+  background: var(--panel); border: 1px solid var(--field-line); border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(30,25,15,.18); max-height: 210px; overflow-y: auto; padding: 4px;
+}
+.combo-list button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  color: var(--panel-ink); font-size: 13px; padding: 7px 9px; border-radius: 6px; cursor: pointer;
+}
+.combo-list button:hover, .combo-list button.on { background: var(--field-bg); color: var(--gold); }
 
 /* ---------- Centered page wrapper (lists, single memo) ---------- */
 .wrap { max-width: 1000px; margin: 0 auto; padding: 28px 22px 60px; }
@@ -578,5 +678,6 @@ td.row-actions { text-align: right; white-space: nowrap; }
   /* Fill the printable A4 area (297mm − 2×8mm page margin) so the flex column
      can push the signature block to the bottom of the page. */
   .memo { width: auto; min-height: 281mm; box-shadow: none; padding: 12mm; }
+  .pd-sheet { width: auto; min-height: auto; box-shadow: none; padding: 6mm 8mm; }
   @page { size: A4; margin: 8mm; }
 }

@@ -9,12 +9,16 @@ export default function Home() {
       <h1>{COMPANY.name}</h1>
       <p className="tagline">{COMPANY.tagline}</p>
       <p className="lead">
-        Generate a delivery memo for every piece of jewellery leaving the office —
-        auto-numbered, saved, and searchable.
+        Delivery memos for jewellery leaving the office, and PD sheets for the
+        design team — auto-numbered, saved, and searchable.
       </p>
       <div className="cta">
         <Link href="/memo/new" className="btn btn-primary">+ New Memo</Link>
-        <Link href="/memo" className="btn">View History</Link>
+        <Link href="/memo" className="btn">Memo History</Link>
+      </div>
+      <div className="cta" style={{ marginTop: 12 }}>
+        <Link href="/pd/new" className="btn btn-primary">+ New PD Sheet</Link>
+        <Link href="/pd" className="btn">PD Sheets</Link>
       </div>
     </div>
   );
