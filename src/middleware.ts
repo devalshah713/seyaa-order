@@ -41,6 +41,7 @@ function backupReachablePath(pathname: string): boolean {
   return (
     pathname.startsWith("/api/backup") ||
     /^\/api\/memos\/[^/]+\/pdf$/.test(pathname) ||
+    /^\/api\/pd\/[^/]+\/pdf$/.test(pathname) ||
     // The nightly job saves a dated copy of the order board image.
     pathname === "/api/orders/image"
   );
