@@ -3,10 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import Combo from "@/components/Combo";
+import DiamondSizePicker from "@/components/DiamondSizePicker";
 import { todayInput } from "@/lib/memoFormat";
 import {
-  PRODUCTS, CATEGORIES, SUB_CATEGORIES, TYPES, DIA_QUALITIES, DIA_SHAPES,
+  PRODUCTS, CATEGORIES, SUB_CATEGORIES, TYPES, DIA_QUALITIES,
   GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, sizeLabel,
+  BLANK_DIA_LINE, formatDiaLines, shapesFromLines, type DiaLine,
 } from "@/lib/pdConfig";
 
 export type PdInitial = {
@@ -20,6 +22,7 @@ export type PdInitial = {
   goldPurity: string; goldColor: string; priceRange: string; diaWeightPointers: string;
   quantity: string; orderBy: string; deliveryDate: string;
   pdMerchandiser: string; remarks: string;
+  diaLines?: DiaLine[];
 };
 
 const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
@@ -42,6 +45,9 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
     assignedDate: initial?.assignedDate || todayInput(),
   });
   const [pdNo, setPdNo] = useState(initial?.pdNo || "PD/…");
+  const [diaLines, setDiaLines] = useState<DiaLine[]>(
+    initial?.diaLines?.length ? initial.diaLines : [{ ...BLANK_DIA_LINE }]
+  );
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -89,7 +95,7 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       const res = await fetch(editing ? `/api/pd/${initial!.id}` : "/api/pd", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(f),
+        body: JSON.stringify({ ...f, diaShape, diaWeightPointers: diaText, diaLines }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the PD sheet.");
@@ -101,6 +107,10 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
     }
   }
 
+  // The printed sheet keeps its single Shape cell and one "Dia. Weight &
+  // Pointers" line — both are composed from the rows above.
+  const diaShape = shapesFromLines(diaLines) || f.diaShape;
+  const diaText = formatDiaLines(diaLines) || f.diaWeightPointers;
   const photoUrl = f.photoPath ? `/api/photo?p=${encodeURIComponent(f.photoPath)}` : "";
 
   return (
@@ -159,15 +169,18 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
 
         <fieldset className="group">
           <legend>Diamond &amp; Gold</legend>
-          <div className="two">
-            <label className="field"><span>Dia. quality</span>
-              <Combo value={f.diaQuality} onChange={(v) => set("diaQuality", v)} options={DIA_QUALITIES} placeholder="VVS-EF" /></label>
-            <label className="field"><span>Dia. shape</span>
-              <Combo value={f.diaShape} onChange={(v) => set("diaShape", v)} options={DIA_SHAPES} placeholder="Round" /></label>
+          <label className="field"><span>Dia. quality</span>
+            <Combo value={f.diaQuality} onChange={(v) => set("diaQuality", v)} options={DIA_QUALITIES} placeholder="VVS-EF" /></label>
+
+          <div className="field">
+            <span>Diamond sizes</span>
+            <p className="group-hint" style={{ margin: "0 0 8px" }}>
+              Pick the shape first. Round asks for a sieve size; fancy shapes ask
+              for the MM and the per-piece pointer.
+            </p>
+            <DiamondSizePicker lines={diaLines} onChange={setDiaLines} />
+            {diaText && <p className="dia-preview">{diaText}</p>}
           </div>
-          <label className="field"><span>Dia. weight &amp; pointers</span>
-            <input value={f.diaWeightPointers} onChange={(e) => set("diaWeightPointers", e.target.value)}
-              placeholder="ROUND - +15-15.5 – 110 PCS" /></label>
           <div className="two">
             <label className="field"><span>Gold purity</span>
               <Combo value={f.goldPurity} onChange={(v) => set("goldPurity", v)} options={GOLD_PURITIES} placeholder="14KT" /></label>
@@ -228,7 +241,7 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       </aside>
 
       <main className="stage">
-        <PdSheetView data={{ ...f, pdNo, photoUrl }} />
+        <PdSheetView data={{ ...f, diaShape, diaWeightPointers: diaText, pdNo, photoUrl }} />
       </main>
     </div>
   );

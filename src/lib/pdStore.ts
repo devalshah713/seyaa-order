@@ -3,6 +3,7 @@
 import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
+import type { DiaLine } from "./pdConfig";
 
 const DB_PATH = "pd/db.json";
 
@@ -42,6 +43,10 @@ export type PdSheet = {
   pdMerchandiser: string;
   remarks: string;
 
+  // Structured diamond sizes behind the printed "Dia. Weight & Pointers" line,
+  // kept so the picker can be reopened on edit.
+  diaLines?: DiaLine[];
+
   // Legacy SKU segments from when the design number was auto-built. Kept
   // optional so sheets saved before that change still load.
   line?: string;
@@ -74,7 +79,23 @@ export function normalizePdInput(body: Record<string, unknown>): NewPdSheet {
     diaWeightPointers: s("diaWeightPointers"), quantity: s("quantity"),
     orderBy: s("orderBy"), deliveryDate: s("deliveryDate"),
     pdMerchandiser: s("pdMerchandiser"), remarks: s("remarks"),
+    diaLines: normalizeDiaLines(body.diaLines),
   };
+}
+
+// Diamond rows arrive as free text from the picker; keep only strings.
+function normalizeDiaLines(input: unknown): DiaLine[] {
+  if (!Array.isArray(input)) return [];
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  return input
+    .map((raw) => {
+      const r = raw as Partial<DiaLine>;
+      return {
+        shape: str(r.shape), size: str(r.size), mm: str(r.mm),
+        pointer: str(r.pointer), pcs: str(r.pcs),
+      };
+    })
+    .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs);
 }
 
 function requireToken(): string {

@@ -699,3 +699,24 @@ td.row-actions { text-align: right; white-space: nowrap; }
 .access-edit select { max-width: 160px; }
 .access-actions { display: flex; gap: 8px; margin-top: 8px; }
 .user-actions { display: flex; gap: 8px; white-space: nowrap; }
+
+/* ---------- Diamond size picker (PD sheet) ---------- */
+.dia-picker { display: flex; flex-direction: column; gap: 10px; }
+.dia-row {
+  border: 1px solid var(--field-line); border-radius: 9px;
+  padding: 10px 10px 4px; background: var(--field-bg);
+}
+.dia-head {
+  display: grid; grid-template-columns: 22px 1fr 74px 30px;
+  gap: 8px; align-items: center; margin-bottom: 9px;
+}
+.dia-head .sr { font-variant-numeric: tabular-nums; text-align: center;
+  font-size: 12.5px; color: var(--gold); font-weight: 700; }
+.dia-head .combo input, .dia-head .pcs { background: var(--panel); }
+.dia-head .pcs { text-align: center; font-variant-numeric: tabular-nums; }
+.dia-row .combo input { background: var(--panel); }
+.dia-preview {
+  margin: 10px 0 0; font-size: 11.5px; line-height: 1.5;
+  color: var(--gold); background: color-mix(in srgb, var(--gold) 8%, transparent);
+  border-radius: 8px; padding: 8px 10px; word-break: break-word;
+}

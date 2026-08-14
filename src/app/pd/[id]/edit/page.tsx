@@ -21,6 +21,7 @@ export default async function EditPdPage({ params }: { params: { id: string } })
         diaWeightPointers: s.diaWeightPointers, quantity: s.quantity,
         orderBy: s.orderBy, deliveryDate: s.deliveryDate,
         pdMerchandiser: s.pdMerchandiser, remarks: s.remarks,
+        diaLines: s.diaLines,
       }}
     />
   );
