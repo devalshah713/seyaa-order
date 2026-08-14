@@ -10,6 +10,7 @@ import { get, put, BlobNotFoundError } from "@vercel/blob";
 import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import type { Role } from "./session";
+import { sanitizeModules, type ModuleKey } from "./access";
 
 const USERS_PATH = "users/users.json";
 const SCRYPT_KEYLEN = 64;
@@ -24,6 +25,10 @@ export type User = {
   id: string;
   username: string;
   role: Role;
+  // Features this account may use. Left undefined on accounts created before
+  // per-feature access existed — those keep full access until an admin sets a
+  // list, so adding this never locked anyone out.
+  modules?: ModuleKey[];
   passwordHash: string; // scrypt$<salt-b64>$<hash-b64>
   createdAt: string;
 };
@@ -104,7 +109,8 @@ export type CreateUserResult =
 export async function createUser(
   username: string,
   password: string,
-  role: Role
+  role: Role,
+  modules: unknown = []
 ): Promise<CreateUserResult> {
   const name = username.trim();
   if (name.length < 3) return { ok: false, error: "Username must be at least 3 characters." };
@@ -123,12 +129,42 @@ export async function createUser(
     id: randomUUID(),
     username: name,
     role,
+    // Admins implicitly have everything, so no list is stored for them.
+    modules: role === "admin" ? undefined : sanitizeModules(modules),
     passwordHash: await hashPassword(password),
     createdAt: new Date().toISOString(),
   };
   users.push(user);
   await writeUsers(users, token);
   return { ok: true, user: publicOf(user) };
+}
+
+// Change which features an account may use. Admins keep everything, so
+// switching someone to admin clears their list.
+export async function updateUserAccess(
+  id: string,
+  role: Role,
+  modules: unknown
+): Promise<{ ok: boolean; error?: string }> {
+  const token = requireToken();
+  const users = await readUsers(token);
+  const target = users.find((u) => u.id === id);
+  if (!target) return { ok: false, error: "User not found." };
+
+  // Don't allow demoting the only admin — that would leave nobody able to
+  // manage users or access.
+  if (
+    target.role === "admin" &&
+    role !== "admin" &&
+    users.filter((u) => u.role === "admin").length === 1
+  ) {
+    return { ok: false, error: "This is the only admin. Make someone else an admin first." };
+  }
+
+  target.role = role;
+  target.modules = role === "admin" ? undefined : sanitizeModules(modules);
+  await writeUsers(users, token);
+  return { ok: true };
 }
 
 export async function deleteUser(id: string): Promise<{ ok: boolean; error?: string }> {

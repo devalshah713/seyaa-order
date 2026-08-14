@@ -681,3 +681,21 @@ td.row-actions { text-align: right; white-space: nowrap; }
   .pd-sheet { width: auto; min-height: auto; box-shadow: none; padding: 6mm 8mm; }
   @page { size: A4; margin: 8mm; }
 }
+
+/* ---------- Per-feature access picker (Users admin) ---------- */
+.access-pick > span { display: block; font-size: 11px; color: var(--panel-muted);
+  margin-bottom: 6px; letter-spacing: .3px; }
+.access-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.access-grid.tight { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin: 8px 0; }
+.access-opt {
+  display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+  border: 1px solid var(--field-line); background: var(--field-bg);
+  border-radius: 9px; padding: 9px 11px;
+}
+.access-opt:hover { border-color: var(--gold-soft); }
+.access-opt input { width: auto; margin-top: 2px; flex: none; }
+.access-opt b { display: block; font-size: 13px; font-weight: 650; }
+.access-opt small { display: block; font-size: 11px; color: var(--panel-muted); margin-top: 1px; }
+.access-edit select { max-width: 160px; }
+.access-actions { display: flex; gap: 8px; margin-top: 8px; }
+.user-actions { display: flex; gap: 8px; white-space: nowrap; }

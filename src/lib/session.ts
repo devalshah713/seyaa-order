@@ -10,6 +10,9 @@ export type Session = {
   uid: string;
   username: string;
   role: Role;
+  // Feature keys this account may use. Absent on sessions minted before
+  // per-feature access existed, which access.ts reads as "everything".
+  mods?: string[];
   exp: number; // unix seconds
 };
 

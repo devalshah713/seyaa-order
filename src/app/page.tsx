@@ -1,25 +1,39 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import { COMPANY } from "@/lib/memoFormat";
+import { currentSession } from "@/lib/currentUser";
+import { MODULES, allowedModules } from "@/lib/access";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const session = await currentSession();
+  const mine = session ? allowedModules(session) : [];
+  const cards = MODULES.filter((m) => mine.includes(m.key));
+
   return (
     <div className="hero">
       <Logo height={96} className="mark" />
       <h1>{COMPANY.name}</h1>
       <p className="tagline">{COMPANY.tagline}</p>
-      <p className="lead">
-        Delivery memos for jewellery leaving the office, and PD sheets for the
-        design team — auto-numbered, saved, and searchable.
-      </p>
-      <div className="cta">
-        <Link href="/memo/new" className="btn btn-primary">+ New Memo</Link>
-        <Link href="/memo" className="btn">Memo History</Link>
-      </div>
-      <div className="cta" style={{ marginTop: 12 }}>
-        <Link href="/pd/new" className="btn btn-primary">+ New PD Sheet</Link>
-        <Link href="/pd" className="btn">PD Sheets</Link>
-      </div>
+
+      {cards.length === 0 ? (
+        <p className="lead">
+          No features have been assigned to your account yet. Ask an admin to
+          give you access.
+        </p>
+      ) : (
+        <>
+          <p className="lead">Choose what you want to work on.</p>
+          <div className="cta">
+            {cards.map((m) => (
+              <Link key={m.key} href={m.home} className="btn btn-primary">
+                {m.label}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

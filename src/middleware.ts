@@ -14,6 +14,7 @@ import {
   signSession,
   verifySession,
 } from "@/lib/session";
+import { canAccessPath, landingPath } from "@/lib/access";
 
 const PUBLIC_PATHS = ["/login"];
 const PUBLIC_APIS = ["/api/auth/login", "/api/auth/setup", "/api/auth/status"];
@@ -57,12 +58,31 @@ export async function middleware(req: NextRequest) {
   if (secret) {
     const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value, secret);
     if (session) {
+      // Signed in, but this feature may not be theirs. Admins bypass this.
+      if (!canAccessPath(session, pathname)) {
+        if (pathname.startsWith("/api/")) {
+          return NextResponse.json(
+            { error: "You do not have access to this feature." },
+            { status: 403 }
+          );
+        }
+        const to = req.nextUrl.clone();
+        to.pathname = landingPath(session);
+        to.search = "";
+        return NextResponse.redirect(to);
+      }
+
       const res = NextResponse.next();
       // Slide the expiry forward for anyone still working, so a long day at
       // the desk never ends in a failed save.
       if (needsRenewal(session)) {
         const fresh = await signSession(
-          { uid: session.uid, username: session.username, role: session.role },
+          {
+            uid: session.uid,
+            username: session.username,
+            role: session.role,
+            mods: session.mods,
+          },
           secret
         );
         res.cookies.set(SESSION_COOKIE, fresh, {

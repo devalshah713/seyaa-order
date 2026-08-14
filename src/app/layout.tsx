@@ -16,7 +16,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <TopBar user={session ? { username: session.username, role: session.role } : null} />
+        <TopBar
+          user={
+            session
+              ? { username: session.username, role: session.role, mods: session.mods }
+              : null
+          }
+        />
         {children}
       </body>
     </html>

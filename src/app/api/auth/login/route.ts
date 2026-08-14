@@ -35,7 +35,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "Wrong username or password." }, { status: 401 });
   }
 
-  const token = await signSession({ uid: user.id, username: user.username, role: user.role }, secret);
+  const token = await signSession(
+    { uid: user.id, username: user.username, role: user.role, mods: user.modules },
+    secret
+  );
   const res = NextResponse.json({ ok: true, username: user.username, role: user.role });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
