@@ -364,6 +364,14 @@ td.row-actions { text-align: right; white-space: nowrap; }
 
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; }
+  /* Stacked, the form is no longer a column of its own — it must not keep its
+     own scrollbar or its right-hand divider. */
+  .controls {
+    border-right: 0; border-bottom: 1px solid var(--panel-line);
+    overflow: visible; padding: 18px 16px 28px;
+  }
+  /* The memo is flowing text, so it reflows to the screen and stays readable.
+     The PD and demand sheets are fixed grids and are handled further down. */
   .memo { width: 100%; min-height: 0; padding: 20px; }
   .stage { padding: 16px; }
 }
@@ -870,3 +878,138 @@ table.pieces-table td:nth-child(2) { width: 170px; }
 
 .pieces-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .pieces-ok { font-size: 12px; color: #2f8f4e; font-weight: 600; }
+
+/* ============================================================================
+   Phones and small tablets
+   ----------------------------------------------------------------------------
+   Everything below lives inside a max-width query, so the desktop layout is
+   untouched. Three things drive it:
+
+     * the nav folds behind a menu button — eleven links do not fit in a bar;
+     * lists stay tables and scroll sideways, with the identifying first column
+       pinned, rather than being reflowed into something that reads differently
+       from what the office sees;
+     * the PD and demand sheets keep their true A4 width and scroll, because
+       they are replicas of paper. Squeezing them to 390px would show a layout
+       that is not the one that prints.
+   ========================================================================== */
+
+/* The menu button only exists on small screens. */
+.nav-toggle { display: none; }
+/* Wide screens lay the tail out as if the wrapper were not there at all. */
+.nav-tail { display: contents; }
+
+@media (max-width: 860px) {
+  /* ---- Top bar: logo, name, menu button; links drop below when opened ---- */
+  .topbar {
+    flex-wrap: wrap; gap: 10px; padding: 10px 14px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .topbar .brand { font-size: 13.5px; letter-spacing: 1px; }
+  .nav-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: auto; width: 40px; height: 40px; flex: none;
+    border: 1px solid var(--panel-line); border-radius: 9px;
+    background: var(--panel); color: var(--panel-ink);
+    font-size: 16px; line-height: 1; cursor: pointer; font-family: inherit;
+  }
+  .topbar nav { display: none; }
+  .topbar nav.open {
+    display: flex; flex-direction: column; align-items: stretch;
+    flex-basis: 100%; margin-left: 0; gap: 2px;
+    border-top: 1px solid var(--panel-line); padding-top: 8px;
+    /* A long menu on a short screen still has to reach its last item. */
+    max-height: calc(100vh - 120px); overflow-y: auto;
+  }
+  .topbar nav a { font-size: 15px; padding: 11px 12px; }
+  .topbar .nav-sep { display: none; }
+  .nav-tail {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--panel-line);
+  }
+  .whoami { margin-right: auto; }
+
+  /* ---- Page furniture ---- */
+  .wrap {
+    padding: 18px 14px 48px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .page-head { flex-wrap: wrap; gap: 10px; }
+  .page-head h1 { font-size: 19px; }
+  .search { max-width: none; }
+  .hero { margin-top: 4vh; }
+  .hero h1 { font-size: 26px; letter-spacing: 2px; }
+  .hero .cta .btn { flex: 1 1 200px; }
+
+  /* Stop iOS zooming the page in every time a field is focused, which it does
+     for anything under 16px, and leaves the layout shifted afterwards. */
+  input, select, textarea { font-size: 16px; }
+  .btn { padding: 12px 16px; min-height: 44px; }
+
+  /* ---- Lists: keep the table, scroll it, pin the column that identifies
+          the row so it stays in view while reading across. ---- */
+  table.history, .user-table, .stock-table {
+    display: block; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    white-space: nowrap; border-radius: 10px;
+  }
+  table.history td, table.history th { padding: 10px 11px; }
+  table.history th:first-child, table.history td:first-child,
+  .user-table th:first-child, .user-table td:first-child,
+  .stock-table th:first-child, .stock-table td:first-child {
+    position: sticky; left: 0; z-index: 1; background: var(--panel);
+    /* An edge, so the columns sliding underneath read as scrolled-away
+       rather than as overlapping text. */
+    box-shadow: 1px 0 0 var(--panel-line);
+  }
+  table.history tbody tr:hover td:first-child { background: var(--field-bg); }
+  /* Cells holding a sentence rather than a value still wrap. */
+  .row-note, .notes-row td, .ledger-row td, .piece-hit, .b-note,
+  .history .filter-row th { white-space: normal; }
+  td.row-actions { white-space: nowrap; }
+  .rowbtn { padding: 8px 12px; font-size: 12.5px; }
+  table.history th.actions-col { width: auto; }
+
+  /* ---- Paper replicas: full size, scrolled, not squeezed ---- */
+  .stage { justify-content: flex-start; padding: 14px; }
+  .pd-sheet, .dd-sheet { box-shadow: 0 6px 20px rgba(40,34,20,.18); flex: none; }
+
+  /* ---- Editing surfaces ---- */
+  .three { grid-template-columns: 1fr; }
+  .sp-actions { gap: 12px; }
+  .sp-date input { width: 100%; }
+  .stock-table select, .sp-extra { max-width: none; }
+
+  /* The pieces list is a form, not a report: horizontal scrolling while typing
+     is miserable, so each piece becomes its own card with its labels shown. */
+  table.pieces-table, .pieces-table thead, .pieces-table tbody,
+  .pieces-table tr, .pieces-table td { display: block; width: auto; }
+  .pieces-table thead { display: none; }
+  .pieces-table tr {
+    border: 1px solid var(--field-line); border-radius: 9px;
+    background: var(--field-bg); padding: 10px 12px; margin-bottom: 10px;
+  }
+  .pieces-table td { border: 0; padding: 0 0 8px; }
+  .pieces-table tr td:last-child { padding-bottom: 0; }
+  .pieces-table td::before {
+    content: attr(data-label); display: block;
+    font-size: 11px; color: var(--panel-muted); margin-bottom: 4px; letter-spacing: .3px;
+  }
+  .pieces-table td.pno::before { display: none; }
+  .pieces-table td.pno { font-size: 13.5px; padding-bottom: 10px; }
+  .pieces-table td:nth-child(2), .pieces-table td:nth-child(3) { width: auto; }
+  .pieces-table input, .pieces-table select { background: var(--panel); }
+  .pieces { padding: 16px 14px; }
+  .pieces-bags .field { max-width: none; flex: 1 1 140px; }
+}
+
+@media (max-width: 560px) {
+  .two { grid-template-columns: 1fr; }
+  .party-add { grid-template-columns: 1fr; }
+  .actions { flex-direction: column; }
+  .run-chips code { font-size: 11px; }
+  .kind-tabs { display: flex; width: 100%; }
+  .kind-tabs button { flex: 1; justify-content: center; padding: 8px 6px; }
+  .sheet-controls .search { min-width: 0; }
+}

@@ -148,8 +148,10 @@ export default function PiecesPanel({
         <tbody>
           {pieces.map((p, i) => (
             <tr key={p.no} className={p.status === "cancelled" ? "off" : undefined}>
-              <td className="pno">{p.no}</td>
-              <td>
+              {/* data-label feeds the stacked card layout on a phone, where
+                  the header row is off-screen. Unused on a wide screen. */}
+              <td className="pno" data-label="Design No.">{p.no}</td>
+              <td data-label="Status">
                 <select
                   value={p.status}
                   onChange={(e) => set(i, { status: e.target.value as PieceStatus })}
@@ -159,7 +161,7 @@ export default function PiecesPanel({
                   ))}
                 </select>
               </td>
-              <td>
+              <td data-label="Stock No.">
                 <input
                   value={p.stockNo}
                   onChange={(e) => setStockNo(i, e.target.value)}
@@ -167,7 +169,7 @@ export default function PiecesPanel({
                   maxLength={6}
                 />
               </td>
-              <td>
+              <td data-label="Note">
                 <input
                   value={p.note}
                   onChange={(e) => set(i, { note: e.target.value })}

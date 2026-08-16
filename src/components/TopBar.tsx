@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Logo from "./Logo";
@@ -11,6 +12,12 @@ type Props = { user: { username: string; role: Role; mods?: string[] } | null };
 
 export default function TopBar({ user }: Props) {
   const path = usePathname();
+  // On a phone the nav is folded behind a menu button; on a wide screen the
+  // button is hidden and the links sit in the bar exactly as before.
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Following a link has to put the menu away, or it covers the page arrived at.
+  useEffect(() => setMenuOpen(false), [path]);
+
   // The order board is screenshotted for sharing — the app chrome must not
   // appear in the image.
   if (path === "/orders/board") return null;
@@ -36,7 +43,18 @@ export default function TopBar({ user }: Props) {
         {COMPANY.name}
       </Link>
       {user && (
-        <nav>
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
+      )}
+      {user && (
+        <nav className={menuOpen ? "open" : ""}>
           {can("memos") && (
             <>
               <Link href="/memo/new" className={path === "/memo/new" ? "active" : ""}>New Memo</Link>
@@ -67,9 +85,13 @@ export default function TopBar({ user }: Props) {
               <Link href="/admin/users" className={on("/admin/users") ? "active" : ""}>Users</Link>
             </>
           )}
-          <ThemeToggle />
-          <span className="whoami" title={user.role === "admin" ? "Admin" : "User"}>{user.username}</span>
-          <button type="button" className="signout" onClick={signOut}>Sign out</button>
+          {/* `display: contents` on wide screens, so the bar is laid out exactly
+              as it was; on a phone these three sit together on their own row. */}
+          <div className="nav-tail">
+            <ThemeToggle />
+            <span className="whoami" title={user.role === "admin" ? "Admin" : "User"}>{user.username}</span>
+            <button type="button" className="signout" onClick={signOut}>Sign out</button>
+          </div>
         </nav>
       )}
     </header>
