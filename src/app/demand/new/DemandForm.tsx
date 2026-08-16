@@ -32,19 +32,47 @@ export default function DemandForm({ initial }: { initial?: DemandInitial }) {
   const [rows, setRows] = useState<DemandRow[]>(
     initial?.rows?.length ? initial.rows : [{ ...BLANK_DEMAND_ROW }]
   );
-  const [demandNo, setDemandNo] = useState(initial?.demandNo || "DD/…");
+  const [demandNo, setDemandNo] = useState(initial?.demandNo || "");
+  const [numbering, setNumbering] = useState<"loading" | "ok" | "failed">(
+    editing ? "ok" : "loading"
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Predicted demand number (create mode only).
+  // The next demand number, previewed for the fiscal year the date falls in.
+  // A saved demand keeps the number it was given, so this only runs for new
+  // ones. The lookup retries rather than failing silently — a stuck "DD/…"
+  // looks like the numbering is broken when it isn't.
   const latest = useRef(0);
   useEffect(() => {
     if (editing) return;
     const n = ++latest.current;
-    fetch(`/api/demand?next=${encodeURIComponent(date)}`)
-      .then((r) => r.json())
-      .then((d) => { if (n === latest.current && d.demandNo) setDemandNo(d.demandNo); })
-      .catch(() => {});
+    let cancelled = false;
+    setNumbering("loading");
+
+    async function load(attempt = 0): Promise<void> {
+      try {
+        const res = await fetch(`/api/demand?next=${encodeURIComponent(date)}`, {
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.demandNo) throw new Error("no number");
+        if (cancelled || n !== latest.current) return;
+        setDemandNo(data.demandNo);
+        setNumbering("ok");
+      } catch {
+        if (cancelled || n !== latest.current) return;
+        if (attempt < 2) {
+          setTimeout(() => void load(attempt + 1), 600 * (attempt + 1));
+          return;
+        }
+        // Not fatal: the number is assigned by the server on save either way.
+        setNumbering("failed");
+      }
+    }
+    void load();
+
+    return () => { cancelled = true; };
   }, [date, editing]);
 
   const setRow = (i: number, patch: Partial<DemandRow>) =>
@@ -104,10 +132,22 @@ export default function DemandForm({ initial }: { initial?: DemandInitial }) {
           <legend>Demand</legend>
           <div className="two">
             <label className="field"><span>Demand No.</span>
-              <input value={demandNo} readOnly /></label>
+              <input
+                value={
+                  demandNo ||
+                  (numbering === "loading" ? "Generating…" : "Assigned on save")
+                }
+                readOnly
+              />
+            </label>
             <label className="field"><span>Date</span>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
           </div>
+          {!editing && (
+            <p className="group-hint">
+              Generated automatically. The final number is assigned when you save.
+            </p>
+          )}
           <label className="field"><span>Issued to</span>
             <input value={issuedTo} onChange={(e) => setIssuedTo(e.target.value)}
               placeholder="Diamond department / supplier" /></label>
