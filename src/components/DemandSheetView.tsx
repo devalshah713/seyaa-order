@@ -19,6 +19,18 @@ export default function DemandSheetView({ data }: { data: DemandSheetData }) {
     (r) => r.designNo || r.shape || r.pointers || r.pcs || r.bags
   );
   const pad = Math.max(0, MIN_ROWS - rows.length);
+  const bodyRows = rows.length + pad;
+
+  // A design usually takes several diamond sizes, so its number is written once
+  // and merged down its own rows. Only runs of the *same* number merge, so two
+  // designs sharing a demand still read separately.
+  const designSpans = new Map<number, number>();
+  for (let i = 0; i < rows.length; ) {
+    let n = 1;
+    while (i + n < rows.length && rows[i + n].designNo === rows[i].designNo) n++;
+    designSpans.set(i, n);
+    i += n;
+  }
 
   return (
     <div className="dd-sheet">
@@ -52,9 +64,18 @@ export default function DemandSheetView({ data }: { data: DemandSheetData }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i}>
-              {/* The paper sheet writes the date once, against the first line. */}
-              <td className="c-date">{i === 0 && data.date ? formatDate(data.date) : ""}</td>
-              <td className="c-design">{r.designNo}</td>
+              {/* Written once and merged down the whole table, as on paper. */}
+              {i === 0 && (
+                <td className="c-date merged" rowSpan={bodyRows}>
+                  {data.date ? formatDate(data.date) : ""}
+                </td>
+              )}
+              {/* One design number covers all of its diamond sizes. */}
+              {designSpans.has(i) && (
+                <td className="c-design merged" rowSpan={designSpans.get(i)}>
+                  {r.designNo}
+                </td>
+              )}
               <td className="c-shape">{r.shape}</td>
               <td className="c-pt">{r.pointers}</td>
               <td className="c-num">{r.pcs}</td>
@@ -65,7 +86,10 @@ export default function DemandSheetView({ data }: { data: DemandSheetData }) {
           ))}
           {Array.from({ length: pad }).map((_, i) => (
             <tr key={`e${i}`} className="empty">
-              <td className="c-date">&nbsp;</td>
+              {/* The date cell above already spans these rows. */}
+              {rows.length === 0 && i === 0 && (
+                <td className="c-date merged" rowSpan={bodyRows} />
+              )}
               <td className="c-design" /><td className="c-shape" /><td className="c-pt" />
               <td className="c-num" /><td className="c-com" /><td className="c-num" />
               <td className="c-growth" />

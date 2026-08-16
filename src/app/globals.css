@@ -730,6 +730,7 @@ td.row-actions { text-align: right; white-space: nowrap; }
   background: var(--paper); color: var(--paper-ink); width: 210mm; min-height: 297mm;
   padding: 14mm 12mm; box-shadow: 0 12px 40px rgba(40,34,20,.22);
   font-size: 11px; line-height: 1.4;
+  display: flex; flex-direction: column;
 }
 .dd-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
 .dd-head .mark { flex: none; }
@@ -764,6 +765,8 @@ table.dd-table .c-growth { width: 60px; text-align: center; font-weight: 600; }
 table.dd-table th { padding: 6px 4px; font-size: 9px; }
 table.dd-table td { padding: 5px 5px; }
 table.dd-table tr.empty td { color: transparent; }
+table.dd-table td.merged { vertical-align: middle; text-align: center; }
+table.dd-table td.c-design.merged { text-align: left; }
 table.dd-table tfoot td { border: 1px solid var(--paper-rule); font-weight: 700;
   background: color-mix(in srgb, var(--gold) 7%, var(--paper)); }
 table.dd-table tfoot .tot-lab { text-align: right; text-transform: uppercase;
@@ -773,8 +776,11 @@ table.dd-table tfoot .tot-lab { text-align: right; text-transform: uppercase;
 .dd-notes span { color: var(--paper-muted); font-weight: 700; text-transform: uppercase;
   font-size: 10px; letter-spacing: .8px; }
 .dd-notes p { margin: 3px 0 0; white-space: pre-wrap; }
-.dd-signs { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; margin-top: 30px; }
-.dd-signs .line { border-top: 1px solid var(--paper-ink); }
+/* Pinned to the foot of the page, with blank space above each rule to sign in. */
+.dd-signs { display: grid; grid-template-columns: 1fr 1fr; gap: 80px;
+  margin-top: auto; padding-top: 26px; }
+.dd-signs > div { display: flex; flex-direction: column; justify-content: flex-end; }
+.dd-signs .line { border-top: 1px solid var(--paper-ink); margin-top: 24mm; }
 .dd-signs span { display: block; font-size: 10.5px; text-transform: uppercase;
   letter-spacing: .8px; font-weight: 650; margin-top: 5px; }
 
@@ -789,5 +795,6 @@ table.dd-table tfoot .tot-lab { text-align: right; text-transform: uppercase;
 .dd-row .combo input, .dd-row input { background: var(--panel); }
 
 @media print {
-  .dd-sheet { width: auto; min-height: auto; box-shadow: none; padding: 6mm 8mm; }
+  /* Fill the printable A4 height so the signatures stay at the foot on paper. */
+  .dd-sheet { width: auto; min-height: 281mm; box-shadow: none; padding: 8mm; }
 }
