@@ -4,6 +4,10 @@ import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
 import type { DiaLine } from "./pdConfig";
+import {
+  isPieceStatus, matchDesign, reconcilePieces,
+  type DesignHit, type PdPiece,
+} from "./designNo";
 
 const DB_PATH = "pd/db.json";
 
@@ -47,6 +51,11 @@ export type PdSheet = {
   // kept so the picker can be reopened on edit.
   diaLines?: DiaLine[];
 
+  // One entry per piece the design number covers — "…-45-49" is five pieces.
+  // Always derived from `sku` (see reconcilePieces), never taken from a request
+  // body, so the number and the pieces cannot drift apart.
+  pieces?: PdPiece[];
+
   // Legacy SKU segments from when the design number was auto-built. Kept
   // optional so sheets saved before that change still load.
   line?: string;
@@ -57,7 +66,12 @@ export type PdSheet = {
   updatedAt: string;
 };
 
-export type NewPdSheet = Omit<PdSheet, "id" | "pdNo" | "fy" | "seq" | "createdAt" | "updatedAt">;
+// `pieces` is left out on purpose: it is worked out from the design number, so
+// saving a sheet never carries a piece list in from the browser.
+export type NewPdSheet = Omit<
+  PdSheet,
+  "id" | "pdNo" | "fy" | "seq" | "createdAt" | "updatedAt" | "pieces"
+>;
 
 export type PdDB = { counters: Record<string, number>; sheets: PdSheet[] };
 
@@ -148,6 +162,7 @@ export async function createPdSheet(input: NewPdSheet): Promise<PdSheet> {
     pdNo: `PD/${fy}/${pad(seq)}`,
     fy,
     seq,
+    pieces: reconcilePieces(input.sku, []),
     createdAt: now,
     updatedAt: now,
   };
@@ -156,16 +171,27 @@ export async function createPdSheet(input: NewPdSheet): Promise<PdSheet> {
   return sheet;
 }
 
+// Sheets written before pieces existed have none stored, so the list is worked
+// out on the way out as well as on the way in. It is a handful of entries per
+// sheet, and it means every reader sees the same pieces the design number says.
+function hydrate(sheet: PdSheet): PdSheet {
+  return { ...sheet, pieces: reconcilePieces(sheet.sku, sheet.pieces) };
+}
+
 export async function listPdSheets(): Promise<PdSheet[]> {
   const token = requireToken();
   const db = await readDB(token);
-  return db.sheets.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return db.sheets
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map(hydrate);
 }
 
 export async function getPdSheet(id: string): Promise<PdSheet | null> {
   const token = requireToken();
   const db = await readDB(token);
-  return db.sheets.find((s) => s.id === id) || null;
+  const sheet = db.sheets.find((s) => s.id === id);
+  return sheet ? hydrate(sheet) : null;
 }
 
 // Identity fields (id, pdNo, fy, seq, createdAt) are preserved on edit.
@@ -177,11 +203,67 @@ export async function updatePdSheet(id: string, patch: NewPdSheet): Promise<PdSh
   const updated: PdSheet = {
     ...db.sheets[idx],
     ...patch,
+    // Correcting the design number re-cuts the run; anything already recorded
+    // against a piece that survives the change is kept.
+    pieces: reconcilePieces(patch.sku, db.sheets[idx].pieces),
     updatedAt: new Date().toISOString(),
   };
   db.sheets[idx] = updated;
   await writeDB(db, token);
   return updated;
+}
+
+// Progress on the individual pieces, saved without touching the rest of the
+// sheet. What comes in is treated as values to overlay, not as the list itself:
+// the list is still derived from the design number.
+export async function setPdPieces(id: string, incoming: PdPiece[]): Promise<PdSheet | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const idx = db.sheets.findIndex((s) => s.id === id);
+  if (idx === -1) return null;
+
+  const updated: PdSheet = {
+    ...db.sheets[idx],
+    pieces: reconcilePieces(db.sheets[idx].sku, incoming),
+    updatedAt: new Date().toISOString(),
+  };
+  db.sheets[idx] = updated;
+  await writeDB(db, token);
+  return updated;
+}
+
+export function normalizePieceInput(input: unknown): PdPiece[] {
+  if (!Array.isArray(input)) return [];
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  return input
+    .map((raw) => {
+      const p = raw as Partial<PdPiece>;
+      return {
+        no: str(p.no),
+        n: typeof p.n === "number" ? p.n : 0,
+        status: isPieceStatus(p.status) ? p.status : ("pending" as const),
+        stockNo: str(p.stockNo).toUpperCase(),
+        note: str(p.note),
+      };
+    })
+    .filter((p) => p.no);
+}
+
+export type DesignLookup = { sheet: PdSheet; hit: DesignHit };
+
+// The design number as a key: given anything from a full piece number down to
+// part of a design number, find the sheets it names. Exact piece hits sort
+// first — that is what someone holding one unlabelled piece is asking for.
+export async function findByDesignNo(query: string): Promise<DesignLookup[]> {
+  const sheets = await listPdSheets();
+  const hits: DesignLookup[] = [];
+  for (const sheet of sheets) {
+    const hit = matchDesign(sheet.sku, query);
+    if (hit) hits.push({ sheet, hit });
+  }
+  return hits.sort((a, b) =>
+    a.hit.kind === b.hit.kind ? 0 : a.hit.kind === "piece" ? -1 : 1
+  );
 }
 
 export async function deletePdSheet(id: string): Promise<boolean> {

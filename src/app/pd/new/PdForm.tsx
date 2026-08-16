@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import Combo from "@/components/Combo";
@@ -10,6 +10,7 @@ import {
   GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, sizeLabel,
   BLANK_DIA_LINE, formatDiaLines, shapesFromLines, type DiaLine,
 } from "@/lib/pdConfig";
+import { parseDesignNo, pieceCount, pieceNumbers, MAX_PIECES } from "@/lib/designNo";
 
 export type PdInitial = {
   id: string;
@@ -65,6 +66,28 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       .then((d) => { if (n === latest.current && d.pdNo) setPdNo(d.pdNo); })
       .catch(() => {});
   }, [f.assignedDate, editing]);
+
+  // A bulk design carries its pieces in its number: "SN-BR-AMF-10CT-45-49" is
+  // five pieces, 45 to 49, each searchable on its own once this is saved.
+  const run = useMemo(() => parseDesignNo(f.sku), [f.sku]);
+  const pieces = useMemo(() => pieceNumbers(run), [run]);
+  const count = f.sku.trim() ? pieceCount(run) : 0;
+
+  // Quantity is the same fact written twice, so it follows the design number —
+  // but only while it agrees, so a deliberately different quantity is left alone.
+  const lastCount = useRef(0);
+  useEffect(() => {
+    const was = lastCount.current;
+    lastCount.current = count;
+    if (!count) return;
+    setF((s) => {
+      const q = s.quantity.trim();
+      return q === "" || q === String(was) ? { ...s, quantity: String(count) } : s;
+    });
+  }, [count]);
+
+  const qtyMismatch =
+    count > 0 && f.quantity.trim() !== "" && f.quantity.trim() !== String(count);
 
   async function pickPhoto(file: File) {
     setError("");
@@ -145,10 +168,41 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
             <input
               value={f.sku}
               onChange={(e) => set("sku", e.target.value)}
-              placeholder="SS-NK-SL-KO-20CT-011-015-WG-14KT-USA"
+              placeholder="SN-BR-AMF-10CT-45-49"
             />
-            <p className="hint">Type the design number exactly as it should print.</p>
+            <p className="hint">
+              Type it exactly as it should print. Write a run for bulk —{" "}
+              <code>-45-49</code> means five pieces, 45 to 49.
+            </p>
           </div>
+
+          {count > 1 && (
+            <div className="run-box">
+              <p className="run-lede">
+                <b>{count} pieces</b> under this design:{" "}
+                <code>{pieces[0]}</code> to <code>{pieces[pieces.length - 1]}</code>
+              </p>
+              <div className="run-chips">
+                {pieces.map((p) => <code key={p}>{p}</code>)}
+              </div>
+              <p className="hint">
+                Each of these can be searched on its own later, even before the
+                piece reaches the stock sheet.
+              </p>
+              {pieceCount(run) > MAX_PIECES && (
+                <p className="hint warn">
+                  That run is {pieceCount(run)} pieces — only the first{" "}
+                  {MAX_PIECES} are tracked. Check the design number.
+                </p>
+              )}
+            </div>
+          )}
+          {count === 1 && run.at !== -1 && (
+            <p className="hint">
+              One piece, number {run.from}. For a bulk run add the last number,
+              e.g. <code>{f.sku.trim()}-{run.from + 4}</code> for five.
+            </p>
+          )}
         </fieldset>
 
         <fieldset className="group">
@@ -209,6 +263,16 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
             <label className="field"><span>Price range</span>
               <input value={f.priceRange} onChange={(e) => set("priceRange", e.target.value)} /></label>
           </div>
+          {qtyMismatch && (
+            <p className="hint warn">
+              The design number covers {count} {count === 1 ? "piece" : "pieces"}
+              , but Quantity says {f.quantity.trim()}.{" "}
+              <button type="button" className="linkbtn"
+                onClick={() => set("quantity", String(count))}>
+                Use {count}
+              </button>
+            </p>
+          )}
           <label className="field"><span>Order by</span>
             <input value={f.orderBy} onChange={(e) => set("orderBy", e.target.value)} /></label>
         </fieldset>

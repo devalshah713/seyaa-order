@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import { getPdSheet } from "@/lib/pdStore";
 import PdActions from "./PdActions";
+import PiecesPanel from "./PiecesPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,15 @@ export default async function PdViewPage({
       <div className="stage">
         <PdSheetView data={{ ...sheet, photoUrl }} />
       </div>
+      {!forPdf && (
+        <div className="wrap">
+          <PiecesPanel
+            id={sheet.id}
+            designNo={sheet.sku}
+            pieces={sheet.pieces || []}
+          />
+        </div>
+      )}
     </>
   );
 }
