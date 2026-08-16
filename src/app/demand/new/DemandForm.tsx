@@ -22,7 +22,9 @@ export type DemandInitial = {
 
 export default function DemandForm({ initial }: { initial?: DemandInitial }) {
   const router = useRouter();
-  const editing = !!initial;
+  // Seeding from a PD sheet also passes `initial`, but with no id — that is
+  // still a new demand. Only a real id means we are editing a saved one.
+  const editing = !!initial?.id;
 
   const [date, setDate] = useState(initial?.date || todayInput());
   const [issuedTo, setIssuedTo] = useState(initial?.issuedTo ?? "");
@@ -80,8 +82,13 @@ export default function DemandForm({ initial }: { initial?: DemandInitial }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not save the demand.");
+      // Not every failure comes back as JSON — an empty body would otherwise
+      // surface as a parser error instead of something readable.
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || `Could not save the demand (${res.status}).`);
+      }
+      if (!data?.demand?.id) throw new Error("Saved, but the demand came back empty.");
       router.push(`/demand/${data.demand.id}`);
       router.refresh();
     } catch (err) {
