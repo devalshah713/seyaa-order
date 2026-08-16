@@ -25,7 +25,7 @@ export default async function NewDemandPage({
         date: todayInput(),
         issuedTo: "",
         notes: "",
-        rows: rowsFromPdSheet(sheet.sku || sheet.pdNo, sheet.diaLines),
+        rows: rowsFromPdSheet(sheet.sku || sheet.pdNo, sheet.diaLines, sheet.quantity),
         pdId: sheet.id,
         pdNo: sheet.pdNo,
       }}

@@ -31,10 +31,17 @@ export function pointersLabel(line: DiaLine): string {
 }
 
 // Seed a demand from a PD sheet: one row per diamond size on that design.
+//
+// `quantity` is how many pieces of jewellery are being made, and that is what
+// drives BAGS — one bag of diamonds per piece. It is deliberately not the
+// diamond count: an order for 2 bracelets is 2 bags however many stones each
+// one takes.
 export function rowsFromPdSheet(
   designNo: string,
-  lines: DiaLine[] | undefined
+  lines: DiaLine[] | undefined,
+  quantity = ""
 ): DemandRow[] {
+  const bags = quantity.trim();
   const rows = (lines || [])
     .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs)
     .map((l) => ({
@@ -43,11 +50,10 @@ export function rowsFromPdSheet(
       pointers: pointersLabel(l),
       pcs: l.pcs.trim(),
       comments: "",
-      // The paper sheet bags each size separately, one bag per piece.
-      bags: l.pcs.trim(),
+      bags,
       growth: "CVD",
     }));
-  return rows.length ? rows : [{ ...BLANK_DEMAND_ROW, designNo }];
+  return rows.length ? rows : [{ ...BLANK_DEMAND_ROW, designNo, bags }];
 }
 
 export function totalPcs(rows: DemandRow[]): number {
