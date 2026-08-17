@@ -111,6 +111,38 @@ export function pieceNumbers(run: DesignRun): string[] {
   return Array.from({ length: count }, (_, i) => pieceNo(run, run.from + i));
 }
 
+// --- Writing a design number in parts ---------------------------------------
+// The form asks for the design and its run separately — "SN-BR-AMF" and 41 to
+// 49 — because that is how the designer thinks of it. What gets stored is still
+// the one number, "SN-BR-AMF-41-49", so nothing downstream has to care.
+
+export function joinDesignNo(base: string, from: string, to: string): string {
+  // A trailing separator on the base would double up when the run is added.
+  const b = base.trim().replace(/[^A-Za-z0-9.]+$/, "");
+  const f = from.trim();
+  const t = to.trim();
+  if (!f) return b;
+  const run = t && t !== f ? `${f}-${t}` : f;
+  return b ? `${b}-${run}` : run;
+}
+
+// The reverse, for reopening a saved sheet. Only a run written at the very end
+// splits: a number with codes after it ("…-011-015-WG-14KT-USA") is handed back
+// whole rather than having its tail quietly dropped. It still works everywhere
+// else — parseDesignNo finds the run wherever it sits.
+export function splitDesignNo(sku: string): { base: string; from: string; to: string } {
+  const whole = { base: sku, from: "", to: "" };
+  const run = parseDesignNo(sku);
+  if (run.at === -1) return whole;
+  const after = run.at + (run.spanned ? 2 : 1);
+  if (after !== run.segs.length) return whole;
+  return {
+    base: joinParts(run.segs.slice(0, run.at), run.pre.slice(0, run.at), ""),
+    from: run.segs[run.at],
+    to: run.spanned ? run.segs[run.at + 1] : "",
+  };
+}
+
 const flat = (s: string) => s.toUpperCase().replace(/[^A-Z0-9.]/g, "");
 const sameSegs = (a: string[], b: string[]) =>
   a.length === b.length && a.every((s, i) => s === b[i]);

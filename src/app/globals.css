@@ -276,6 +276,17 @@ table.pd-table td.sign { height: 62px; vertical-align: top; }
   background: var(--panel);
 }
 .pd-skubox .hint { font-size: 10.5px; color: var(--panel-muted); margin: 6px 2px 0; }
+/* The run the design is being developed in, written beneath the design itself. */
+.sku-run { display: grid; grid-template-columns: 1fr 14px 1fr; gap: 6px; align-items: end; margin-top: 8px; }
+.sku-run .field { margin-bottom: 0; }
+.sku-run .field > span { font-size: 10px; }
+.sku-run input { text-align: center; font-variant-numeric: tabular-nums; }
+.sku-run .dash { text-align: center; color: var(--panel-muted); padding-bottom: 9px; }
+.sku-full { margin: 8px 2px 0; font-size: 11px; color: var(--panel-muted); }
+.sku-full code {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px;
+  color: var(--gold); letter-spacing: .3px; font-weight: 600;
+}
 .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 
 /* Photo upload control */

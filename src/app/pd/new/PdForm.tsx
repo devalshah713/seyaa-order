@@ -10,7 +10,9 @@ import {
   GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, sizeLabel,
   BLANK_DIA_LINE, formatDiaLines, shapesFromLines, type DiaLine,
 } from "@/lib/pdConfig";
-import { parseDesignNo, pieceCount, pieceNumbers, MAX_PIECES } from "@/lib/designNo";
+import {
+  parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, MAX_PIECES,
+} from "@/lib/designNo";
 
 export type PdInitial = {
   id: string;
@@ -45,6 +47,13 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
     ...(initial || {}),
     assignedDate: initial?.assignedDate || todayInput(),
   });
+  // The design number is written in three boxes — the design, then the run it
+  // is being developed in — and joined back into the single number that gets
+  // stored and printed.
+  const [sku, setSku] = useState(() => splitDesignNo(initial?.sku || ""));
+  const setSkuPart = (k: keyof typeof sku, v: string) => setSku((s) => ({ ...s, [k]: v }));
+  const designNo = joinDesignNo(sku.base, sku.from, sku.to);
+
   const [pdNo, setPdNo] = useState(initial?.pdNo || "PD/…");
   const [diaLines, setDiaLines] = useState<DiaLine[]>(
     initial?.diaLines?.length ? initial.diaLines : [{ ...BLANK_DIA_LINE }]
@@ -67,11 +76,18 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       .catch(() => {});
   }, [f.assignedDate, editing]);
 
-  // A bulk design carries its pieces in its number: "SN-BR-AMF-10CT-45-49" is
-  // five pieces, 45 to 49, each searchable on its own once this is saved.
-  const run = useMemo(() => parseDesignNo(f.sku), [f.sku]);
+  // A bulk design carries its pieces in its number: "SN-BR-AMF-41-49" is nine
+  // pieces, 41 to 49, each searchable on its own once this is saved.
+  const run = useMemo(() => parseDesignNo(designNo), [designNo]);
   const pieces = useMemo(() => pieceNumbers(run), [run]);
-  const count = f.sku.trim() ? pieceCount(run) : 0;
+  const count = designNo.trim() ? pieceCount(run) : 0;
+
+  // "49 to 41" is a slip, not a run — reading it as one would silently make a
+  // single piece numbered 41, so it is called out instead.
+  const backwards =
+    !!sku.from.trim() && !!sku.to.trim() &&
+    /^[0-9]+$/.test(sku.from.trim()) && /^[0-9]+$/.test(sku.to.trim()) &&
+    +sku.to.trim() < +sku.from.trim();
 
   // Quantity is the same fact written twice, so it follows the design number —
   // but only while it agrees, so a deliberately different quantity is left alone.
@@ -109,8 +125,12 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
 
   async function save() {
     setError("");
-    if (!f.sku && !f.product) {
+    if (!designNo && !f.product) {
       setError("Add at least a Product or SKU before saving.");
+      return;
+    }
+    if (backwards) {
+      setError("The design number runs backwards — put the smaller number in From.");
       return;
     }
     setSaving(true);
@@ -118,7 +138,9 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       const res = await fetch(editing ? `/api/pd/${initial!.id}` : "/api/pd", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...f, diaShape, diaWeightPointers: diaText, diaLines }),
+        body: JSON.stringify({
+          ...f, sku: designNo, diaShape, diaWeightPointers: diaText, diaLines,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save the PD sheet.");
@@ -166,14 +188,41 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           <div className="pd-skubox">
             <div className="cap">SKU No.</div>
             <input
-              value={f.sku}
-              onChange={(e) => set("sku", e.target.value)}
-              placeholder="SN-BR-AMF-10CT-45-49"
+              value={sku.base}
+              onChange={(e) => setSkuPart("base", e.target.value)}
+              placeholder="SN-BR-AMF"
             />
+            <div className="sku-run">
+              <label className="field">
+                <span>From</span>
+                <input
+                  value={sku.from} inputMode="numeric" placeholder="41"
+                  onChange={(e) => setSkuPart("from", e.target.value)}
+                />
+              </label>
+              <span className="dash" aria-hidden="true">–</span>
+              <label className="field">
+                <span>To</span>
+                <input
+                  value={sku.to} inputMode="numeric" placeholder="49"
+                  onChange={(e) => setSkuPart("to", e.target.value)}
+                />
+              </label>
+            </div>
             <p className="hint">
-              Type it exactly as it should print. Write a run for bulk —{" "}
-              <code>-45-49</code> means five pieces, 45 to 49.
+              The design on top, then the numbers it is being developed in.
+              Leave <b>To</b> empty for a single piece.
             </p>
+            {designNo && (
+              <p className="sku-full">
+                Prints as <code>{designNo}</code>
+              </p>
+            )}
+            {backwards && (
+              <p className="hint warn">
+                <b>To</b> is lower than <b>From</b>. Put the smaller number first.
+              </p>
+            )}
           </div>
 
           {count > 1 && (
@@ -199,8 +248,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           )}
           {count === 1 && run.at !== -1 && (
             <p className="hint">
-              One piece, number {run.from}. For a bulk run add the last number,
-              e.g. <code>{f.sku.trim()}-{run.from + 4}</code> for five.
+              One piece, number {run.from}. For a bulk run put the last number in{" "}
+              <b>To</b> — {run.from + 4} would make it five.
             </p>
           )}
         </fieldset>
@@ -305,7 +354,9 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       </aside>
 
       <main className="stage">
-        <PdSheetView data={{ ...f, diaShape, diaWeightPointers: diaText, pdNo, photoUrl }} />
+        <PdSheetView
+          data={{ ...f, sku: designNo, diaShape, diaWeightPointers: diaText, pdNo, photoUrl }}
+        />
       </main>
     </div>
   );
