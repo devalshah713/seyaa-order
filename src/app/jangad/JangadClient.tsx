@@ -182,11 +182,22 @@ export default function JangadClient({
         if (key === "ctsUsed" || key === "price") {
           next.totalPrice = totalPriceFor(next.ctsUsed, next.price);
         }
-        // What should come back is shown in the empty return boxes as a hint —
-        // see the placeholder below — rather than written in for the accountant.
-        // Filled in, it becomes a figure nobody counted: it would date the
-        // return stage before any stones came back, and be indistinguishable
-        // afterwards from a count that was actually made.
+        // The difference that should come back is worked out the moment the
+        // used figures are known, so nobody does the subtraction by hand. It
+        // keeps up too: comparing against what the old figures implied says
+        // whether anyone has typed over it, and if not it is still ours to
+        // maintain. Left stale, a corrected count made the row read as short by
+        // exactly the correction.
+        if (key === "carats" || key === "ctsUsed") {
+          if (!r.ctsReturn || r.ctsReturn === expectedCtsReturn(r)) {
+            next.ctsReturn = expectedCtsReturn(next);
+          }
+        }
+        if (key === "pcs" || key === "pcsUsed") {
+          if (!r.pcsReturn || r.pcsReturn === expectedPcsReturn(r)) {
+            next.pcsReturn = expectedPcsReturn(next);
+          }
+        }
 
         // Status follows the work, but only forward, and only on the dates. A
         // weight typed into a row is not the same as the jewellery having come
