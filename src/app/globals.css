@@ -1258,3 +1258,17 @@ table.jg-slip-table tfoot .tot-lab {
 .jg-piece.done b { color: var(--panel-muted); }
 .jg-piece.done small { color: var(--gold); font-weight: 600; }
 .jg-piece.done.on { border-style: solid; border-color: #b26a23; }
+/* A stage with figures but no date is unfinished rather than wrong, so it is
+   marked differently from a row whose numbers do not reconcile. */
+table.jg-table tr.jg-undated td { background: color-mix(in srgb, #B26A23 6%, transparent); }
+.jg-flag.date { background: #b26a23; }
+table.jg-table input.jg-needed {
+  border-color: #b26a23;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #b26a23 16%, transparent);
+}
+.jg-blocked { font-size: 12px; color: #b26a23; line-height: 1.5; }
+@media (max-width: 860px) {
+  table.jg-table tr.jg-undated td.jg-pickcol {
+    background: color-mix(in srgb, #B26A23 6%, var(--panel));
+  }
+}

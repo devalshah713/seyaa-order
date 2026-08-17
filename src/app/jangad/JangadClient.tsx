@@ -6,8 +6,8 @@ import Combo from "@/components/Combo";
 import { joinDesignNo, matchDesign } from "@/lib/designNo";
 import {
   JANGAD_COLUMNS, SELL_STATUSES, SETTINGS, STAGES, STATUSES,
-  columnsFor, expectedCtsReturn, expectedPcsReturn, isMergedColumn, mergeSpans,
-  num, shortfall, totalPriceFor,
+  STAGE_DATE, columnsFor, expectedCtsReturn, expectedPcsReturn, isMergedColumn,
+  mergeSpans, missingStageDates, num, shortfall, totalPriceFor,
   type JangadColumn, type JangadField, type JangadRow, type JangadStage,
 } from "@/lib/jangadConfig";
 
@@ -115,6 +115,30 @@ export default function JangadClient({
 
   const allShownPicked = shownIds.length > 0 && pickedShown.length === shownIds.length;
 
+  // Entries carrying figures for a stage that has no date on it. Saving these
+  // would put weights into the register that cannot be placed in time — no use
+  // in an audit and impossible to reconcile against a memo — so the save waits
+  // for the date rather than accepting them and hoping someone comes back.
+  const undated = useMemo(
+    () => dirty.filter((r) => missingStageDates(r).length > 0),
+    [dirty]
+  );
+
+  const undatedNote = useMemo(() => {
+    if (!undated.length) return "";
+    const stages = new Set<JangadStage>();
+    for (const r of undated) for (const st of missingStageDates(r)) stages.add(st);
+    const names = [...stages]
+      .map((st) => JANGAD_COLUMNS.find((c) => c.key === STAGE_DATE[st])!.header)
+      .join(" and ");
+    const which = undated
+      .slice(0, 3)
+      .map((r) => `${fullPieceNo(r)} ${r.shape}`.trim())
+      .join(", ");
+    const more = undated.length > 3 ? ` and ${undated.length - 3} more` : "";
+    return `${undated.length} ${undated.length === 1 ? "entry has" : "entries have"} figures but no ${names}: ${which}${more}.`;
+  }, [undated]);
+
   const readOnly = (key: JangadField) =>
     view !== "issue" && view !== "all" && ANCHORS.includes(key);
 
@@ -138,31 +162,19 @@ export default function JangadClient({
         if (key === "ctsUsed" || key === "price") {
           next.totalPrice = totalPriceFor(next.ctsUsed, next.price);
         }
-        // What should come back is filled in the moment the used figures are
-        // known, so the accountant checks a number instead of working one out.
-        // It stays editable — the point is to catch when the count differs.
-        //
-        // It also has to keep up. Comparing against what the old figures implied
-        // tells us whether anyone has typed over it: if not, it is still ours to
-        // maintain, and correcting a stone count corrects it too. Left stale, a
-        // corrected count made the row read as short by exactly the correction.
-        if (key === "carats" || key === "ctsUsed") {
-          if (!r.ctsReturn || r.ctsReturn === expectedCtsReturn(r)) {
-            next.ctsReturn = expectedCtsReturn(next);
-          }
-        }
-        if (key === "pcs" || key === "pcsUsed") {
-          if (!r.pcsReturn || r.pcsReturn === expectedPcsReturn(r)) {
-            next.pcsReturn = expectedPcsReturn(next);
-          }
-        }
+        // What should come back is shown in the empty return boxes as a hint —
+        // see the placeholder below — rather than written in for the accountant.
+        // Filled in, it becomes a figure nobody counted: it would date the
+        // return stage before any stones came back, and be indistinguishable
+        // afterwards from a count that was actually made.
 
-        // Status follows the work, but only forward and only from the value it
-        // would have had anyway.
-        if ((key === "receivedDate" || key === "ctsUsed") && value && next.status === "Issued") {
+        // Status follows the work, but only forward, and only on the dates. A
+        // weight typed into a row is not the same as the jewellery having come
+        // back on a day someone is willing to put their name to.
+        if (key === "receivedDate" && value && next.status === "Issued") {
           next.status = "Received";
         }
-        if ((key === "returnDate" || key === "ctsReturn") && value && next.status === "Received") {
+        if (key === "returnDate" && value && next.status === "Received") {
           next.status = "Returned";
         }
         return next;
@@ -172,6 +184,11 @@ export default function JangadClient({
 
   async function save() {
     if (!dirty.length) return;
+    if (undated.length) {
+      setNote("");
+      setError(`${undatedNote} Fill the date in before saving — the boxes are marked.`);
+      return;
+    }
     setError("");
     setNote("");
     setSaving(true);
@@ -225,14 +242,29 @@ export default function JangadClient({
         c.key === "setting" ? SETTINGS : c.key === "status" ? STATUSES : SELL_STATUSES;
       return <Combo value={value} onChange={write} options={options} placeholder="—" />;
     }
+    // The sum the accountant would otherwise do, offered without being written
+    // in: it vanishes the moment a real count is typed over it.
+    const expect =
+      c.key === "ctsReturn" ? expectedCtsReturn(row)
+      : c.key === "pcsReturn" ? expectedPcsReturn(row)
+      : "";
+
     return (
       <input
         type={c.kind === "date" ? "date" : "text"}
         inputMode={c.kind === "number" ? "decimal" : undefined}
         value={value}
+        placeholder={expect ? `${expect} expected` : undefined}
+        className={needsDate(row, c.key) ? "jg-needed" : undefined}
         onChange={(e) => write(e.target.value)}
       />
     );
+  }
+
+  // The date box a row is waiting on, so it can be pointed at directly.
+  function needsDate(row: JangadRow, key: JangadField): boolean {
+    const stages = missingStageDates(row);
+    return stages.some((st) => STAGE_DATE[st] === key);
   }
 
   const totals = useMemo(() => {
@@ -354,11 +386,15 @@ export default function JangadClient({
               <tbody>
                 {shown.map((r, i) => {
                   const gap = shortfall(r);
+                  const undatedStages = missingStageDates(r);
                   return (
                     <tr
                       key={r.id}
-                      className={[gap ? "jg-short" : "", picked.has(r.id) ? "jg-on" : ""]
-                        .filter(Boolean).join(" ") || undefined}
+                      className={[
+                        gap ? "jg-short" : "",
+                        undatedStages.length ? "jg-undated" : "",
+                        picked.has(r.id) ? "jg-on" : "",
+                      ].filter(Boolean).join(" ") || undefined}
                     >
                       <td className="jg-pickcol">
                         <input
@@ -379,6 +415,18 @@ export default function JangadClient({
                             ].filter(Boolean).join(", ")} unaccounted for`}
                           >
                             !
+                          </span>
+                        )}
+                        {/* A different mark from the one above: this row is
+                            unfinished, not wrong. */}
+                        {!gap && undatedStages.length > 0 && (
+                          <span
+                            className="jg-flag date"
+                            title={`Needs ${undatedStages
+                              .map((st) => JANGAD_COLUMNS.find((c) => c.key === STAGE_DATE[st])!.header)
+                              .join(" and ")} before this entry can be saved`}
+                          >
+                            ?
                           </span>
                         )}
                       </td>
@@ -424,6 +472,7 @@ export default function JangadClient({
             <button className="btn btn-primary" onClick={save} disabled={saving || !dirty.length}>
               {saving ? "Saving…" : dirty.length ? `Save ${dirty.length} changed` : "Saved"}
             </button>
+            {undated.length > 0 && <span className="jg-blocked">{undatedNote}</span>}
           </div>
         </>
       )}
