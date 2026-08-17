@@ -279,7 +279,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
             <span>Diamond sizes</span>
             <p className="group-hint" style={{ margin: "0 0 8px" }}>
               Pick the shape first. Round asks for a sieve size; fancy shapes ask
-              for the MM and the per-piece pointer.
+              for the MM and the weight of one stone — write it in cts or pts and
+              that is how it prints.
             </p>
             <DiamondSizePicker lines={diaLines} onChange={setDiaLines} />
             {diaText && <p className="dia-preview">{diaText}</p>}

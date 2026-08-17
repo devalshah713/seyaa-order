@@ -15,6 +15,8 @@
 // Everything is held as typed text rather than numbers: a half-entered weight
 // like "1." has to survive being typed, and the export converts on the way out.
 
+import { pointerCarats } from "./pdConfig";
+
 export type JangadStage = "issue" | "received" | "returned";
 
 export type JangadField =
@@ -122,10 +124,13 @@ function round(n: number, dp: number): string {
   return String(parseFloat(n.toFixed(dp)));
 }
 
-// Carats issued = stones × the per-stone weight the sieve size carries.
+// Carats issued = stones × the per-stone weight the size carries. The weight
+// may be written with its unit ("3.57 cts", "25 pts"), so it is read through
+// pointerCarats rather than as a plain number — otherwise a unit on the PD
+// sheet would leave this column silently blank.
 export function caratsFor(pcs: string, pointer: string): string {
   const p = num(pcs);
-  const w = num(pointer);
+  const w = pointerCarats(pointer);
   if (p === null || w === null) return "";
   return round(p * w, 4);
 }

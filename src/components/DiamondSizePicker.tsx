@@ -8,7 +8,7 @@ import {
   isRoundShape,
   trimPointer,
 } from "@/lib/sieveSizes";
-import type { DiaLine } from "@/lib/pdConfig";
+import { formatPointer, type DiaLine } from "@/lib/pdConfig";
 
 // Picking a diamond size used to mean typing the sieve out by hand. Now the
 // shape decides what is asked for:
@@ -126,7 +126,7 @@ export default function DiamondSizePicker({
                   />
                 </label>
                 <label className="field">
-                  <span>Pointer (per pc)</span>
+                  <span>Weight (per pc)</span>
                   {/* Raw while typing — tidying it here would swallow the
                       decimal point the moment "1." is typed. */}
                   <Combo
@@ -135,6 +135,10 @@ export default function DiamondSizePicker({
                     options={ptOptions}
                     placeholder="0.25"
                   />
+                  {/* Whichever unit is written is the one that prints. */}
+                  <p className="dia-note">
+                    {formatPointer(l.pointer) || "Add cts or pts — a plain number prints as PTR"}
+                  </p>
                 </label>
               </div>
             )}

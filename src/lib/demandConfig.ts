@@ -2,7 +2,7 @@
 // sheet exists. Columns mirror the paper format:
 //   Date | Design No | Diamond Shape | Diamond Pointers | Number Of Pcs |
 //   Comments | BAGS | CVD/HPHT
-import type { DiaLine } from "./pdConfig";
+import { formatPointer, pointerHasUnit, type DiaLine } from "./pdConfig";
 
 export type DemandRow = {
   designNo: string;
@@ -25,6 +25,9 @@ export const BLANK_DEMAND_ROW: DemandRow = {
 export function pointersLabel(line: DiaLine): string {
   const isRound = line.shape.trim().toLowerCase() === "round";
   if (isRound) return line.size.trim() || line.mm.trim();
+  // A unit written on the PD sheet carries through to the demand as written —
+  // "3.57 cts" must not arrive at the diamond department reading as pointers.
+  if (pointerHasUnit(line.pointer)) return formatPointer(line.pointer);
   const n = parseFloat(line.pointer);
   if (!isFinite(n) || n <= 0) return line.mm.trim();
   return `${parseFloat(n.toFixed(4))}CT`;

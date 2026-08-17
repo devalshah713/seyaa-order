@@ -1138,3 +1138,6 @@ table.jg-table tr.jg-short td { background: color-mix(in srgb, #B23 6%, transpar
   }
   .jg-tabs button { padding: 8px 10px; font-size: 12px; }
 }
+/* Echoes the per-stone weight back in the unit it was typed in, so the sheet
+   below holds no surprises. */
+.dia-note { margin: 5px 2px 0; font-size: 10.5px; color: var(--panel-muted); line-height: 1.4; }
