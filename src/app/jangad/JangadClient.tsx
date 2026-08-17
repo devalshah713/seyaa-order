@@ -141,8 +141,21 @@ export default function JangadClient({
         // What should come back is filled in the moment the used figures are
         // known, so the accountant checks a number instead of working one out.
         // It stays editable — the point is to catch when the count differs.
-        if (key === "ctsUsed" && !r.ctsReturn) next.ctsReturn = expectedCtsReturn(next);
-        if (key === "pcsUsed" && !r.pcsReturn) next.pcsReturn = expectedPcsReturn(next);
+        //
+        // It also has to keep up. Comparing against what the old figures implied
+        // tells us whether anyone has typed over it: if not, it is still ours to
+        // maintain, and correcting a stone count corrects it too. Left stale, a
+        // corrected count made the row read as short by exactly the correction.
+        if (key === "carats" || key === "ctsUsed") {
+          if (!r.ctsReturn || r.ctsReturn === expectedCtsReturn(r)) {
+            next.ctsReturn = expectedCtsReturn(next);
+          }
+        }
+        if (key === "pcs" || key === "pcsUsed") {
+          if (!r.pcsReturn || r.pcsReturn === expectedPcsReturn(r)) {
+            next.pcsReturn = expectedPcsReturn(next);
+          }
+        }
 
         // Status follows the work, but only forward and only from the value it
         // would have had anyway.
