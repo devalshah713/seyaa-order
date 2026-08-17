@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Combo from "@/components/Combo";
-import { todayInput } from "@/lib/memoFormat";
+import { formatDate, todayInput } from "@/lib/memoFormat";
 import { splitPiece } from "@/lib/designNo";
 import {
   BLANK_JANGAD, SETTINGS, columnsFor, isMergedColumn, mergeSpans,
@@ -130,6 +130,12 @@ export default function NewJangadForm() {
 
   const spans = useMemo(() => mergeSpans(rows), [rows]);
 
+  // Picking a piece the register already covers is allowed — a second bag for
+  // the same piece is a real thing — but it is never silent.
+  const reissuing = (seed?.pieces || [])
+    .filter((p) => p.issued && picked.has(p.no))
+    .map((p) => p.no);
+
   // Mfg Name comes off the PD sheet, but the whole issue goes to one factory,
   // so changing it changes every row rather than being retyped down the column.
   const setMfgAll = (v: string) => {
@@ -222,14 +228,30 @@ export default function NewJangadForm() {
               </div>
               <div className="jg-piece-list">
                 {seed.pieces.map((p) => (
-                  <label key={p.no} className={picked.has(p.no) ? "jg-piece on" : "jg-piece"}>
+                  <label
+                    key={p.no}
+                    className={[
+                      "jg-piece",
+                      picked.has(p.no) ? "on" : "",
+                      p.issued ? "done" : "",
+                    ].filter(Boolean).join(" ")}
+                  >
                     <input
                       type="checkbox"
                       checked={picked.has(p.no)}
                       onChange={() => togglePiece(p.no)}
                     />
                     <b>{p.no}</b>
-                    <small>{p.stockNo ? `stock ${p.stockNo}` : p.status}</small>
+                    {/* What the register already holds beats what the PD sheet
+                        says: a piece whose diamonds went out last week must not
+                        read as if it is still waiting for them. */}
+                    <small>
+                      {p.issued
+                        ? `issued ${p.issued.date ? formatDate(p.issued.date) : ""}${
+                            p.issued.memoNo ? ` · ${p.issued.memoNo}` : ""
+                          }`
+                        : p.stockNo ? `stock ${p.stockNo}` : p.status}
+                    </small>
                   </label>
                 ))}
               </div>
@@ -238,6 +260,16 @@ export default function NewJangadForm() {
                   ? `${seed.lines.length} diamond ${seed.lines.length === 1 ? "size" : "sizes"} on this design — ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`
                   : "This design has no diamond sizes on its PD sheet, so the sizes are yours to fill in."}
               </p>
+              {reissuing.length > 0 && (
+                <p className="hint warn">
+                  {reissuing.length === 1
+                    ? `${reissuing[0]} has already had diamonds issued.`
+                    : `${reissuing.length} of these have already had diamonds issued.`}{" "}
+                  Saving adds a second issue against{" "}
+                  {reissuing.length === 1 ? "it" : "them"} rather than replacing
+                  the first — right for a top-up, not for a correction.
+                </p>
+              )}
             </div>
           </section>
 

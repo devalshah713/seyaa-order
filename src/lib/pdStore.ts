@@ -232,6 +232,42 @@ export async function setPdPieces(id: string, incoming: PdPiece[]): Promise<PdSh
   return updated;
 }
 
+// Diamonds going out against a piece is the moment it starts being made, so
+// the jangad register moves the PD sheet on rather than leaving someone to
+// remember to. Only pieces still waiting are touched: one already ready, in
+// stock or cancelled is further along than this knows about.
+export async function markPiecesInProduction(
+  id: string,
+  pieceNos: string[]
+): Promise<PdSheet | null> {
+  if (!pieceNos.length) return null;
+  const token = requireToken();
+  const db = await readDB(token);
+  const idx = db.sheets.findIndex((s) => s.id === id);
+  if (idx === -1) return null;
+
+  const flat = (s: string) => (s || "").toUpperCase().replace(/[^A-Z0-9.]/g, "");
+  const wanted = new Set(pieceNos.map(flat));
+  const pieces = reconcilePieces(db.sheets[idx].sku, db.sheets[idx].pieces);
+
+  let changed = false;
+  const next = pieces.map((p) => {
+    if (p.status !== "pending" || !wanted.has(flat(p.no))) return p;
+    changed = true;
+    return { ...p, status: "production" as const };
+  });
+  if (!changed) return db.sheets[idx];
+
+  const updated: PdSheet = {
+    ...db.sheets[idx],
+    pieces: next,
+    updatedAt: new Date().toISOString(),
+  };
+  db.sheets[idx] = updated;
+  await writeDB(db, token);
+  return updated;
+}
+
 export function normalizePieceInput(input: unknown): PdPiece[] {
   if (!Array.isArray(input)) return [];
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");

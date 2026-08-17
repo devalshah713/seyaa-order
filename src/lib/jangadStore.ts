@@ -8,12 +8,15 @@
 import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
 import {
-  BLANK_JANGAD, JANGAD_FIELDS, type JangadField, type JangadRow,
+  BLANK_JANGAD, JANGAD_FIELDS, suggestedPieces,
+  type JangadField, type JangadRow,
 } from "./jangadConfig";
-import { getPdSheet, findByDesignNo } from "./pdStore";
+import { getPdSheet, findByDesignNo, markPiecesInProduction } from "./pdStore";
 import { listDemands } from "./demandStore";
 import { todayInput } from "./memoFormat";
-import { pieceNumbers, parseDesignNo, type PdPiece } from "./designNo";
+import {
+  joinDesignNo, pieceNumbers, parseDesignNo, type PdPiece,
+} from "./designNo";
 
 const DB_PATH = "jangad/db.json";
 
@@ -133,6 +136,17 @@ export async function addJangadRows(
 
   db.rows.push(...added);
   await writeDB(db, token);
+
+  // Diamonds with the factory means the piece is being made, so the PD sheet
+  // says so rather than still reading "pending" the next time it is opened.
+  // Best-effort: the register is saved either way, and a piece already further
+  // along is left where it is.
+  if (link.pdId) {
+    const pieces = [...new Set(
+      added.map((r) => joinDesignNo(r.designNo, r.subDesignNo, "")).filter(Boolean)
+    )];
+    await markPiecesInProduction(link.pdId, pieces).catch(() => {});
+  }
   return added;
 }
 
@@ -195,7 +209,15 @@ export type JangadSeed = {
   demandNo: string;
   // Who the design is with in the factory — the PD sheet already says.
   assignedTo: string;
-  pieces: { no: string; status: string; stockNo: string; suggested: boolean }[];
+  pieces: {
+    no: string;
+    status: string;
+    stockNo: string;
+    suggested: boolean;
+    // Set when this piece already has entries in the register, so the same
+    // stones cannot be issued twice without it being obvious.
+    issued?: { date: string; memoNo: string; mfgName: string; rows: number };
+  }[];
   // One per diamond size on the design, ready to be crossed with the pieces.
   lines: {
     shape: string; size: string; pcs: string; growth: string;
@@ -239,8 +261,27 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
         no, n: i, status: "pending" as const, stockNo: "", note: "",
       }));
 
+  // What the register already holds for this design. Without this the picker
+  // offers pieces whose diamonds went out weeks ago, and a second issue against
+  // the same piece looks exactly like the first.
+  const db = await readDB(requireToken());
+  const already = new Map<string, { date: string; memoNo: string; mfgName: string; rows: number }>();
+  for (const r of db.rows) {
+    const key = flatNo(joinDesignNo(r.designNo, r.subDesignNo, ""));
+    if (!key) continue;
+    const seen = already.get(key);
+    if (seen) { seen.rows += 1; continue; }
+    already.set(key, { date: r.date, memoNo: r.memoNo, mfgName: r.mfgName, rows: 1 });
+  }
+
   const named = hit.kind === "piece" ? hit.piece : "";
-  const anyStarted = all.some((p) => p.status === "production" || p.status === "ready");
+  const issuedOf = (no: string) => already.get(flatNo(no));
+  const suggested = new Set(
+    suggestedPieces(
+      all.map((p) => ({ no: p.no, status: p.status, issued: !!issuedOf(p.no) })),
+      named
+    )
+  );
 
   return {
     pdId: sheet.id,
@@ -253,10 +294,8 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
       no: p.no,
       status: p.status,
       stockNo: p.stockNo,
-      suggested: named
-        ? p.no === named
-        : p.status === "production" || p.status === "ready" ||
-          (!anyStarted && p.status === "pending"),
+      suggested: suggested.has(p.no),
+      issued: issuedOf(p.no),
     })),
     lines,
   };
@@ -270,4 +309,10 @@ export async function pdForRow(row: JangadRow) {
 
 export function jangadDate(): string {
   return todayInput();
+}
+
+// Design numbers are compared without their separators, so a piece written
+// "SN-BR-AMF-10CT-63" matches the register's "SN-BR-AMF-10CT" + "63".
+function flatNo(s: string): string {
+  return (s || "").toUpperCase().replace(/[^A-Z0-9.]/g, "");
 }

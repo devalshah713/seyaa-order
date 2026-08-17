@@ -1252,3 +1252,9 @@ table.jg-slip-table tfoot .tot-lab {
   .jg-filters .field input, .jg-filters .field select { min-width: 0; width: 100%; }
   .jg-pick .btn { flex: 1 1 auto; }
 }
+/* A piece whose diamonds have already gone out: still selectable — a second bag
+   for the same piece happens — but never mistaken for one still waiting. */
+.jg-piece.done { border-style: dashed; }
+.jg-piece.done b { color: var(--panel-muted); }
+.jg-piece.done small { color: var(--gold); font-weight: 600; }
+.jg-piece.done.on { border-style: solid; border-color: #b26a23; }
