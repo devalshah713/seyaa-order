@@ -1398,3 +1398,38 @@ table.sb-money tr.sb-grand td:first-child { color: var(--panel-ink); }
   .sb-rates .sb-table td:first-child::before { display: none; }
   .sb-rates .sb-table td:first-child { padding-bottom: 10px; font-size: 13px; }
 }
+
+/* The design number as the way in, and the history it answers with. */
+.sb-lookup { display: flex; gap: 8px; flex-wrap: wrap; }
+.sb-lookup input {
+  flex: 1 1 240px; max-width: 360px; font-family: ui-monospace, Menlo, monospace;
+}
+.sb-lookup .btn { flex: none; }
+
+.sb-trace {
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 18px;
+}
+.sb-trace-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.sb-trace-col h3 {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--gold); font-weight: 700; margin: 0 0 8px;
+}
+.sb-trace-col dl { margin: 0; }
+.sb-trace-col dl > div {
+  display: grid; grid-template-columns: 100px 1fr; gap: 4px 10px;
+  padding: 3px 0; font-size: 12px;
+}
+.sb-trace-col dt { color: var(--panel-muted); }
+.sb-trace-col dd { margin: 0; color: var(--panel-ink); word-break: break-word; }
+.sb-trace .pieces-hint { margin-top: 12px; }
+
+@media (max-width: 860px) {
+  /* Three stages become three stacked blocks — reading the trail top to bottom
+     is the order it happened in anyway. */
+  .sb-trace-cols { grid-template-columns: 1fr; gap: 14px; }
+  .sb-trace-col + .sb-trace-col { border-top: 1px solid var(--panel-line); padding-top: 12px; }
+  .sb-trace { padding: 16px 14px; }
+  .sb-lookup input { max-width: none; }
+  .sb-lookup .btn { flex: 1 1 auto; }
+}

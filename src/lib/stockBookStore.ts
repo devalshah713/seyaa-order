@@ -7,7 +7,7 @@ import {
 } from "./stockBookConfig";
 import { loadPrices } from "./priceStore";
 import { listJangad, getJangadRows } from "./jangadStore";
-import { getPdSheet } from "./pdStore";
+import { traceDesign, type DesignTrace } from "./designTrace";
 import { joinDesignNo } from "./designNo";
 import { todayInput } from "./memoFormat";
 
@@ -87,8 +87,14 @@ export function normalizeStockInput(body: Record<string, unknown>): NewStockEntr
       : undefined,
     pdId: s(body.pdId) || undefined,
     pdNo: s(body.pdNo) || undefined,
+    demandNos: strList(body.demandNos),
+    memoNos: strList(body.memoNos),
+    mfgName: s(body.mfgName) || undefined,
   };
 }
+
+const strList = (v: unknown): string[] | undefined =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
 
 export async function listStockEntries(): Promise<StockEntry[]> {
   const token = requireToken();
@@ -164,6 +170,9 @@ export async function updateStockEntry(
     jangadIds: patch.jangadIds ?? before.jangadIds,
     pdId: patch.pdId ?? before.pdId,
     pdNo: patch.pdNo ?? before.pdNo,
+    demandNos: patch.demandNos ?? before.demandNos,
+    memoNos: patch.memoNos ?? before.memoNos,
+    mfgName: patch.mfgName ?? before.mfgName,
     updatedAt: new Date().toISOString(),
   };
   db.entries[idx] = updated;
@@ -206,11 +215,9 @@ export type StockSeedPiece = {
   jangadIds: string[];
   pdId?: string;
   pdNo?: string;
-  // Off the PD sheet, so the entry starts filled in rather than blank.
-  design: string;
-  category: string;
-  subCategory: string;
-  goldDetails: string;
+  // Everything the design number already knows, so the entry starts filled in
+  // rather than blank.
+  trace: DesignTrace | null;
   lines: StockLine[];
 };
 
@@ -231,8 +238,7 @@ export async function piecesForStock(): Promise<StockSeedPiece[]> {
       p = {
         key, pieceNo, designNo: r.designNo, subDesignNo: r.subDesignNo,
         product: r.product, mfgName: r.mfgName, stockCode: r.stockCode,
-        jangadIds: [], pdId: r.pdId, pdNo: r.pdNo,
-        design: r.product, category: "", subCategory: "", goldDetails: "",
+        jangadIds: [], pdId: r.pdId, pdNo: r.pdNo, trace: null,
         lines: [],
       };
       byPiece.set(key, p);
@@ -253,32 +259,45 @@ export async function piecesForStock(): Promise<StockSeedPiece[]> {
     if (hasContent(line)) p.lines.push(line);
   }
 
-  // The PD sheet says what the piece is and what gold it is in — the boxes on a
-  // stock entry that would otherwise be typed out again for every piece of a run.
-  const pdIds = [...new Set([...byPiece.values()].map((p) => p.pdId).filter(Boolean))] as string[];
-  const sheets = await Promise.all(pdIds.map((id) => getPdSheet(id).catch(() => null)));
-  const byPd = new Map(pdIds.map((id, i) => [id, sheets[i]]));
-  for (const p of byPiece.values()) {
-    const sheet = p.pdId ? byPd.get(p.pdId) : null;
-    if (!sheet) continue;
-    p.design = sheet.product || p.design;
-    p.category = sheet.category;
-    p.subCategory = sheet.subCategory;
-    p.goldDetails = goldDetailsOf(sheet.goldPurity, sheet.goldColor);
-  }
+  // Everything the design number already answers — what the piece is, what gold
+  // it is in, where it is going, and the paper trail behind it. All of that was
+  // typed once on the PD sheet; none of it should be typed again here.
+  const list = [...byPiece.values()];
+  const traces = await Promise.all(
+    list.map((p) => traceDesign(p.pieceNo).catch(() => null))
+  );
+  list.forEach((p, i) => { p.trace = traces[i]; });
 
-  return [...byPiece.values()].sort((a, b) =>
+  return list.sort((a, b) =>
     a.pieceNo.localeCompare(b.pieceNo, undefined, { numeric: true })
   );
 }
 
-// The stock book writes the gold as one phrase — "14K WHITE" — and reads the
-// purity back out of it to pick the gold rate. The PD sheet keeps the two apart,
-// so they are put together here in the form the price lookup expects.
-export function goldDetailsOf(purity: string, colour: string): string {
-  // "14KT", "14 K", "14kt Gold" all become "14K", which is what karatOf reads.
-  const p = (purity || "").trim().toUpperCase().replace(/\s*K\s*T\b/, "K");
-  return [p, (colour || "").trim().toUpperCase()].filter(Boolean).join(" ");
+// A piece that never went through the register — anything made before the
+// portal, or a repair coming back — still has a design number, and the number
+// still knows most of the entry.
+export async function seedFromDesign(query: string): Promise<StockSeedPiece | null> {
+  const trace = await traceDesign(query);
+  if (!trace) return null;
+  const known = await piecesForStock().catch(() => [] as StockSeedPiece[]);
+  const already = known.find(
+    (p) => p.pieceNo.toUpperCase() === trace.pieceNo.toUpperCase()
+  );
+  if (already) return already;
+  return {
+    key: trace.pieceNo.toUpperCase(),
+    pieceNo: trace.pieceNo,
+    designNo: trace.designNo,
+    subDesignNo: "",
+    product: trace.product,
+    mfgName: trace.mfgName,
+    stockCode: "",
+    jangadIds: [],
+    pdId: trace.pdId,
+    pdNo: trace.pdNo,
+    trace,
+    lines: [],
+  };
 }
 
 // Writes the stock number into the Stock Code column of every jangad line for

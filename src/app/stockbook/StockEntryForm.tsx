@@ -48,6 +48,8 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
           : blank(stockNo)
   );
   const [from, setFrom] = useState(entry ? entry.designNo : "");
+  const [picked, setPicked] = useState<StockSeedPiece | null>(null);
+  const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -82,20 +84,49 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
   // Pieces the register has but the book does not — what is waiting to come in.
   const waiting = useMemo(() => pieces.filter((p) => !p.stockCode), [pieces]);
 
+  // Everything the design number already knows, carried across in one go. Only
+  // what nobody could know without the piece in hand — its weight on the scale
+  // — is left to type.
   function take(p: StockSeedPiece) {
     setFrom(p.pieceNo);
+    setPicked(p);
+    const t = p.trace;
     setDraft((d) => ({
       ...d,
-      design: p.design || p.product || d.design,
+      design: t?.design || p.product || d.design,
       designNo: p.pieceNo,
-      category: p.category || d.category,
-      subCategory: p.subCategory || d.subCategory,
-      goldDetails: p.goldDetails || d.goldDetails,
+      category: t?.category || d.category,
+      subCategory: t?.subCategory || d.subCategory,
+      subSubCategory: t?.subSubCategory || d.subSubCategory,
+      location: t?.location || d.location,
+      goldDetails: t?.goldDetails || d.goldDetails,
+      inchSize: t?.inchSize || d.inchSize,
       lines: p.lines.length ? p.lines.map((l) => ({ ...l })) : [{ ...BLANK_LINE }],
       jangadIds: p.jangadIds,
       pdId: p.pdId,
       pdNo: p.pdNo,
+      demandNos: t?.demandNos,
+      memoNos: t?.memoNos,
+      mfgName: t?.mfgName || p.mfgName,
     }));
+  }
+
+  // Looking a design number up by hand, for a piece the register never saw.
+  async function lookup() {
+    const q = from.trim();
+    if (!q) return;
+    setError("");
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/stockbook?design=${encodeURIComponent(q)}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `Nothing found for “${q}”.`);
+      take(data.seed as StockSeedPiece);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not look that up.");
+    } finally {
+      setSearching(false);
+    }
   }
 
   // Priced as you type, from the same code the server prices it with.
@@ -148,8 +179,26 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
       {!entry && (
         <section className="sb-pick">
           <div className="sb-pick-head">
-            <span>Pieces back from the workshop</span>
+            <span>Start from a design number</span>
             <Link href="/stockbook/prices" className="linkbtn">Price list</Link>
+          </div>
+          {/* The design number is the thread through the whole business, so it
+              is also the way in here: one number answers with the sheet it was
+              designed on, the demand its stones came from and the memo they
+              went out on. */}
+          <div className="sb-lookup">
+            <input
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookup(); } }}
+              placeholder="SN-BR-AMF-10CT-63"
+            />
+            <button type="button" className="btn" onClick={lookup} disabled={searching}>
+              {searching ? "Looking…" : "Fetch details"}
+            </button>
+          </div>
+          <div className="sb-pick-head" style={{ marginTop: 16 }}>
+            <span>Pieces back from the workshop</span>
           </div>
           {waiting.length === 0 ? (
             <p className="pieces-hint">
@@ -186,6 +235,50 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
       )}
 
       {error && <p className="save-error">{error}</p>}
+
+      {/* What the number already knows, laid out stage by stage. Shown rather
+          than filled in: the boxes below are what the entry saves, and this is
+          the history to check them against. */}
+      {picked?.trace && (
+        <section className="sb-trace">
+          <div className="sb-pick-head">
+            <span>Everything under {picked.trace.pieceNo}</span>
+            {picked.trace.pdId && (
+              <Link href={`/pd/${picked.trace.pdId}`} className="linkbtn">
+                Open the PD sheet
+              </Link>
+            )}
+          </div>
+          <div className="sb-trace-cols">
+            {([
+              ["PD sheet", picked.trace.pd],
+              ["Diamond demand", picked.trace.demand],
+              ["Diamonds issued", picked.trace.issue],
+            ] as const).map(([title, rows]) => (
+              <div key={title} className="sb-trace-col">
+                <h3>{title}</h3>
+                {rows.length === 0 ? (
+                  <p className="jg-muted">Nothing recorded.</p>
+                ) : (
+                  <dl>
+                    {rows.map((s, i) => (
+                      <div key={`${s.label}-${i}`}>
+                        <dt>{s.label}</dt><dd>{s.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </div>
+            ))}
+          </div>
+          {picked.trace.goldWeight && (
+            <p className="pieces-hint">
+              The sheet was designed at <b>{picked.trace.goldWeight}</b> of gold
+              — worth a glance against what the piece actually weighs.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="sb-form">
         <div className="three">

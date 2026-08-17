@@ -41,10 +41,15 @@ export type StockEntry = {
   lines: StockLine[];
   comments: string;
 
-  // Where the piece came from, so a stock number can be traced back.
+  // Where the piece came from, so a stock number can be traced back to the
+  // sheet it was designed on, the demand its stones were raised under and the
+  // memo they went out on.
   jangadIds?: string[];
   pdId?: string;
   pdNo?: string;
+  demandNos?: string[];
+  memoNos?: string[];
+  mfgName?: string;
 
   createdAt: string;
   updatedAt: string;
