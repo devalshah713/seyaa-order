@@ -27,7 +27,17 @@ export default function StockBookClient({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [location, setLocation] = useState("");
+  // A MIX row stands for several stone sizes. The workbook keeps their breakup
+  // on a second sheet; here the row opens onto it.
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+
+  const toggle = (id: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const locations = useMemo(() => {
     const seen = new Set<string>();
@@ -144,11 +154,23 @@ export default function StockBookClient({
                 </tr>
               </thead>
               <tbody>
-                {valued.map(({ e, p }) => {
+                {valued.flatMap(({ e, p }) => {
                   const mix = isMix(e);
                   const one = e.lines[0];
-                  return (
-                    <tr key={e.id}>
+                  const shown = open.has(e.id);
+                  // "MIX" on its own says a piece has several sizes without
+                  // saying which, so every cell that reads MIX opens the
+                  // breakup rather than only being a label.
+                  const mixCell = (label: string) =>
+                    mix ? (
+                      <button type="button" className="sb-mix" onClick={() => toggle(e.id)}
+                        aria-expanded={shown}
+                        aria-label={`${shown ? "Hide" : "Show"} the diamond sizes of ${e.stockNo}`}>
+                        {MIX} {shown ? "▴" : "▾"}
+                      </button>
+                    ) : label || "—";
+                  return [
+                    <tr key={e.id} className={shown ? "sb-open" : undefined}>
                       <td data-label="Sr. No.">
                         <Link href={`/stockbook/${e.id}`} className="sb-link">{e.stockNo}</Link>
                       </td>
@@ -163,18 +185,77 @@ export default function StockBookClient({
                       <td data-label="Dia Wt" className="sb-num">{trim(p.totalWeight, 3) || "—"}</td>
                       <td data-label="Dia Pcs" className="sb-num">{p.totalPcs || "—"}</td>
                       <td data-label="Pointers" className="sb-num">
-                        {mix ? MIX : trim(p.pointer, 2) || "—"}</td>
-                      <td data-label="Shape">{mix ? MIX : one?.shape || "—"}</td>
-                      <td data-label="Sieve / Size">{mix ? MIX : one?.sieve || "—"}</td>
-                      <td data-label="Code">{mix ? MIX : one?.code || "—"}</td>
+                        {mix ? mixCell("") : trim(p.pointer, 2) || "—"}</td>
+                      <td data-label="Shape">{mixCell(one?.shape || "")}</td>
+                      <td data-label="Sieve / Size">{mixCell(one?.sieve || "")}</td>
+                      <td data-label="Code">{mixCell(one?.code || "")}</td>
                       <td data-label="Total ($)" className="sb-num">{money(p.total.usd)}</td>
                       <td data-label="Total (₹)" className="sb-num">{money(p.total.inr)}</td>
                       <td className="jg-sr">
                         <button className="del" onClick={() => del(e)}
                           title="Remove from stock" aria-label="Remove from stock">×</button>
                       </td>
-                    </tr>
-                  );
+                    </tr>,
+                    // The breakup, as the workbook's "Multiple Dia Entry" sheet
+                    // keeps it: one line per stone size with its own price, and
+                    // the gold, labour and piece total ruled off below.
+                    ...(mix && shown ? [
+                      <tr key={`${e.id}-lines`} className="sb-breakup">
+                        <td colSpan={18}>
+                          <div className="sb-breakup-in">
+                            <h4>{e.stockNo} · {e.lines.length} diamond sizes</h4>
+                            <table className="sb-sub">
+                              <thead>
+                                <tr>
+                                  <th>#</th><th>Weight (cts)</th><th>Pcs</th><th>Shape</th>
+                                  <th>Sieve / Size</th><th>Product Code</th>
+                                  <th>Pointers</th><th>Price ($)</th><th>Price (₹)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {e.lines.map((l, i) => (
+                                  <tr key={i}>
+                                    <td>{i + 1}</td>
+                                    <td className="sb-num">{l.breakupWt || "—"}</td>
+                                    <td className="sb-num">{l.pcs || "—"}</td>
+                                    <td>{l.shape || "—"}</td>
+                                    <td>{l.sieve || "—"}</td>
+                                    <td>{l.code || "—"}</td>
+                                    <td className="sb-num">{trim(p.lines[i]?.pointer ?? null, 2) || "—"}</td>
+                                    <td className="sb-num">{money(p.lines[i]?.diamond.usd ?? 0)}</td>
+                                    <td className="sb-num">{money(p.lines[i]?.diamond.inr ?? 0)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr>
+                                  <td colSpan={6}>Diamonds</td>
+                                  <td className="sb-num">{trim(p.totalWeight, 3)}</td>
+                                  <td className="sb-num">{money(p.diamond.usd)}</td>
+                                  <td className="sb-num">{money(p.diamond.inr)}</td>
+                                </tr>
+                                <tr>
+                                  <td colSpan={7}>Gold · {p.karat}KT on {e.netWt || "0"} g net</td>
+                                  <td className="sb-num">{money(p.gold.usd)}</td>
+                                  <td className="sb-num">{money(p.gold.inr)}</td>
+                                </tr>
+                                <tr>
+                                  <td colSpan={7}>Labour</td>
+                                  <td className="sb-num">{money(p.labour.usd)}</td>
+                                  <td className="sb-num">{money(p.labour.inr)}</td>
+                                </tr>
+                                <tr className="sb-grand">
+                                  <td colSpan={7}>Total</td>
+                                  <td className="sb-num">{money(p.total.usd)}</td>
+                                  <td className="sb-num">{money(p.total.inr)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>,
+                    ] : []),
+                  ];
                 })}
               </tbody>
             </table>

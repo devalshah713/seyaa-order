@@ -30,12 +30,13 @@ export type DesignTrace = {
   pdNo: string;
 
   // What the PD sheet says the piece is. These fill the entry's own boxes.
-  design: string; // a description, built from what the sheet holds
+  // Not the description or the location: the first is written by whoever has
+  // the piece in hand, and the second is where the piece is now rather than
+  // where the sheet means to send it.
   product: string;
   category: string;
   subCategory: string;
   subSubCategory: string;
-  location: string;
   goldDetails: string;
   inchSize: string;
   goldWeight: string; // the design's target, for checking a weighed piece against
@@ -58,26 +59,6 @@ export function goldDetailsOf(purity: string, colour: string): string {
   const p = clean(purity).toUpperCase().replace(/\s*K\s*T\b/, "K");
   const c = clean(colour).toUpperCase().replace(/\s*GOLD\b/, "");
   return [p, c].filter(Boolean).join(" ");
-}
-
-// The stock sheet's DESIGN column is a description — "50PTS EACH OVAL BEZEL
-// TENNIS BRACELET". The PD sheet holds those words in separate boxes, so they
-// are put back together here, dropping any that the product name already says.
-export function describeDesign(sheet: {
-  diaWeightPointers: string; diaShape: string; category: string; product: string;
-}): string {
-  const said = new Set<string>();
-  const out: string[] = [];
-  for (const part of [sheet.diaWeightPointers, sheet.diaShape, sheet.category, sheet.product]) {
-    for (const word of clean(part).split(/\s+/)) {
-      if (!word) continue;
-      const key = word.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      if (!key || said.has(key)) continue;
-      said.add(key);
-      out.push(word.toUpperCase());
-    }
-  }
-  return out.join(" ");
 }
 
 const stage = (label: string, value: string): TraceStage[] =>
@@ -130,14 +111,10 @@ export async function traceDesign(query: string): Promise<DesignTrace | null> {
     pdId: sheet.id,
     pdNo: sheet.pdNo,
 
-    design: describeDesign(sheet),
     product: sheet.product,
     category: sheet.category,
     subCategory: sheet.subCategory,
     subSubCategory: sheet.type,
-    // The PD sheet's zone is where the piece is going, which is the stock
-    // book's Location.
-    location: clean(sheet.zone).toUpperCase(),
     goldDetails: goldDetailsOf(sheet.goldPurity, sheet.goldColor),
     inchSize: sheet.size,
     goldWeight: sheet.goldWeight,
@@ -154,6 +131,9 @@ export async function traceDesign(query: string): Promise<DesignTrace | null> {
       ...stage("Gold", [sheet.goldPurity, sheet.goldColor].filter(Boolean).join(" ")),
       ...stage("Gold weight", sheet.goldWeight),
       ...stage("Size", sheet.size),
+      // Where the sheet means the piece to end up. Said here rather than
+      // written into Location, which is where the piece is today.
+      ...stage("Zone", sheet.zone),
       ...stage("Order", [sheet.orderType, sheet.orderBy].filter(Boolean).join(" · ")),
       ...stage("Remarks", sheet.remarks),
     ],

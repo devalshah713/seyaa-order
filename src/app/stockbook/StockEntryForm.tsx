@@ -93,12 +93,15 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
     const t = p.trace;
     setDraft((d) => ({
       ...d,
-      design: t?.design || p.product || d.design,
+      // Design is the piece's own description, written by whoever is holding
+      // it. Nothing upstream says it, so nothing is put in it — and Location
+      // stays INDIA, where the piece actually is on the day it comes in; the
+      // sheet's zone is where it is eventually going, which is shown in the
+      // trail rather than filled in here.
       designNo: p.pieceNo,
       category: t?.category || d.category,
       subCategory: t?.subCategory || d.subCategory,
       subSubCategory: t?.subSubCategory || d.subSubCategory,
-      location: t?.location || d.location,
       goldDetails: t?.goldDetails || d.goldDetails,
       inchSize: t?.inchSize || d.inchSize,
       lines: p.lines.length ? p.lines.map((l) => ({ ...l })) : [{ ...BLANK_LINE }],
