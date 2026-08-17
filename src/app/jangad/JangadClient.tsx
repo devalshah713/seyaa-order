@@ -7,7 +7,8 @@ import { joinDesignNo, matchDesign } from "@/lib/designNo";
 import {
   JANGAD_COLUMNS, SELL_STATUSES, SETTINGS, STAGES, STATUSES,
   STAGE_DATE, columnsFor, expectedCtsReturn, expectedPcsReturn, isMergedColumn,
-  mergeSpans, missingStageDates, num, shortfall, totalPriceFor,
+  isPerPieceColumn, mergeSpans, mergedValue, missingStageDates, num, shortfall,
+  totalPriceFor,
   type JangadColumn, type JangadField, type JangadRow, type JangadStage,
 } from "@/lib/jangadConfig";
 
@@ -225,8 +226,8 @@ export default function JangadClient({
     }
   }
 
-  function cell(row: JangadRow, c: JangadColumn, covers: string[]) {
-    const value = row[c.key];
+  function cell(row: JangadRow, c: JangadColumn, covers: string[], groupValue?: string) {
+    const value = groupValue ?? row[c.key];
     if (readOnly(c.key)) {
       // "63" alone says nothing when you are filling in what came back, so the
       // anchor shows the piece's whole number.
@@ -438,6 +439,12 @@ export default function JangadClient({
                         // covers this row, so this line draws no cell at all.
                         if (span === undefined) return null;
                         const covers = shown.slice(i, i + span).map((x) => x.id);
+                        // Rows saved before these columns merged can carry the
+                        // value on one line only, so the box shows whichever
+                        // line has it rather than reading empty.
+                        const groupValue = isPerPieceColumn(c.key)
+                          ? mergedValue(shown, i, span, c.key)
+                          : undefined;
                         return (
                           <td
                             key={c.key}
@@ -445,7 +452,7 @@ export default function JangadClient({
                             rowSpan={span > 1 ? span : undefined}
                             className={span > 1 ? "merged" : undefined}
                           >
-                            {cell(r, c, covers)}
+                            {cell(r, c, covers, groupValue)}
                           </td>
                         );
                       })}

@@ -1,7 +1,8 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import {
-  EXPORT_COLUMNS, isMergedColumn, mergeSpans, num, type JangadRow,
+  EXPORT_COLUMNS, isMergedColumn, isPerPieceColumn, mergeSpans, mergedValue,
+  num, type JangadRow,
 } from "./jangadConfig";
 
 // The register is ruled like the paper it replaces.
@@ -83,6 +84,12 @@ export async function buildJangadWorkbook(rows: JangadRow[]): Promise<ArrayBuffe
     for (const [start, span] of spans.get(c.key) || []) {
       if (span < 2) continue;
       const top = FIRST_ROW + start;
+      // Merging keeps the top-left cell and drops the rest, so a value sitting
+      // on a lower line of the group has to be lifted up first or it is lost.
+      if (isPerPieceColumn(c.key)) {
+        const v = mergedValue(ordered, start, span, c.key);
+        if (v) ws.getCell(top, col).value = v;
+      }
       ws.mergeCells(top, col, top + span - 1, col);
       ws.getCell(top, col).alignment = { vertical: "middle", wrapText: true };
     }
