@@ -46,6 +46,11 @@ try {
     -OutFile (Join-Path $dataDir "diamond-jangad.xlsx") -UseBasicParsing
   Log "Saved diamond-jangad.xlsx"
 
+  # 2c) The stock book, priced at the day's rates
+  Invoke-WebRequest -Uri "$BaseUrl/api/backup?format=stockbook" -Headers $headers `
+    -OutFile (Join-Path $dataDir "stock-book.xlsx") -UseBasicParsing
+  Log "Saved stock-book.xlsx"
+
   # 3) PDFs — only new or edited memos (incremental)
   $data = Get-Content (Join-Path $dataDir "data.json") -Raw | ConvertFrom-Json
   $new = 0; $skip = 0

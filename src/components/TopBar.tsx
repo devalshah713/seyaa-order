@@ -81,6 +81,9 @@ export default function TopBar({ user }: Props) {
           {can("jangad") && (
             <Link href="/jangad" className={on("/jangad") ? "active" : ""}>Jangad</Link>
           )}
+          {can("stockbook") && (
+            <Link href="/stockbook" className={on("/stockbook") ? "active" : ""}>Stock Book</Link>
+          )}
           {user.role === "admin" && (
             <>
               <Link href="/admin/parties" className={path === "/admin/parties" ? "active" : ""}>Parties</Link>

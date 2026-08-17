@@ -1282,3 +1282,119 @@ table.jg-table input.jg-needed {
   border: 1px solid color-mix(in srgb, #B23 22%, transparent);
 }
 .jg-mismatch .linkbtn { color: #b23; }
+
+/* ---------- Stock book ---------- */
+/* Taking a finished piece in, and what it is worth. The register borrows the
+   jangad's table, so the two ledgers read as the same kind of screen. */
+.sb-pick, .sb-form, .sb-lines, .sb-total, .sb-rates {
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 18px;
+}
+.sb-pick-head, .sb-lines-head {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px;
+  font-size: 11px; color: var(--panel-muted); letter-spacing: .3px;
+}
+.sb-pick-head .linkbtn, .sb-lines-head .jg-muted { margin-left: auto; }
+.sb-lines-head h2, .sb-rates h2 {
+  font-size: 13px; margin: 0; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--panel-muted);
+}
+.sb-rates h2 { margin-bottom: 10px; }
+
+/* The pieces waiting to come in: a button each, because picking one fills the
+   whole entry rather than ticking something. */
+.sb-piece-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.sb-piece {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  cursor: pointer; text-align: left; font-family: inherit;
+  border: 1px solid var(--field-line); background: var(--field-bg);
+  color: var(--panel-ink); border-radius: 8px; padding: 8px 11px;
+}
+.sb-piece.on { border-color: var(--gold-soft); background: color-mix(in srgb, var(--gold) 8%, transparent); }
+.sb-piece b { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600; }
+.sb-piece small { font-size: 10.5px; color: var(--panel-muted); }
+
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.check input { width: auto; flex: none; }
+
+/* Worked-out figures are read, not typed, so they are set in the same tabular
+   numerals as the paper and never look like an empty box. */
+table.sb-table td.sb-num, table.sb-table td[data-label="Pointers"] {
+  text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px;
+  white-space: nowrap; color: var(--panel-ink);
+}
+table.sb-table td.sb-wide { white-space: normal; min-width: 220px; font-size: 12.5px; }
+table.sb-table td { font-size: 12.5px; }
+.sb-link {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600;
+  color: var(--gold); text-decoration: none;
+}
+.sb-link:hover { text-decoration: underline; }
+
+/* What the piece comes to. Two currencies side by side, as the workbook keeps
+   them, with the total ruled off. */
+.sb-total { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.sb-total-grid {
+  display: grid; grid-template-columns: auto auto; gap: 6px 14px;
+  font-size: 12.5px; color: var(--panel-muted); align-content: start;
+}
+.sb-total-grid b { color: var(--panel-ink); font-variant-numeric: tabular-nums; }
+table.sb-money { border-collapse: collapse; margin-left: auto; min-width: 260px; }
+table.sb-money th {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--panel-muted); font-weight: 700; text-align: right; padding: 4px 10px;
+}
+table.sb-money td {
+  padding: 5px 10px; font-size: 13px; text-align: right;
+  font-variant-numeric: tabular-nums; border-top: 1px solid var(--panel-line);
+}
+table.sb-money td:first-child {
+  text-align: left; color: var(--panel-muted); font-size: 12px;
+}
+table.sb-money tr.sb-grand td {
+  font-weight: 700; border-top: 2px solid var(--panel-line); font-size: 14px;
+}
+table.sb-money tr.sb-grand td:first-child { color: var(--panel-ink); }
+
+@media (max-width: 860px) {
+  .sb-total { flex-direction: column; gap: 16px; }
+  table.sb-money { margin-left: 0; width: 100%; }
+  .sb-piece { flex: 1 1 100%; }
+  .sb-pick, .sb-form, .sb-lines, .sb-total, .sb-rates { padding: 16px 14px; }
+
+  /* The register stays a scrolling grid — it is a report, and the columns are
+     the format. These two are typed into, so they become cards with their
+     labels shown: scrolling sideways to reach the next box is miserable. */
+  .sb-lines .jg-scroll, .sb-rates .jg-scroll { border: 0; background: none; overflow: visible; }
+  .sb-lines table.sb-table, .sb-lines .sb-table tbody, .sb-lines .sb-table tr,
+  .sb-lines .sb-table td,
+  .sb-rates table.sb-table, .sb-rates .sb-table tbody, .sb-rates .sb-table tr,
+  .sb-rates .sb-table td { display: block; width: auto; }
+  .sb-lines .sb-table thead, .sb-rates .sb-table thead { display: none; }
+  .sb-lines .sb-table tr, .sb-rates .sb-table tr {
+    border: 1px solid var(--field-line); border-radius: 9px;
+    background: var(--field-bg); padding: 10px 12px; margin-bottom: 10px;
+    position: relative;
+  }
+  .sb-lines .sb-table td, .sb-rates .sb-table td { border: 0; padding: 0 0 8px; }
+  .sb-lines .sb-table tr td:last-child, .sb-rates .sb-table tr td:last-child { padding-bottom: 0; }
+  .sb-lines .sb-table td::before, .sb-rates .sb-table td::before {
+    content: attr(data-label); display: block;
+    font-size: 11px; color: var(--panel-muted); margin-bottom: 4px; letter-spacing: .3px;
+  }
+  .sb-lines .sb-table input, .sb-lines .sb-table .combo input,
+  .sb-rates .sb-table input { background: var(--panel); width: 100%; min-width: 0; }
+  /* The line number heads its card; the delete button rides in the corner
+     rather than taking a row of its own. */
+  .sb-lines .sb-table td.jg-sr { width: auto; text-align: left; }
+  .sb-lines .sb-table td.jg-sr::before { display: none; }
+  .sb-lines .sb-table td.jg-sr:first-child::after { content: " · diamond size"; }
+  .sb-lines .sb-table tr td.jg-sr:last-child {
+    position: absolute; top: 8px; right: 10px; padding: 0;
+  }
+  /* Figures the form works out read as a line of text, not as an empty box. */
+  .sb-lines table.sb-table td.sb-num,
+  .sb-lines table.sb-table td[data-label="Pointers"] { text-align: left; }
+  .sb-rates .sb-table td:first-child::before { display: none; }
+  .sb-rates .sb-table td:first-child { padding-bottom: 10px; font-size: 13px; }
+}

@@ -6,7 +6,7 @@
 // An admin always has everything. For everyone else, access is the explicit
 // list of module keys stored on their account and carried in their session.
 
-export type ModuleKey = "memos" | "orders" | "stock" | "pd" | "jangad";
+export type ModuleKey = "memos" | "orders" | "stock" | "pd" | "jangad" | "stockbook";
 
 export const MODULES: {
   key: ModuleKey;
@@ -19,6 +19,7 @@ export const MODULES: {
   { key: "stock", label: "Stock", description: "Stock list and availability", home: "/stock" },
   { key: "pd", label: "PD Sheets", description: "Product development sheets", home: "/pd" },
   { key: "jangad", label: "Diamond Jangad", description: "Accounts entry for diamonds issued, used and returned", home: "/jangad" },
+  { key: "stockbook", label: "Stock Book", description: "Finished jewellery taken into stock and valued", home: "/stockbook" },
 ];
 
 export const MODULE_KEYS: ModuleKey[] = MODULES.map((m) => m.key);
@@ -48,6 +49,9 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
   // The register reads PD sheets and demands to fill itself in, but it is the
   // accounts team's screen — they get this without getting the design module.
   { key: "jangad", prefixes: ["/jangad", "/api/jangad"] },
+  // The price list is only ever read to value a piece of stock, so it belongs
+  // to this module rather than standing on its own.
+  { key: "stockbook", prefixes: ["/stockbook", "/api/stockbook", "/api/prices"] },
 ];
 
 // The module a path belongs to, or null for shared things (the home page, auth,
