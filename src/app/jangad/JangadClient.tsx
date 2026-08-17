@@ -151,6 +151,29 @@ export default function JangadClient({
     return `${undated.length} ${undated.length === 1 ? "entry has" : "entries have"} figures but no ${names}: ${which}${more}.`;
   }, [undated, view]);
 
+  // Rows whose issued, studded and returned figures do not reconcile. The mark
+  // on the row carries the amount in its tooltip, but the columns it is talking
+  // about are usually on another tab, so it is said out loud here too.
+  const mismatched = useMemo(() => shown.filter((r) => shortfall(r)), [shown]);
+
+  const mismatchNote = useMemo(() => {
+    if (!mismatched.length) return "";
+    const one = (r: JangadRow) => {
+      const gap = shortfall(r)!;
+      const by = [gap.cts && `${gap.cts} cts`, gap.pcs && `${gap.pcs} pcs`]
+        .filter(Boolean).join(" and ");
+      return `${fullPieceNo(r)} ${r.shape} — ${by}`;
+    };
+    const which = mismatched.slice(0, 3).map(one).join("; ");
+    const more = mismatched.length > 3 ? ` and ${mismatched.length - 3} more` : "";
+    return `${mismatched.length} ${mismatched.length === 1 ? "entry does" : "entries do"} not add up: ${which}${more} unaccounted for.`;
+  }, [mismatched]);
+
+  function showMismatched() {
+    setView("returned");
+    setFocus(new Set(mismatched.map((r) => r.id)));
+  }
+
   // Take them to the entries, on the tab whose date is missing.
   function showUndated() {
     const first = undated.flatMap((r) => missingStageDates(r))[0];
@@ -358,6 +381,15 @@ export default function JangadClient({
 
       {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
       {note && <p className="pieces-ok">{note}</p>}
+
+      {mismatched.length > 0 && (
+        <p className="jg-mismatch">
+          {mismatchNote}{" "}
+          <button type="button" className="linkbtn" onClick={showMismatched}>
+            Show {mismatched.length === 1 ? "it" : "them"}
+          </button>
+        </p>
+      )}
 
       {focus && (
         <p className="jg-focus">

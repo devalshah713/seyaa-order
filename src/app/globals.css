@@ -1273,3 +1273,12 @@ table.jg-table input.jg-needed {
   }
 }
 .jg-focus { font-size: 12.5px; color: var(--panel-muted); margin: 0 0 12px; }
+/* Said out loud, not only in a tooltip: the columns a mismatch is about are
+   usually on a different tab from the one being worked on. */
+.jg-mismatch {
+  font-size: 12.5px; color: #b23; line-height: 1.5; margin: 0 0 12px;
+  padding: 9px 12px; border-radius: 8px;
+  background: color-mix(in srgb, #B23 7%, transparent);
+  border: 1px solid color-mix(in srgb, #B23 22%, transparent);
+}
+.jg-mismatch .linkbtn { color: #b23; }
