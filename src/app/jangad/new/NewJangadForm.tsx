@@ -1,0 +1,289 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Combo from "@/components/Combo";
+import { todayInput } from "@/lib/memoFormat";
+import {
+  BLANK_JANGAD, SETTINGS, caratsFor, columnsFor, num,
+  type JangadField,
+} from "@/lib/jangadConfig";
+import type { JangadSeed } from "@/lib/jangadStore";
+
+type Draft = Record<JangadField, string>;
+
+// Stage one of the register: diamonds going out against a design.
+//
+// The design number is the way in. Everything the PD sheet and its demand
+// already know — product, shapes, sizes, stones, carats, CVD/HPHT — is fetched
+// rather than retyped; the accountant adds only what is theirs: the setting,
+// the certificate, the rate and the memo it went out on.
+export default function NewJangadForm() {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [seed, setSeed] = useState<JangadSeed | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [rows, setRows] = useState<Draft[]>([]);
+  const [date, setDate] = useState(todayInput());
+  const [memoNo, setMemoNo] = useState("");
+  const [looking, setLooking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const issueCols = columnsFor("issue");
+
+  async function lookup() {
+    const q = query.trim();
+    if (!q) return;
+    setError("");
+    setLooking(true);
+    try {
+      const res = await fetch(`/api/jangad?design=${encodeURIComponent(q)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `Could not look that up (${res.status}).`);
+      const s: JangadSeed = data.seed;
+      setSeed(s);
+      const start = new Set(s.pieces.filter((p) => p.suggested).map((p) => p.no));
+      setPicked(start);
+      setRows(build(s, start, date, memoNo));
+    } catch (err) {
+      setSeed(null);
+      setRows([]);
+      setError(err instanceof Error ? err.message : "Could not look that up.");
+    } finally {
+      setLooking(false);
+    }
+  }
+
+  // Rows are the pieces crossed with the diamond sizes — one line per stone
+  // size per piece, which is how the workbook is written.
+  function build(s: JangadSeed, pieces: Set<string>, d: string, memo: string): Draft[] {
+    const out: Draft[] = [];
+    for (const p of s.pieces) {
+      if (!pieces.has(p.no)) continue;
+      for (const l of s.lines) {
+        out.push({
+          ...BLANK_JANGAD,
+          date: d,
+          designNo: s.designNo,
+          subDesignNo: p.no,
+          product: s.product,
+          shape: l.shape,
+          size: l.size,
+          pcs: l.pcs,
+          carats: l.carats,
+          growth: l.growth,
+          memoNo: memo,
+          stockCode: p.stockNo,
+          status: "Issued",
+        });
+      }
+      // A design with no diamond sizes on its PD sheet still gets a line, so
+      // the entry can be made by hand rather than not at all.
+      if (!s.lines.length) {
+        out.push({
+          ...BLANK_JANGAD, date: d, designNo: s.designNo, subDesignNo: p.no,
+          product: s.product, memoNo: memo, stockCode: p.stockNo, status: "Issued",
+        });
+      }
+    }
+    return out;
+  }
+
+  const togglePiece = (no: string) => {
+    if (!seed) return;
+    const next = new Set(picked);
+    if (next.has(no)) next.delete(no);
+    else next.add(no);
+    setPicked(next);
+    setRows(build(seed, next, date, memoNo));
+  };
+
+  const allPieces = () => {
+    if (!seed) return;
+    const next = new Set(
+      picked.size === seed.pieces.length ? [] : seed.pieces.map((p) => p.no)
+    );
+    setPicked(next);
+    setRows(build(seed, next, date, memoNo));
+  };
+
+  // Date and Memo No. are the same for the whole issue, so they are set once
+  // above and pushed into every row rather than typed twenty times.
+  const setDateAll = (v: string) => {
+    setDate(v);
+    setRows((list) => list.map((r) => ({ ...r, date: v })));
+  };
+  const setMemoAll = (v: string) => {
+    setMemoNo(v);
+    setRows((list) => list.map((r) => ({ ...r, memoNo: v })));
+  };
+
+  const setCell = (i: number, k: JangadField, v: string) =>
+    setRows((list) =>
+      list.map((r, n) => {
+        if (n !== i) return r;
+        const next = { ...r, [k]: v };
+        // Carats follow the stone count when the count is corrected and the
+        // per-stone weight is known from what was fetched.
+        if (k === "pcs") {
+          const per = perStone(r);
+          if (per) next.carats = caratsFor(v, per);
+        }
+        return next;
+      })
+    );
+
+  // The weight of one stone, recovered from the fetched pcs/carats pair.
+  function perStone(r: Draft): string {
+    const p = num(r.pcs), c = num(r.carats);
+    if (p === null || c === null || p === 0) return "";
+    return String(c / p);
+  }
+
+  async function save() {
+    if (!rows.length) {
+      setError("Pick at least one piece first.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      const res = await fetch("/api/jangad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows,
+          pdId: seed?.pdId, pdNo: seed?.pdNo, demandNo: seed?.demandNo,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `Could not save (${res.status}).`);
+      router.push(`/jangad?q=${encodeURIComponent(seed?.designNo || "")}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the entries.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="jg-lookup">
+        <label className="field">
+          <span>Design number</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void lookup(); }}
+            placeholder="SN-BR-AMF-41-49 or a single piece, SN-BR-AMF-46"
+          />
+        </label>
+        <button className="btn btn-primary" onClick={lookup} disabled={looking}>
+          {looking ? "Looking…" : "Fetch design"}
+        </button>
+        <p className="pieces-hint">
+          Everything on the PD sheet and its demand is pulled in. Type the whole
+          run, or one piece if that is all the packet says.
+        </p>
+      </div>
+      {error && <p className="save-error">{error}</p>}
+
+      {seed && (
+        <>
+          <section className="jg-found">
+            <div className="jg-found-head">
+              <h2>{seed.designNo}</h2>
+              <span className="jg-tag">{seed.pdNo}</span>
+              {seed.demandNo && <span className="jg-tag">{seed.demandNo}</span>}
+              {seed.product && <span className="jg-muted">{seed.product}</span>}
+            </div>
+
+            <div className="two">
+              <label className="field"><span>Date</span>
+                <input type="date" value={date} onChange={(e) => setDateAll(e.target.value)} /></label>
+              <label className="field"><span>Memo No.</span>
+                <input value={memoNo} onChange={(e) => setMemoAll(e.target.value)}
+                  placeholder="SS/26-27/014" /></label>
+            </div>
+
+            <div className="jg-pieces">
+              <div className="jg-pieces-head">
+                <span>Pieces receiving diamonds</span>
+                <button type="button" className="linkbtn" onClick={allPieces}>
+                  {picked.size === seed.pieces.length ? "Clear all" : "Select all"}
+                </button>
+              </div>
+              <div className="jg-piece-list">
+                {seed.pieces.map((p) => (
+                  <label key={p.no} className={picked.has(p.no) ? "jg-piece on" : "jg-piece"}>
+                    <input
+                      type="checkbox"
+                      checked={picked.has(p.no)}
+                      onChange={() => togglePiece(p.no)}
+                    />
+                    <b>{p.no}</b>
+                    <small>{p.stockNo ? `stock ${p.stockNo}` : p.status}</small>
+                  </label>
+                ))}
+              </div>
+              <p className="pieces-hint">
+                {seed.lines.length
+                  ? `${seed.lines.length} diamond ${seed.lines.length === 1 ? "size" : "sizes"} on this design — ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`
+                  : "This design has no diamond sizes on its PD sheet, so the sizes are yours to fill in."}
+              </p>
+            </div>
+          </section>
+
+          {rows.length > 0 && (
+            <>
+              <div className="jg-scroll">
+                <table className="jg-table">
+                  <thead>
+                    <tr>
+                      <th className="jg-sr">#</th>
+                      {issueCols.map((c) => <th key={c.key}>{c.header}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        <td className="jg-sr">{i + 1}</td>
+                        {issueCols.map((c) => (
+                          <td key={c.key} data-label={c.header}>
+                            {c.key === "setting" ? (
+                              <Combo value={r.setting} onChange={(v) => setCell(i, "setting", v)}
+                                options={SETTINGS} placeholder="Prong" />
+                            ) : (
+                              <input
+                                type={c.kind === "date" ? "date" : "text"}
+                                inputMode={c.kind === "number" ? "decimal" : undefined}
+                                value={r[c.key]}
+                                onChange={(e) => setCell(i, c.key, e.target.value)}
+                                readOnly={c.key === "designNo" || c.key === "subDesignNo"}
+                                className={
+                                  c.key === "designNo" || c.key === "subDesignNo" ? "jg-fixed" : ""
+                                }
+                              />
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="pieces-actions">
+                <button className="btn btn-primary" onClick={save} disabled={saving}>
+                  {saving ? "Saving…" : `Save ${rows.length} ${rows.length === 1 ? "entry" : "entries"}`}
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+}

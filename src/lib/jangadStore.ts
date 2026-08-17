@@ -1,0 +1,251 @@
+// Diamond jangad register store — same private Vercel Blob pattern as the
+// other modules, in its own JSON document.
+//
+// Unlike memos or PD sheets this is not a document with a number: it is a
+// ledger, one row per piece per diamond size, matching the accountant's
+// workbook. Rows are added in batches when diamonds are issued, then filled in
+// over the following weeks as jewellery and stones come back.
+import "server-only";
+import { get, put, BlobNotFoundError } from "@vercel/blob";
+import {
+  BLANK_JANGAD, JANGAD_FIELDS, caratsFor, type JangadField, type JangadRow,
+} from "./jangadConfig";
+import { getPdSheet, findByDesignNo } from "./pdStore";
+import { listDemands } from "./demandStore";
+import { todayInput } from "./memoFormat";
+import { pieceNumbers, parseDesignNo, type PdPiece } from "./designNo";
+
+const DB_PATH = "jangad/db.json";
+
+export type JangadDB = { rows: JangadRow[]; seq: number };
+
+export function isJangadStorageConfigured(): boolean {
+  return !!process.env.BLOB_READ_WRITE_TOKEN;
+}
+
+function requireToken(): string {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) {
+    throw new Error(
+      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
+    );
+  }
+  return token;
+}
+
+async function readDB(token: string): Promise<JangadDB> {
+  try {
+    const result = await get(DB_PATH, { access: "private", token, useCache: false });
+    if (!result || result.statusCode !== 200 || !result.stream) return { rows: [], seq: 0 };
+    const db = (await new Response(result.stream).json()) as Partial<JangadDB>;
+    return { rows: db.rows || [], seq: db.seq || 0 };
+  } catch (err) {
+    if (err instanceof BlobNotFoundError) return { rows: [], seq: 0 };
+    throw err;
+  }
+}
+
+async function writeDB(db: JangadDB, token: string): Promise<void> {
+  await put(DB_PATH, JSON.stringify(db), {
+    access: "private",
+    token,
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+  });
+}
+
+// Every column is free text — the workbook's own columns are — so normalising
+// an incoming row is trimming the 25 fields and ignoring anything else sent.
+export function normalizeJangadRow(input: unknown): Record<JangadField, string> {
+  const body = (input || {}) as Record<string, unknown>;
+  const out = { ...BLANK_JANGAD };
+  for (const k of JANGAD_FIELDS) {
+    const v = body[k];
+    if (typeof v === "string") out[k] = v.trim();
+  }
+  return out;
+}
+
+function isEmptyRow(r: Record<JangadField, string>): boolean {
+  return JANGAD_FIELDS.every((k) => !r[k]);
+}
+
+export async function listJangad(): Promise<JangadRow[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  // Newest batch first, but a batch keeps the order it was entered in so the
+  // pieces of one design stay together and in number order.
+  return db.rows.slice().sort((a, b) => (a.createdAt === b.createdAt
+    ? a.id.localeCompare(b.id, undefined, { numeric: true })
+    : a.createdAt < b.createdAt ? 1 : -1));
+}
+
+export async function getJangadRow(id: string): Promise<JangadRow | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  return db.rows.find((r) => r.id === id) || null;
+}
+
+export type JangadLink = { pdId?: string; pdNo?: string; demandNo?: string };
+
+export async function addJangadRows(
+  rows: Record<JangadField, string>[],
+  link: JangadLink = {}
+): Promise<JangadRow[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const now = new Date().toISOString();
+
+  const added: JangadRow[] = [];
+  for (const r of rows) {
+    if (isEmptyRow(r)) continue;
+    db.seq += 1;
+    added.push({
+      ...r,
+      id: `JG-${String(db.seq).padStart(5, "0")}`,
+      pdId: link.pdId,
+      pdNo: link.pdNo,
+      demandNo: link.demandNo,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  if (!added.length) return [];
+
+  db.rows.push(...added);
+  await writeDB(db, token);
+  return added;
+}
+
+export async function updateJangadRow(
+  id: string,
+  patch: Record<JangadField, string>
+): Promise<JangadRow | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const idx = db.rows.findIndex((r) => r.id === id);
+  if (idx === -1) return null;
+  const updated: JangadRow = { ...db.rows[idx], ...patch, updatedAt: new Date().toISOString() };
+  db.rows[idx] = updated;
+  await writeDB(db, token);
+  return updated;
+}
+
+// Saving a screenful at once: the accountant fills in a whole design's rows and
+// presses save once, so one read and one write cover the lot.
+export async function updateJangadRows(
+  patches: { id: string; row: Record<JangadField, string> }[]
+): Promise<JangadRow[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const now = new Date().toISOString();
+  const touched: JangadRow[] = [];
+  for (const p of patches) {
+    const idx = db.rows.findIndex((r) => r.id === p.id);
+    if (idx === -1) continue;
+    db.rows[idx] = { ...db.rows[idx], ...p.row, updatedAt: now };
+    touched.push(db.rows[idx]);
+  }
+  if (!touched.length) return [];
+  await writeDB(db, token);
+  return touched;
+}
+
+export async function deleteJangadRow(id: string): Promise<boolean> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const before = db.rows.length;
+  db.rows = db.rows.filter((r) => r.id !== id);
+  if (db.rows.length === before) return false;
+  await writeDB(db, token);
+  return true;
+}
+
+export async function exportJangadDb(): Promise<JangadDB> {
+  const token = requireToken();
+  return readDB(token);
+}
+
+// --- Auto-fetch from a design number -----------------------------------------
+
+export type JangadSeed = {
+  pdId: string;
+  pdNo: string;
+  designNo: string;
+  product: string;
+  demandNo: string;
+  pieces: { no: string; status: string; stockNo: string; suggested: boolean }[];
+  // One per diamond size on the design, ready to be crossed with the pieces.
+  lines: {
+    shape: string; size: string; pcs: string; carats: string; growth: string;
+  }[];
+};
+
+// Everything the accountant would otherwise copy out of the PD sheet by hand.
+//
+// The design number is the way in — a whole run ("SN-BR-AMF-41-49") or one
+// piece of it ("SN-BR-AMF-46"), because by this point that piece may be the
+// only thing written on the packet.
+export async function seedFromDesign(query: string): Promise<JangadSeed | null> {
+  const hits = await findByDesignNo(query);
+  if (!hits.length) return null;
+  const { sheet, hit } = hits[0];
+
+  // Its diamond demand, if one was raised — that is where CVD/HPHT is decided.
+  const demands = await listDemands().catch(() => []);
+  const demand = demands.find((d) => d.pdId === sheet.id);
+  const growthFor = (shape: string) =>
+    demand?.rows.find((r) => r.shape.trim().toLowerCase() === shape.trim().toLowerCase())
+      ?.growth || demand?.rows[0]?.growth || "CVD";
+
+  const lines = (sheet.diaLines || [])
+    .filter((l) => l.shape || l.size || l.mm || l.pcs)
+    .map((l) => ({
+      shape: l.shape.trim().toUpperCase(),
+      // Round stones are known by their sieve name, fancy ones by their MM.
+      size: (l.size.trim() || l.mm.trim()),
+      pcs: l.pcs.trim(),
+      carats: caratsFor(l.pcs, l.pointer),
+      growth: growthFor(l.shape),
+    }));
+
+  // Searching for one piece means that piece; searching the design offers the
+  // ones actually in production, since those are what diamonds go out against.
+  const all: PdPiece[] = sheet.pieces?.length
+    ? sheet.pieces
+    : pieceNumbers(parseDesignNo(sheet.sku)).map((no, i) => ({
+        no, n: i, status: "pending" as const, stockNo: "", note: "",
+      }));
+
+  const named = hit.kind === "piece" ? hit.piece : "";
+  const anyStarted = all.some((p) => p.status === "production" || p.status === "ready");
+
+  return {
+    pdId: sheet.id,
+    pdNo: sheet.pdNo,
+    designNo: sheet.sku,
+    product: sheet.product,
+    demandNo: demand?.demandNo || "",
+    pieces: all.map((p) => ({
+      no: p.no,
+      status: p.status,
+      stockNo: p.stockNo,
+      suggested: named
+        ? p.no === named
+        : p.status === "production" || p.status === "ready" ||
+          (!anyStarted && p.status === "pending"),
+    })),
+    lines,
+  };
+}
+
+// Used by the register to show a design's PD sheet alongside its rows.
+export async function pdForRow(row: JangadRow) {
+  if (!row.pdId) return null;
+  return getPdSheet(row.pdId).catch(() => null);
+}
+
+export function jangadDate(): string {
+  return todayInput();
+}

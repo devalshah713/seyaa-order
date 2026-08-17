@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import Logo from "./Logo";
 import ThemeToggle from "./ThemeToggle";
 import { COMPANY } from "@/lib/memoFormat";
-import { canUseModule } from "@/lib/access";
+import { canUseModule, type ModuleKey } from "@/lib/access";
 import type { Role } from "@/lib/session";
 
 type Props = { user: { username: string; role: Role; mods?: string[] } | null };
@@ -26,8 +26,7 @@ export default function TopBar({ user }: Props) {
     path === base || (path.startsWith(`${base}/`) && path !== `${base}/new`);
 
   // Only show what this account may actually open; admins see everything.
-  const can = (key: "memos" | "orders" | "stock" | "pd") =>
-    !!user && canUseModule(user, key);
+  const can = (key: ModuleKey) => !!user && canUseModule(user, key);
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -78,6 +77,9 @@ export default function TopBar({ user }: Props) {
               <Link href="/pd" className={on("/pd") ? "active" : ""}>PD Sheets</Link>
               <Link href="/demand" className={on("/demand") ? "active" : ""}>Demands</Link>
             </>
+          )}
+          {can("jangad") && (
+            <Link href="/jangad" className={on("/jangad") ? "active" : ""}>Jangad</Link>
           )}
           {user.role === "admin" && (
             <>

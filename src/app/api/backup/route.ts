@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { exportDb } from "@/lib/memoStore";
 import { exportPdDb } from "@/lib/pdStore";
 import { exportDemandDb } from "@/lib/demandStore";
+import { exportJangadDb } from "@/lib/jangadStore";
+import { buildJangadWorkbook } from "@/lib/jangadExport";
 import { buildMemoWorkbook } from "@/lib/memoExport";
 import { isBackupConfigured, tokenOk } from "@/lib/backup";
 
 // Secret-protected backup download for the user's own PC to pull nightly.
-//   ?format=json  -> full restorable database (counters + memos)
-//   ?format=xlsx  -> readable Excel of all memos
+//   ?format=json   -> full restorable database (counters + memos)
+//   ?format=xlsx   -> readable Excel of all memos
+//   ?format=jangad -> the diamond jangad register in the accounts workbook
 // Auth: `x-backup-token` header or `?token=` must equal BACKUP_TOKEN.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +30,22 @@ export async function GET(req: NextRequest): Promise<Response> {
   const stamp = new Date().toISOString().slice(0, 10);
 
   try {
+    // The accounts team's own workbook, so the nightly copy on the PC includes
+    // the register in the format they already work in.
+    if (format === "jangad") {
+      const db = await exportJangadDb();
+      const buffer = await buildJangadWorkbook(db.rows);
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          "content-type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "content-disposition": `attachment; filename="Diamond Jangad ${stamp}.xlsx"`,
+          "cache-control": "no-store",
+        },
+      });
+    }
+
     if (format === "xlsx") {
       const db = await exportDb();
       const buffer = await buildMemoWorkbook(db.memos, db.events);
@@ -46,7 +65,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     const db = await exportDb();
     const pd = await exportPdDb().catch(() => ({ counters: {}, sheets: [] }));
     const demand = await exportDemandDb().catch(() => ({ counters: {}, demands: [] }));
-    return new NextResponse(JSON.stringify({ ...db, pd, demand }), {
+    const jangad = await exportJangadDb().catch(() => ({ rows: [], seq: 0 }));
+    return new NextResponse(JSON.stringify({ ...db, pd, demand, jangad }), {
       status: 200,
       headers: {
         "content-type": "application/json",

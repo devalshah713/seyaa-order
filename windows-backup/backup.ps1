@@ -41,6 +41,11 @@ try {
     -OutFile (Join-Path $dataDir "memos.xlsx") -UseBasicParsing
   Log "Saved memos.xlsx"
 
+  # 2b) The diamond jangad register, in the accounts team's own workbook format
+  Invoke-WebRequest -Uri "$BaseUrl/api/backup?format=jangad" -Headers $headers `
+    -OutFile (Join-Path $dataDir "diamond-jangad.xlsx") -UseBasicParsing
+  Log "Saved diamond-jangad.xlsx"
+
   # 3) PDFs — only new or edited memos (incremental)
   $data = Get-Content (Join-Path $dataDir "data.json") -Raw | ConvertFrom-Json
   $new = 0; $skip = 0
