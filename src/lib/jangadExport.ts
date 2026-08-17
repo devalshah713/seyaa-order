@@ -1,6 +1,14 @@
 import "server-only";
 import ExcelJS from "exceljs";
-import { EXPORT_COLUMNS, num, type JangadRow } from "./jangadConfig";
+import {
+  EXPORT_COLUMNS, isMergedColumn, mergeSpans, num, type JangadRow,
+} from "./jangadConfig";
+
+// The register is ruled like the paper it replaces.
+const THIN: Partial<ExcelJS.Borders> = {
+  top: { style: "thin" }, left: { style: "thin" },
+  bottom: { style: "thin" }, right: { style: "thin" },
+};
 
 // The register as the accounts team's own workbook: the same 25 columns, in the
 // same order, spelled the same way, so a row exported here pastes straight into
@@ -25,6 +33,7 @@ export async function buildJangadWorkbook(rows: JangadRow[]): Promise<ArrayBuffe
     cell.value = c.header;
     cell.font = { name: "Arial", size: 10, bold: true };
     cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.border = THIN;
   });
 
   // Oldest first, so the register reads as a ledger.
@@ -34,12 +43,15 @@ export async function buildJangadWorkbook(rows: JangadRow[]): Promise<ArrayBuffe
       : a.createdAt < b.createdAt ? -1 : 1
   );
 
-  let r = 2;
+  const FIRST_ROW = 2;
+  let r = FIRST_ROW;
   for (const row of ordered) {
     const line = ws.getRow(r++);
     EXPORT_COLUMNS.forEach((c, i) => {
       const raw = row[c.key] || "";
       const cell = line.getCell(i + 1);
+      cell.border = THIN;
+      cell.alignment = { vertical: "middle" };
       if (!raw) return;
       if (c.kind === "number") {
         const n = num(raw);
@@ -59,6 +71,22 @@ export async function buildJangadWorkbook(rows: JangadRow[]): Promise<ArrayBuffe
       }
     });
   }
+
+  // The design is written once and ruled down its rows, as in the workbook this
+  // replaces: the date, the design number, the product, the memo and the
+  // manufacturer belong to the issue, and the piece number to the piece — not
+  // to each stone size under them.
+  const spans = mergeSpans(ordered);
+  EXPORT_COLUMNS.forEach((c, i) => {
+    if (!isMergedColumn(c.key)) return;
+    const col = i + 1;
+    for (const [start, span] of spans.get(c.key) || []) {
+      if (span < 2) continue;
+      const top = FIRST_ROW + start;
+      ws.mergeCells(top, col, top + span - 1, col);
+      ws.getCell(top, col).alignment = { vertical: "middle", wrapText: true };
+    }
+  });
 
   const out = await wb.xlsx.writeBuffer();
   const u8 = out instanceof Uint8Array ? out : new Uint8Array(out as ArrayBuffer);

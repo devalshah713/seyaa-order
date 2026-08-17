@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Combo from "@/components/Combo";
 import { todayInput } from "@/lib/memoFormat";
 import { splitPiece } from "@/lib/designNo";
 import {
-  BLANK_JANGAD, SETTINGS, columnsFor, type JangadField,
+  BLANK_JANGAD, SETTINGS, columnsFor, isMergedColumn, mergeSpans,
+  type JangadField,
 } from "@/lib/jangadConfig";
 import type { JangadSeed } from "@/lib/jangadStore";
 
@@ -120,8 +121,14 @@ export default function NewJangadForm() {
     setRows((list) => list.map((r) => ({ ...r, memoNo: v })));
   };
 
-  const setCell = (i: number, k: JangadField, v: string) =>
-    setRows((list) => list.map((r, n) => (n === i ? { ...r, [k]: v } : r)));
+  // A merged cell is one box standing for the rows beneath it, so writing in
+  // it writes to all of them.
+  const setCell = (from: number, span: number, k: JangadField, v: string) =>
+    setRows((list) =>
+      list.map((r, n) => (n >= from && n < from + span ? { ...r, [k]: v } : r))
+    );
+
+  const spans = useMemo(() => mergeSpans(rows), [rows]);
 
   // Mfg Name comes off the PD sheet, but the whole issue goes to one factory,
   // so changing it changes every row rather than being retyped down the column.
@@ -248,25 +255,35 @@ export default function NewJangadForm() {
                     {rows.map((r, i) => (
                       <tr key={i}>
                         <td className="jg-sr">{i + 1}</td>
-                        {issueCols.map((c) => (
-                          <td key={c.key} data-label={c.header}>
-                            {c.key === "setting" ? (
-                              <Combo value={r.setting} onChange={(v) => setCell(i, "setting", v)}
-                                options={SETTINGS} placeholder="Prong" />
-                            ) : (
-                              <input
-                                type={c.kind === "date" ? "date" : "text"}
-                                inputMode={c.kind === "number" ? "decimal" : undefined}
-                                value={r[c.key]}
-                                onChange={(e) => setCell(i, c.key, e.target.value)}
-                                readOnly={c.key === "designNo" || c.key === "subDesignNo"}
-                                className={
-                                  c.key === "designNo" || c.key === "subDesignNo" ? "jg-fixed" : ""
-                                }
-                              />
-                            )}
-                          </td>
-                        ))}
+                        {issueCols.map((c) => {
+                          const span = isMergedColumn(c.key) ? spans.get(c.key)?.get(i) : 1;
+                          // No entry means a run above already covers this row.
+                          if (span === undefined) return null;
+                          const fixed = c.key === "designNo" || c.key === "subDesignNo";
+                          return (
+                            <td
+                              key={c.key}
+                              data-label={c.header}
+                              rowSpan={span > 1 ? span : undefined}
+                              className={span > 1 ? "merged" : undefined}
+                            >
+                              {c.key === "setting" ? (
+                                <Combo value={r.setting}
+                                  onChange={(v) => setCell(i, span, "setting", v)}
+                                  options={SETTINGS} placeholder="Prong" />
+                              ) : (
+                                <input
+                                  type={c.kind === "date" ? "date" : "text"}
+                                  inputMode={c.kind === "number" ? "decimal" : undefined}
+                                  value={r[c.key]}
+                                  onChange={(e) => setCell(i, span, c.key, e.target.value)}
+                                  readOnly={fixed}
+                                  className={fixed ? "jg-fixed" : ""}
+                                />
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>

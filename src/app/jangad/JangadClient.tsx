@@ -6,7 +6,8 @@ import Combo from "@/components/Combo";
 import { joinDesignNo, matchDesign } from "@/lib/designNo";
 import {
   JANGAD_COLUMNS, SELL_STATUSES, SETTINGS, STAGES, STATUSES,
-  columnsFor, expectedCtsReturn, expectedPcsReturn, num, shortfall, totalPriceFor,
+  columnsFor, expectedCtsReturn, expectedPcsReturn, isMergedColumn, mergeSpans,
+  num, shortfall, totalPriceFor,
   type JangadColumn, type JangadField, type JangadRow, type JangadStage,
 } from "@/lib/jangadConfig";
 
@@ -65,6 +66,8 @@ export default function JangadClient({
     });
   }, [q, rows]);
 
+  const spans = useMemo(() => mergeSpans(shown), [shown]);
+
   const cols: JangadColumn[] =
     view === "all"
       ? JANGAD_COLUMNS
@@ -77,6 +80,14 @@ export default function JangadClient({
 
   const readOnly = (key: JangadField) =>
     view !== "issue" && view !== "all" && ANCHORS.includes(key);
+
+  // A merged cell is one box standing for several rows — the date of an issue,
+  // the memo it went out on — so writing in it writes to every row it covers.
+  function setCells(ids: string[], key: JangadField, value: string) {
+    setNote("");
+    const wanted = new Set(ids);
+    setRows((list) => list.map((r) => (wanted.has(r.id) ? { ...r, [key]: value } : r)));
+  }
 
   function setCell(id: string, key: JangadField, value: string) {
     setNote("");
@@ -147,7 +158,7 @@ export default function JangadClient({
     }
   }
 
-  function cell(row: JangadRow, c: JangadColumn) {
+  function cell(row: JangadRow, c: JangadColumn, covers: string[]) {
     const value = row[c.key];
     if (readOnly(c.key)) {
       // "63" alone says nothing when you are filling in what came back, so the
@@ -156,20 +167,20 @@ export default function JangadClient({
       return <span className="jg-anchor">{shownValue || "—"}</span>;
     }
 
+    const write = (v: string) =>
+      covers.length > 1 ? setCells(covers, c.key, v) : setCell(row.id, c.key, v);
+
     if (c.key === "setting" || c.key === "status" || c.key === "sellGivenStatus") {
       const options =
         c.key === "setting" ? SETTINGS : c.key === "status" ? STATUSES : SELL_STATUSES;
-      return (
-        <Combo value={value} onChange={(v) => setCell(row.id, c.key, v)}
-          options={options} placeholder="—" />
-      );
+      return <Combo value={value} onChange={write} options={options} placeholder="—" />;
     }
     return (
       <input
         type={c.kind === "date" ? "date" : "text"}
         inputMode={c.kind === "number" ? "decimal" : undefined}
         value={value}
-        onChange={(e) => setCell(row.id, c.key, e.target.value)}
+        onChange={(e) => write(e.target.value)}
       />
     );
   }
@@ -257,9 +268,25 @@ export default function JangadClient({
                           </span>
                         )}
                       </td>
-                      {cols.map((c) => (
-                        <td key={c.key} data-label={c.header}>{cell(r, c)}</td>
-                      ))}
+                      {cols.map((c) => {
+                        const span = isMergedColumn(c.key)
+                          ? spans.get(c.key)?.get(i)
+                          : 1;
+                        // No entry means a run started above and already
+                        // covers this row, so this line draws no cell at all.
+                        if (span === undefined) return null;
+                        const covers = shown.slice(i, i + span).map((x) => x.id);
+                        return (
+                          <td
+                            key={c.key}
+                            data-label={c.header}
+                            rowSpan={span > 1 ? span : undefined}
+                            className={span > 1 ? "merged" : undefined}
+                          >
+                            {cell(r, c, covers)}
+                          </td>
+                        );
+                      })}
                       <td className="jg-sr">
                         <button className="del" onClick={() => del(r)}
                           title="Delete entry" aria-label="Delete entry">×</button>
