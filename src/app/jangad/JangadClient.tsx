@@ -40,6 +40,9 @@ export default function JangadClient({
   const [to, setTo] = useState("");
   const [mfg, setMfg] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Set by "Show them" on the blocked-save message: the entries holding the
+  // save up, so they can be dealt with without hunting through the register.
+  const [focus, setFocus] = useState<Set<string> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -67,6 +70,7 @@ export default function JangadClient({
   }, [from, to, mfg]);
 
   const shown = useMemo(() => {
+    if (focus) return rows.filter((r) => focus.has(r.id));
     const scoped = rows.filter(inRange);
     const needle = q.trim();
     if (!needle) return scoped;
@@ -88,7 +92,7 @@ export default function JangadClient({
               r.shape, r.size, r.status, r.mfgName]
         .join(" ").toLowerCase().includes(lower);
     });
-  }, [q, rows, inRange]);
+  }, [q, rows, inRange, focus]);
 
   const spans = useMemo(() => mergeSpans(shown), [shown]);
 
@@ -129,8 +133,15 @@ export default function JangadClient({
     if (!undated.length) return "";
     const stages = new Set<JangadStage>();
     for (const r of undated) for (const st of missingStageDates(r)) stages.add(st);
+    // Naming the column is not enough when it lives on a tab that is not the
+    // one being worked on — which is the usual case, since a stage is normally
+    // finished from its own screen.
     const names = [...stages]
-      .map((st) => JANGAD_COLUMNS.find((c) => c.key === STAGE_DATE[st])!.header)
+      .map((st) => {
+        const col = JANGAD_COLUMNS.find((c) => c.key === STAGE_DATE[st])!.header;
+        const tabName = STAGES.find((x) => x.key === st)!.label;
+        return st === view ? col : `${col} (on the ${tabName} tab)`;
+      })
       .join(" and ");
     const which = undated
       .slice(0, 3)
@@ -138,7 +149,15 @@ export default function JangadClient({
       .join(", ");
     const more = undated.length > 3 ? ` and ${undated.length - 3} more` : "";
     return `${undated.length} ${undated.length === 1 ? "entry has" : "entries have"} figures but no ${names}: ${which}${more}.`;
-  }, [undated]);
+  }, [undated, view]);
+
+  // Take them to the entries, on the tab whose date is missing.
+  function showUndated() {
+    const first = undated.flatMap((r) => missingStageDates(r))[0];
+    if (first) setView(first);
+    setFocus(new Set(undated.map((r) => r.id)));
+    setError("");
+  }
 
   const readOnly = (key: JangadField) =>
     view !== "issue" && view !== "all" && ANCHORS.includes(key);
@@ -188,6 +207,7 @@ export default function JangadClient({
     if (undated.length) {
       setNote("");
       setError(`${undatedNote} Fill the date in before saving — the boxes are marked.`);
+      showUndated();
       return;
     }
     setError("");
@@ -283,7 +303,7 @@ export default function JangadClient({
         <input
           className="search"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); setFocus(null); }}
           placeholder="Design number, one piece, memo no. or stock code"
         />
         <a href="/api/jangad/export" className="btn">Export to Excel</a>
@@ -327,6 +347,16 @@ export default function JangadClient({
 
       {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
       {note && <p className="pieces-ok">{note}</p>}
+
+      {focus && (
+        <p className="jg-focus">
+          Showing the {focus.size} {focus.size === 1 ? "entry" : "entries"} waiting
+          on a date.{" "}
+          <button type="button" className="linkbtn" onClick={() => setFocus(null)}>
+            Show everything again
+          </button>
+        </p>
+      )}
 
       {shown.length > 0 && (
         <div className="jg-pick no-print">
@@ -479,7 +509,14 @@ export default function JangadClient({
             <button className="btn btn-primary" onClick={save} disabled={saving || !dirty.length}>
               {saving ? "Saving…" : dirty.length ? `Save ${dirty.length} changed` : "Saved"}
             </button>
-            {undated.length > 0 && <span className="jg-blocked">{undatedNote}</span>}
+            {undated.length > 0 && (
+              <span className="jg-blocked">
+                {undatedNote}{" "}
+                <button type="button" className="linkbtn" onClick={showUndated}>
+                  Show them
+                </button>
+              </span>
+            )}
           </div>
         </>
       )}

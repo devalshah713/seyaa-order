@@ -1272,3 +1272,4 @@ table.jg-table input.jg-needed {
     background: color-mix(in srgb, #B26A23 6%, var(--panel));
   }
 }
+.jg-focus { font-size: 12.5px; color: var(--panel-muted); margin: 0 0 12px; }

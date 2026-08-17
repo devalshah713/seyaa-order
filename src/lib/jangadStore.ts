@@ -8,8 +8,8 @@
 import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
 import {
-  BLANK_JANGAD, JANGAD_FIELDS, suggestedPieces,
-  type JangadField, type JangadRow,
+  BLANK_JANGAD, JANGAD_FIELDS, expectedCtsReturn, expectedPcsReturn,
+  suggestedPieces, type JangadField, type JangadRow,
 } from "./jangadConfig";
 import { getPdSheet, findByDesignNo, markPiecesInProduction } from "./pdStore";
 import { listDemands } from "./demandStore";
@@ -74,14 +74,33 @@ function isEmptyRow(r: Record<JangadField, string>): boolean {
   return JANGAD_FIELDS.every((k) => !r[k]);
 }
 
+// The return columns once had the expected figure written into them as soon as
+// the used figures were known. That figure was nobody's count, and rows saved
+// while it did that still carry it: they read as a return that was never made,
+// and they hold up their own entry by demanding a return date for it.
+//
+// Undated return figures can no longer be saved at all, so anything of the sort
+// still in the register came from that and only that. Clearing it puts the
+// figure back where it belongs — offered in the empty box as a hint.
+function dropUncountedReturn(r: JangadRow): JangadRow {
+  if (r.returnDate.trim()) return r;
+  const out = { ...r };
+  if (out.ctsReturn && out.ctsReturn === expectedCtsReturn(out)) out.ctsReturn = "";
+  if (out.pcsReturn && out.pcsReturn === expectedPcsReturn(out)) out.pcsReturn = "";
+  return out;
+}
+
 export async function listJangad(): Promise<JangadRow[]> {
   const token = requireToken();
   const db = await readDB(token);
   // Newest batch first, but a batch keeps the order it was entered in so the
   // pieces of one design stay together and in number order.
-  return db.rows.slice().sort((a, b) => (a.createdAt === b.createdAt
-    ? a.id.localeCompare(b.id, undefined, { numeric: true })
-    : a.createdAt < b.createdAt ? 1 : -1));
+  return db.rows
+    .slice()
+    .sort((a, b) => (a.createdAt === b.createdAt
+      ? a.id.localeCompare(b.id, undefined, { numeric: true })
+      : a.createdAt < b.createdAt ? 1 : -1))
+    .map(dropUncountedReturn);
 }
 
 // The rows behind a print, in the order they were asked for — the slip should
@@ -89,7 +108,7 @@ export async function listJangad(): Promise<JangadRow[]> {
 export async function getJangadRows(ids: string[]): Promise<JangadRow[]> {
   const token = requireToken();
   const db = await readDB(token);
-  const byId = new Map(db.rows.map((r) => [r.id, r]));
+  const byId = new Map(db.rows.map((r) => [r.id, dropUncountedReturn(r)]));
   return ids.map((id) => byId.get(id)).filter((r): r is JangadRow => !!r);
 }
 
@@ -196,7 +215,8 @@ export async function deleteJangadRow(id: string): Promise<boolean> {
 
 export async function exportJangadDb(): Promise<JangadDB> {
   const token = requireToken();
-  return readDB(token);
+  const db = await readDB(token);
+  return { ...db, rows: db.rows.map(dropUncountedReturn) };
 }
 
 // --- Auto-fetch from a design number -----------------------------------------
