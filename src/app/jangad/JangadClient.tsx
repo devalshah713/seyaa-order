@@ -32,6 +32,13 @@ export default function JangadClient({
   const [rows, setRows] = useState<JangadRow[]>(saved);
   const [q, setQ] = useState(initialQuery);
   const [view, setView] = useState<View>("issue");
+  // Filters kept apart from the free-text search: an audit asks "everything
+  // that went to this factory in July", which is a date range and a name, not
+  // a phrase.
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [mfg, setMfg] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -43,19 +50,35 @@ export default function JangadClient({
     return rows.filter((r) => JSON.stringify(before.get(r.id)) !== JSON.stringify(r));
   }, [rows, saved]);
 
+  // Every manufacturer the register has ever been issued to, for the filter.
+  const factories = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of rows) if (r.mfgName) seen.add(r.mfgName);
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  // Dates are stored as yyyy-mm-dd, which compares correctly as text.
+  const inRange = useMemo(() => {
+    return (r: JangadRow) =>
+      (!from || (r.date && r.date >= from)) &&
+      (!to || (r.date && r.date <= to)) &&
+      (!mfg || r.mfgName === mfg);
+  }, [from, to, mfg]);
+
   const shown = useMemo(() => {
+    const scoped = rows.filter(inRange);
     const needle = q.trim();
-    if (!needle) return rows;
+    if (!needle) return scoped;
     const lower = needle.toLowerCase();
 
     // Naming one piece means that piece, not the whole design it came from, so
     // a piece-level hit wins outright when there is one. The register keeps the
     // design and the piece in separate columns, so the number being searched
     // for has to be put back together first.
-    const byPiece = rows.filter((r) => matchDesign(fullPieceNo(r), needle));
+    const byPiece = scoped.filter((r) => matchDesign(fullPieceNo(r), needle));
     if (byPiece.length) return byPiece;
 
-    return rows.filter((r) => {
+    return scoped.filter((r) => {
       if (r.designNo && matchDesign(r.designNo, needle)) return true;
       // runNo is the whole run off the PD sheet ("…-63-67"), which no column
       // holds any more — matched as plain text so searching it still finds
@@ -64,7 +87,7 @@ export default function JangadClient({
               r.shape, r.size, r.status, r.mfgName]
         .join(" ").toLowerCase().includes(lower);
     });
-  }, [q, rows]);
+  }, [q, rows, inRange]);
 
   const spans = useMemo(() => mergeSpans(shown), [shown]);
 
@@ -77,6 +100,20 @@ export default function JangadClient({
             : (ANCHORS.map((k) => JANGAD_COLUMNS.find((c) => c.key === k)!) )),
           ...columnsFor(view),
         ];
+
+  // What is ticked for printing. Kept as ids rather than indexes so filtering
+  // or reordering the list underneath cannot change what was chosen.
+  const shownIds = useMemo(() => shown.map((r) => r.id), [shown]);
+  const pickedShown = shownIds.filter((id) => picked.has(id));
+
+  const toggle = (ids: string[], on: boolean) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) { if (on) next.add(id); else next.delete(id); }
+      return next;
+    });
+
+  const allShownPicked = shownIds.length > 0 && pickedShown.length === shownIds.length;
 
   const readOnly = (key: JangadField) =>
     view !== "issue" && view !== "all" && ANCHORS.includes(key);
@@ -207,6 +244,24 @@ export default function JangadClient({
         <Link href="/jangad/new" className="btn btn-primary">+ Issue Diamonds</Link>
       </div>
 
+      <div className="jg-filters no-print">
+        <label className="field"><span>From</span>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="field"><span>To</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label className="field"><span>Factory</span>
+          <select value={mfg} onChange={(e) => setMfg(e.target.value)}>
+            <option value="">All factories</option>
+            {factories.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select></label>
+        {(from || to || mfg) && (
+          <button type="button" className="linkbtn"
+            onClick={() => { setFrom(""); setTo(""); setMfg(""); }}>
+            Clear filters
+          </button>
+        )}
+      </div>
+
       <div className="kind-tabs jg-tabs">
         {STAGES.map((s) => (
           <button key={s.key} className={view === s.key ? "active" : ""}
@@ -227,6 +282,39 @@ export default function JangadClient({
       {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
       {note && <p className="pieces-ok">{note}</p>}
 
+      {shown.length > 0 && (
+        <div className="jg-pick no-print">
+          <label className="jg-pick-all">
+            <input
+              type="checkbox"
+              checked={allShownPicked}
+              onChange={(e) => toggle(shownIds, e.target.checked)}
+            />
+            <span>{allShownPicked ? "Clear selection" : "Select all shown"}</span>
+          </label>
+          <span className="jg-pick-count">
+            {picked.size
+              ? `${picked.size} selected for printing`
+              : "Tick the entries going out on one memo"}
+          </span>
+          {picked.size > 0 && (
+            <>
+              <button type="button" className="linkbtn" onClick={() => setPicked(new Set())}>
+                Clear
+              </button>
+              <Link
+                href={`/jangad/print?ids=${encodeURIComponent(
+                  shown.filter((r) => picked.has(r.id)).map((r) => r.id).join(",")
+                )}`}
+                className="btn btn-primary"
+              >
+                Print issue slip
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+
       {shown.length === 0 ? (
         <div className="empty-state">
           <p>
@@ -244,6 +332,7 @@ export default function JangadClient({
             <table className="jg-table">
               <thead>
                 <tr>
+                  <th className="jg-pickcol" />
                   <th className="jg-sr">#</th>
                   {cols.map((c) => <th key={c.key}>{c.header}</th>)}
                   <th className="jg-sr" />
@@ -253,7 +342,19 @@ export default function JangadClient({
                 {shown.map((r, i) => {
                   const gap = shortfall(r);
                   return (
-                    <tr key={r.id} className={gap ? "jg-short" : undefined}>
+                    <tr
+                      key={r.id}
+                      className={[gap ? "jg-short" : "", picked.has(r.id) ? "jg-on" : ""]
+                        .filter(Boolean).join(" ") || undefined}
+                    >
+                      <td className="jg-pickcol">
+                        <input
+                          type="checkbox"
+                          checked={picked.has(r.id)}
+                          onChange={(e) => toggle([r.id], e.target.checked)}
+                          aria-label={`Select ${fullPieceNo(r)}`}
+                        />
+                      </td>
                       <td className="jg-sr">
                         {i + 1}
                         {gap && (

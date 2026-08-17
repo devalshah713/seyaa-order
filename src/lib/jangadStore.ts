@@ -81,6 +81,15 @@ export async function listJangad(): Promise<JangadRow[]> {
     : a.createdAt < b.createdAt ? 1 : -1));
 }
 
+// The rows behind a print, in the order they were asked for — the slip should
+// read in the order the register showed, not in storage order.
+export async function getJangadRows(ids: string[]): Promise<JangadRow[]> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const byId = new Map(db.rows.map((r) => [r.id, r]));
+  return ids.map((id) => byId.get(id)).filter((r): r is JangadRow => !!r);
+}
+
 export async function getJangadRow(id: string): Promise<JangadRow | null> {
   const token = requireToken();
   const db = await readDB(token);
