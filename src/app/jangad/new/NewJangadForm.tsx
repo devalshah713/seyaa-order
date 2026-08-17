@@ -3,9 +3,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Combo from "@/components/Combo";
 import { todayInput } from "@/lib/memoFormat";
+import { splitPiece } from "@/lib/designNo";
 import {
-  BLANK_JANGAD, SETTINGS, caratsFor, columnsFor, num,
-  type JangadField,
+  BLANK_JANGAD, SETTINGS, columnsFor, type JangadField,
 } from "@/lib/jangadConfig";
 import type { JangadSeed } from "@/lib/jangadStore";
 
@@ -25,6 +25,7 @@ export default function NewJangadForm() {
   const [rows, setRows] = useState<Draft[]>([]);
   const [date, setDate] = useState(todayInput());
   const [memoNo, setMemoNo] = useState("");
+  const [mfg, setMfg] = useState("");
   const [looking, setLooking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -44,9 +45,10 @@ export default function NewJangadForm() {
       if (!res.ok) throw new Error(data?.error || `Could not look that up (${res.status}).`);
       const s: JangadSeed = data.seed;
       setSeed(s);
+      setMfg(s.assignedTo);
       const start = new Set(s.pieces.filter((p) => p.suggested).map((p) => p.no));
       setPicked(start);
-      setRows(build(s, start, date, memoNo));
+      setRows(build(s, start, date, memoNo, s.assignedTo));
     } catch (err) {
       setSeed(null);
       setRows([]);
@@ -58,35 +60,33 @@ export default function NewJangadForm() {
 
   // Rows are the pieces crossed with the diamond sizes — one line per stone
   // size per piece, which is how the workbook is written.
-  function build(s: JangadSeed, pieces: Set<string>, d: string, memo: string): Draft[] {
+  //
+  // Issuing splits the run: only some of the five pieces get diamonds now, so
+  // the design and the piece go in separate columns — "SN-BR-AMF-10CT" and
+  // "63" — rather than repeating the whole run on every line.
+  function build(s: JangadSeed, pieces: Set<string>, d: string, memo: string, mfgName: string): Draft[] {
     const out: Draft[] = [];
     for (const p of s.pieces) {
       if (!pieces.has(p.no)) continue;
+      const { design, sub } = splitPiece(p.no);
+      const base = {
+        ...BLANK_JANGAD,
+        date: d,
+        designNo: design,
+        subDesignNo: sub,
+        product: s.product,
+        memoNo: memo,
+        mfgName,
+        stockCode: p.stockNo,
+        status: "Issued",
+      };
       for (const l of s.lines) {
-        out.push({
-          ...BLANK_JANGAD,
-          date: d,
-          designNo: s.designNo,
-          subDesignNo: p.no,
-          product: s.product,
-          shape: l.shape,
-          size: l.size,
-          pcs: l.pcs,
-          carats: l.carats,
-          growth: l.growth,
-          memoNo: memo,
-          stockCode: p.stockNo,
-          status: "Issued",
-        });
+        // Diamond Carats stays empty on purpose — the bag is weighed.
+        out.push({ ...base, shape: l.shape, size: l.size, pcs: l.pcs, growth: l.growth });
       }
       // A design with no diamond sizes on its PD sheet still gets a line, so
       // the entry can be made by hand rather than not at all.
-      if (!s.lines.length) {
-        out.push({
-          ...BLANK_JANGAD, date: d, designNo: s.designNo, subDesignNo: p.no,
-          product: s.product, memoNo: memo, stockCode: p.stockNo, status: "Issued",
-        });
-      }
+      if (!s.lines.length) out.push(base);
     }
     return out;
   }
@@ -97,7 +97,7 @@ export default function NewJangadForm() {
     if (next.has(no)) next.delete(no);
     else next.add(no);
     setPicked(next);
-    setRows(build(seed, next, date, memoNo));
+    setRows(build(seed, next, date, memoNo, mfg));
   };
 
   const allPieces = () => {
@@ -106,7 +106,7 @@ export default function NewJangadForm() {
       picked.size === seed.pieces.length ? [] : seed.pieces.map((p) => p.no)
     );
     setPicked(next);
-    setRows(build(seed, next, date, memoNo));
+    setRows(build(seed, next, date, memoNo, mfg));
   };
 
   // Date and Memo No. are the same for the whole issue, so they are set once
@@ -121,26 +121,14 @@ export default function NewJangadForm() {
   };
 
   const setCell = (i: number, k: JangadField, v: string) =>
-    setRows((list) =>
-      list.map((r, n) => {
-        if (n !== i) return r;
-        const next = { ...r, [k]: v };
-        // Carats follow the stone count when the count is corrected and the
-        // per-stone weight is known from what was fetched.
-        if (k === "pcs") {
-          const per = perStone(r);
-          if (per) next.carats = caratsFor(v, per);
-        }
-        return next;
-      })
-    );
+    setRows((list) => list.map((r, n) => (n === i ? { ...r, [k]: v } : r)));
 
-  // The weight of one stone, recovered from the fetched pcs/carats pair.
-  function perStone(r: Draft): string {
-    const p = num(r.pcs), c = num(r.carats);
-    if (p === null || c === null || p === 0) return "";
-    return String(c / p);
-  }
+  // Mfg Name comes off the PD sheet, but the whole issue goes to one factory,
+  // so changing it changes every row rather than being retyped down the column.
+  const setMfgAll = (v: string) => {
+    setMfg(v);
+    setRows((list) => list.map((r) => ({ ...r, mfgName: v })));
+  };
 
   async function save() {
     if (!rows.length) {
@@ -156,6 +144,7 @@ export default function NewJangadForm() {
         body: JSON.stringify({
           rows,
           pdId: seed?.pdId, pdNo: seed?.pdNo, demandNo: seed?.demandNo,
+          runNo: seed?.designNo,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -207,6 +196,15 @@ export default function NewJangadForm() {
                 <input value={memoNo} onChange={(e) => setMemoAll(e.target.value)}
                   placeholder="SS/26-27/014" /></label>
             </div>
+            <label className="field"><span>Mfg Name — who it goes to</span>
+              <input value={mfg} onChange={(e) => setMfgAll(e.target.value)}
+                placeholder="PRATIK C6" /></label>
+            {seed.assignedTo && (
+              <p className="pieces-hint">
+                Taken from the PD sheet, which has this design assigned to{" "}
+                <b>{seed.assignedTo}</b>.
+              </p>
+            )}
 
             <div className="jg-pieces">
               <div className="jg-pieces-head">

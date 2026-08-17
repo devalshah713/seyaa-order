@@ -15,13 +15,12 @@
 // Everything is held as typed text rather than numbers: a half-entered weight
 // like "1." has to survive being typed, and the export converts on the way out.
 
-import { pointerCarats } from "./pdConfig";
-
 export type JangadStage = "issue" | "received" | "returned";
 
 export type JangadField =
   | "date" | "designNo" | "subDesignNo" | "product" | "shape" | "setting"
   | "certiNo" | "size" | "pcs" | "carats" | "growth" | "price" | "memoNo"
+  | "mfgName"
   | "ctsUsed" | "pcsUsed" | "totalPrice" | "receivedDate"
   | "ctsReturn" | "pcsReturn" | "returnDate" | "status"
   | "stockCode" | "sellGivenDate" | "sellGivenStatus" | "comments";
@@ -34,7 +33,10 @@ export type JangadColumn = {
   width: number; // export column width
 };
 
-// The order here IS the workbook's column order. Do not reorder.
+// The order here is the order the columns are worked in on screen. It is the
+// workbook's order too, with one addition: Mfg Name sits with the rest of the
+// issue, next to the memo it went out on, because that is where it is filled
+// in. The export puts it last instead — see EXPORT_COLUMNS.
 export const JANGAD_COLUMNS: JangadColumn[] = [
   { key: "date", header: "Date", stage: "issue", kind: "date", width: 12 },
   { key: "designNo", header: "Design Number", stage: "issue", kind: "text", width: 22 },
@@ -49,6 +51,7 @@ export const JANGAD_COLUMNS: JangadColumn[] = [
   { key: "growth", header: "Cvd/Hpht", stage: "issue", kind: "text", width: 11 },
   { key: "price", header: "Price", stage: "issue", kind: "number", width: 11 },
   { key: "memoNo", header: "Memo No.", stage: "issue", kind: "text", width: 14 },
+  { key: "mfgName", header: "Mfg Name", stage: "issue", kind: "text", width: 18 },
 
   { key: "ctsUsed", header: "Dia Cts Used", stage: "received", kind: "number", width: 13 },
   { key: "pcsUsed", header: "Dia Pcs Used", stage: "received", kind: "number", width: 13 },
@@ -65,8 +68,27 @@ export const JANGAD_COLUMNS: JangadColumn[] = [
   { key: "comments", header: "Comments", stage: "returned", kind: "text", width: 30 },
 ];
 
-export const JANGAD_HEADERS = JANGAD_COLUMNS.map((c) => c.header);
 export const JANGAD_FIELDS = JANGAD_COLUMNS.map((c) => c.key);
+
+// The export's own order: A to Y exactly as the company's workbook has them, so
+// a sheet exported from here still pastes into the file that already holds
+// years of entries. Anything added since goes on the end rather than shifting
+// a column out from under existing data.
+const SHEET_ORDER: JangadField[] = [
+  "date", "designNo", "subDesignNo", "product", "shape", "setting",
+  "certiNo", "size", "pcs", "carats", "growth", "price", "memoNo",
+  "ctsUsed", "pcsUsed", "totalPrice", "receivedDate",
+  "ctsReturn", "pcsReturn", "returnDate", "status",
+  "stockCode", "sellGivenDate", "sellGivenStatus", "comments",
+  // --- beyond the original 25 ---
+  "mfgName",
+];
+
+export const EXPORT_COLUMNS: JangadColumn[] = SHEET_ORDER.map(
+  (k) => JANGAD_COLUMNS.find((c) => c.key === k)!
+);
+
+export const JANGAD_HEADERS = EXPORT_COLUMNS.map((c) => c.header);
 
 export const STAGES: { key: JangadStage; label: string; blurb: string }[] = [
   {
@@ -96,6 +118,10 @@ export type JangadRow = Record<JangadField, string> & {
   pdId?: string;
   pdNo?: string;
   demandNo?: string;
+  // The whole design run as the PD sheet writes it. Not a workbook column —
+  // the register splits a piece into design + sub, so this keeps the run
+  // findable.
+  runNo?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -124,17 +150,10 @@ function round(n: number, dp: number): string {
   return String(parseFloat(n.toFixed(dp)));
 }
 
-// Carats issued = stones × the per-stone weight the size carries. The weight
-// may be written with its unit ("3.57 cts", "25 pts"), so it is read through
-// pointerCarats rather than as a plain number — otherwise a unit on the PD
-// sheet would leave this column silently blank.
-export function caratsFor(pcs: string, pointer: string): string {
-  const p = num(pcs);
-  const w = pointerCarats(pointer);
-  if (p === null || w === null) return "";
-  return round(p * w, 4);
-}
-
+// Diamond Carats is deliberately not worked out from the size. What goes in a
+// bag is weighed, and the weighed figure is the one the register exists to
+// account for — a computed one would look like a measurement and quietly become
+// the thing everything else is checked against.
 export function totalPriceFor(ctsUsed: string, price: string): string {
   const c = num(ctsUsed);
   const p = num(price);

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Combo from "@/components/Combo";
-import { matchDesign } from "@/lib/designNo";
+import { joinDesignNo, matchDesign } from "@/lib/designNo";
 import {
   JANGAD_COLUMNS, SELL_STATUSES, SETTINGS, STAGES, STATUSES,
   columnsFor, expectedCtsReturn, expectedPcsReturn, num, shortfall, totalPriceFor,
@@ -15,6 +15,10 @@ type View = JangadStage | "all";
 // The three columns that say which entry you are looking at. They lead every
 // stage, so filling in what came back never means guessing which line is which.
 const ANCHORS: JangadField[] = ["subDesignNo", "shape", "size"];
+
+// The design and the piece live in separate columns; together they are the
+// piece's number.
+const fullPieceNo = (r: JangadRow) => joinDesignNo(r.designNo, r.subDesignNo, "");
 
 export default function JangadClient({
   rows: saved,
@@ -43,16 +47,20 @@ export default function JangadClient({
     if (!needle) return rows;
     const lower = needle.toLowerCase();
 
-    // Naming one piece means that piece. Asking for "SN-BR-AMF-42" would
-    // otherwise also match its design "SN-BR-AMF-41-49" and hand back all nine
-    // pieces, which is the opposite of what was asked, so a piece-level hit
-    // wins outright when there is one.
-    const byPiece = rows.filter((r) => r.subDesignNo && matchDesign(r.subDesignNo, needle));
+    // Naming one piece means that piece, not the whole design it came from, so
+    // a piece-level hit wins outright when there is one. The register keeps the
+    // design and the piece in separate columns, so the number being searched
+    // for has to be put back together first.
+    const byPiece = rows.filter((r) => matchDesign(fullPieceNo(r), needle));
     if (byPiece.length) return byPiece;
 
     return rows.filter((r) => {
       if (r.designNo && matchDesign(r.designNo, needle)) return true;
-      return [r.memoNo, r.stockCode, r.certiNo, r.product, r.shape, r.size, r.status]
+      // runNo is the whole run off the PD sheet ("…-63-67"), which no column
+      // holds any more — matched as plain text so searching it still finds
+      // every piece that was issued under it.
+      return [r.runNo, r.memoNo, r.stockCode, r.certiNo, r.product,
+              r.shape, r.size, r.status, r.mfgName]
         .join(" ").toLowerCase().includes(lower);
     });
   }, [q, rows]);
@@ -141,7 +149,12 @@ export default function JangadClient({
 
   function cell(row: JangadRow, c: JangadColumn) {
     const value = row[c.key];
-    if (readOnly(c.key)) return <span className="jg-anchor">{value || "—"}</span>;
+    if (readOnly(c.key)) {
+      // "63" alone says nothing when you are filling in what came back, so the
+      // anchor shows the piece's whole number.
+      const shownValue = c.key === "subDesignNo" ? fullPieceNo(row) : value;
+      return <span className="jg-anchor">{shownValue || "—"}</span>;
+    }
 
     if (c.key === "setting" || c.key === "status" || c.key === "sellGivenStatus") {
       const options =

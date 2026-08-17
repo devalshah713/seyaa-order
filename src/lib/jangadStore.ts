@@ -8,7 +8,7 @@
 import "server-only";
 import { get, put, BlobNotFoundError } from "@vercel/blob";
 import {
-  BLANK_JANGAD, JANGAD_FIELDS, caratsFor, type JangadField, type JangadRow,
+  BLANK_JANGAD, JANGAD_FIELDS, type JangadField, type JangadRow,
 } from "./jangadConfig";
 import { getPdSheet, findByDesignNo } from "./pdStore";
 import { listDemands } from "./demandStore";
@@ -87,7 +87,15 @@ export async function getJangadRow(id: string): Promise<JangadRow | null> {
   return db.rows.find((r) => r.id === id) || null;
 }
 
-export type JangadLink = { pdId?: string; pdNo?: string; demandNo?: string };
+export type JangadLink = {
+  pdId?: string;
+  pdNo?: string;
+  demandNo?: string;
+  // The design number as the PD sheet writes it, run and all. The register
+  // splits a piece across two columns, so this is the only place the whole run
+  // survives — and it is how a search for it finds these rows again.
+  runNo?: string;
+};
 
 export async function addJangadRows(
   rows: Record<JangadField, string>[],
@@ -107,6 +115,7 @@ export async function addJangadRows(
       pdId: link.pdId,
       pdNo: link.pdNo,
       demandNo: link.demandNo,
+      runNo: link.runNo,
       createdAt: now,
       updatedAt: now,
     });
@@ -175,10 +184,12 @@ export type JangadSeed = {
   designNo: string;
   product: string;
   demandNo: string;
+  // Who the design is with in the factory — the PD sheet already says.
+  assignedTo: string;
   pieces: { no: string; status: string; stockNo: string; suggested: boolean }[];
   // One per diamond size on the design, ready to be crossed with the pieces.
   lines: {
-    shape: string; size: string; pcs: string; carats: string; growth: string;
+    shape: string; size: string; pcs: string; growth: string;
   }[];
 };
 
@@ -206,7 +217,8 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
       // Round stones are known by their sieve name, fancy ones by their MM.
       size: (l.size.trim() || l.mm.trim()),
       pcs: l.pcs.trim(),
-      carats: caratsFor(l.pcs, l.pointer),
+      // Carats are left for the accountant: what goes in a bag is weighed, and
+      // a figure worked out from the size would pass for that measurement.
       growth: growthFor(l.shape),
     }));
 
@@ -227,6 +239,7 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
     designNo: sheet.sku,
     product: sheet.product,
     demandNo: demand?.demandNo || "",
+    assignedTo: sheet.assignedTo,
     pieces: all.map((p) => ({
       no: p.no,
       status: p.status,

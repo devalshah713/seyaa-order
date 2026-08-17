@@ -143,6 +143,20 @@ export function splitDesignNo(sku: string): { base: string; from: string; to: st
   };
 }
 
+// The jangad register writes a piece across two columns — the design it belongs
+// to and the piece's own number, "SN-BR-AMF-10CT" and "63" — rather than the
+// joined piece number. joinDesignNo puts them back together.
+export function splitPiece(pieceNo: string): { design: string; sub: string } {
+  const run = parseDesignNo(pieceNo);
+  if (run.at === -1) return { design: pieceNo, sub: "" };
+  const segs = run.segs.slice();
+  const pre = run.pre.slice();
+  const sub = segs[run.at];
+  segs.splice(run.at, 1);
+  pre.splice(run.at, 1);
+  return { design: joinParts(segs, pre, run.post), sub };
+}
+
 const flat = (s: string) => s.toUpperCase().replace(/[^A-Z0-9.]/g, "");
 const sameSegs = (a: string[], b: string[]) =>
   a.length === b.length && a.every((s, i) => s === b[i]);

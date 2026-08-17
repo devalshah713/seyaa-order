@@ -1,10 +1,11 @@
 import "server-only";
 import ExcelJS from "exceljs";
-import { JANGAD_COLUMNS, num, type JangadRow } from "./jangadConfig";
+import { EXPORT_COLUMNS, num, type JangadRow } from "./jangadConfig";
 
 // The register as the accounts team's own workbook: the same 25 columns, in the
-// same order, spelled the same way. A row exported here can be pasted straight
-// into the existing file.
+// same order, spelled the same way, so a row exported here pastes straight into
+// the existing file. Columns added since sit after those 25 rather than
+// shifting one out from under data already in the sheet.
 //
 // Values are written typed rather than as text — weights and prices go out as
 // numbers and dates as dates, so the sheet totals and sorts without anyone
@@ -13,13 +14,13 @@ export async function buildJangadWorkbook(rows: JangadRow[]): Promise<ArrayBuffe
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Diamond Jangad", { views: [{ state: "frozen", ySplit: 1 }] });
 
-  ws.columns = JANGAD_COLUMNS.map((c) => ({
+  ws.columns = EXPORT_COLUMNS.map((c) => ({
     width: c.width,
     style: { font: { name: "Arial", size: 10 } },
   }));
 
   const header = ws.getRow(1);
-  JANGAD_COLUMNS.forEach((c, i) => {
+  EXPORT_COLUMNS.forEach((c, i) => {
     const cell = header.getCell(i + 1);
     cell.value = c.header;
     cell.font = { name: "Arial", size: 10, bold: true };
@@ -36,7 +37,7 @@ export async function buildJangadWorkbook(rows: JangadRow[]): Promise<ArrayBuffe
   let r = 2;
   for (const row of ordered) {
     const line = ws.getRow(r++);
-    JANGAD_COLUMNS.forEach((c, i) => {
+    EXPORT_COLUMNS.forEach((c, i) => {
       const raw = row[c.key] || "";
       const cell = line.getCell(i + 1);
       if (!raw) return;
