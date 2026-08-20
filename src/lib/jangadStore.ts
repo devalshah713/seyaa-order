@@ -221,6 +221,9 @@ export type JangadSeed = {
   // One per diamond size on the design, ready to be crossed with the pieces.
   lines: {
     shape: string; size: string; pcs: string; growth: string;
+    // Which pieces of the run this size is set into, straight off the PD sheet.
+    // Blank means all of them.
+    pieces?: string;
   }[];
 };
 
@@ -251,6 +254,7 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
       // Carats are left for the accountant: what goes in a bag is weighed, and
       // a figure worked out from the size would pass for that measurement.
       growth: growthFor(l.shape),
+      pieces: l.pieces || "",
     }));
 
   // Searching for one piece means that piece; searching the design offers the

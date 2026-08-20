@@ -6,7 +6,7 @@ import Combo from "@/components/Combo";
 import { todayInput } from "@/lib/memoFormat";
 import { DIA_SHAPES } from "@/lib/pdConfig";
 import {
-  BLANK_DEMAND_ROW, GROWTH_TYPES, totalBags, type DemandRow,
+  BLANK_DEMAND_ROW, GROWTH_TYPES, type DemandRow,
 } from "@/lib/demandConfig";
 
 export type DemandInitial = {
@@ -18,9 +18,6 @@ export type DemandInitial = {
   rows: DemandRow[];
   pdId?: string;
   pdNo?: string;
-  // How many pieces the PD sheet is for. Not saved on the demand — it is the
-  // figure the bags are checked against while it is being written.
-  pieces?: number;
 };
 
 export default function DemandForm({ initial }: { initial?: DemandInitial }) {
@@ -42,17 +39,6 @@ export default function DemandForm({ initial }: { initial?: DemandInitial }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // One bag per piece. The rows are seeded at one bag each, which is right when
-  // the sheet lists a diamond size per piece — but a design can be drawn with
-  // more sizes than pieces, or fewer, and then the demand is short of a piece
-  // or carrying a spare. Cheap to say here; expensive to find out at the
-  // diamond department.
-  const pieces = initial?.pieces || 0;
-  const bags = totalBags(rows);
-  const bagsNote =
-    !pieces || bags === pieces
-      ? ""
-      : `${initial?.pdNo || "The PD sheet"} is for ${pieces} ${pieces === 1 ? "piece" : "pieces"}, but these rows come to ${bags} ${bags === 1 ? "bag" : "bags"} — one bag per piece is what the diamond department packs to.`;
 
   // The next demand number, previewed for the fiscal year the date falls in.
   // A saved demand keeps the number it was given, so this only runs for new
@@ -211,7 +197,6 @@ export default function DemandForm({ initial }: { initial?: DemandInitial }) {
             </div>
           ))}
           <button type="button" className="ghost" onClick={addRow}>+ Add diamond row</button>
-          {bagsNote && <p className="dd-bags">{bagsNote}</p>}
         </fieldset>
 
         <fieldset className="group">

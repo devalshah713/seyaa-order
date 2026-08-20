@@ -1478,3 +1478,17 @@ table.jg-table table.sb-sub tfoot tr.sb-grand td {
   background: color-mix(in srgb, #B26A23 7%, transparent);
   border: 1px solid color-mix(in srgb, #B26A23 22%, transparent);
 }
+
+/* Which pieces a diamond size is set into. Nearly always all of them, so it
+   sits quietly under the size rather than competing with it. */
+.dia-goes { margin-top: 8px; }
+.dia-goes select { font-size: 12.5px; padding: 6px 8px; }
+/* A sheet whose diamonds were typed as one line before these rows existed:
+   it prints fine and is empty to everything downstream, so it is said plainly. */
+.dia-legacy {
+  margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: #b26a23;
+  padding: 9px 12px; border-radius: 8px;
+  background: color-mix(in srgb, #B26A23 7%, transparent);
+  border: 1px solid color-mix(in srgb, #B26A23 22%, transparent);
+}
+.dia-legacy b { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }

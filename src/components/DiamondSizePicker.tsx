@@ -8,7 +8,7 @@ import {
   isRoundShape,
   trimPointer,
 } from "@/lib/sieveSizes";
-import { formatPointer, type DiaLine } from "@/lib/pdConfig";
+import { ALL_PIECES, BLANK_DIA_LINE, formatPointer, type DiaLine } from "@/lib/pdConfig";
 
 // Picking a diamond size used to mean typing the sieve out by hand. Now the
 // shape decides what is asked for:
@@ -38,19 +38,24 @@ function roundInfo(name: string) {
 export default function DiamondSizePicker({
   lines,
   onChange,
+  run = [],
 }: {
   lines: DiaLine[];
   onChange: (next: DiaLine[]) => void;
+  // The pieces this design covers — "005", "006" — so each size can say which
+  // of them it goes into. A design of one piece has nothing to choose between,
+  // so the box stays out of the way.
+  run?: string[];
 }) {
   const set = (i: number, patch: Partial<DiaLine>) =>
     onChange(lines.map((l, n) => (n === i ? { ...l, ...patch } : l)));
 
   const add = () =>
-    onChange([...lines, { shape: "Round", size: "", mm: "", pointer: "", pcs: "" }]);
+    onChange([...lines, { ...BLANK_DIA_LINE }]);
 
   const remove = (i: number) => {
     const next = lines.filter((_, n) => n !== i);
-    onChange(next.length ? next : [{ shape: "Round", size: "", mm: "", pointer: "", pcs: "" }]);
+    onChange(next.length ? next : [{ ...BLANK_DIA_LINE }]);
   };
 
   // Changing shape clears the size fields — a marquise pointer is meaningless
@@ -86,7 +91,8 @@ export default function DiamondSizePicker({
                 className="pcs"
                 value={l.pcs}
                 onChange={(e) => set(i, { pcs: e.target.value })}
-                placeholder="Pcs"
+                placeholder="Pcs / piece"
+                title="Stones of this size in one piece"
                 inputMode="numeric"
               />
               <button
@@ -142,10 +148,32 @@ export default function DiamondSizePicker({
                 </label>
               </div>
             )}
+            {/* Which pieces are set with this size. Nearly always all of
+                them, so it sits below the size rather than above it. */}
+            {run.length > 1 && (
+              <label className="field dia-goes">
+                <span>Goes to</span>
+                <select
+                  value={l.pieces?.trim() || ""}
+                  onChange={(e) => set(i, { pieces: e.target.value })}
+                >
+                  <option value="">{ALL_PIECES}</option>
+                  {run.map((p) => (
+                    <option key={p} value={p}>Only {p}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         );
       })}
       <button type="button" className="ghost" onClick={add}>+ Add diamond size</button>
+      {run.length > 1 && (
+        <p className="dia-note">
+          Every size goes into every piece unless you say otherwise. Change it
+          only when the run is drawn with a different size per piece.
+        </p>
+      )}
     </div>
   );
 }

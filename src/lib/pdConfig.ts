@@ -61,12 +61,41 @@ export type DiaLine = {
   size: string;
   mm: string;
   pointer: string;
-  pcs: string;
+  pcs: string; // one piece's worth of this size
+  // Which pieces of the run take this size, by sub-design number ("039",
+  // "005"), comma separated. Blank means all of them, which is the ordinary
+  // case: a design's sizes are the sizes every piece of it is made from.
+  //
+  // It is filled in when a run is drawn with a size per piece —
+  // "SN-BR-TN-OV-14CT-005-006" as two oval sizes is 005 in one and 006 in the
+  // other. Without it that sheet is indistinguishable from a pair of earrings
+  // set with two pear sizes each, and the two need opposite answers.
+  pieces?: string;
 };
 
 export const BLANK_DIA_LINE: DiaLine = {
-  shape: "Round", size: "", mm: "", pointer: "", pcs: "",
+  shape: "Round", size: "", mm: "", pointer: "", pcs: "", pieces: "",
 };
+
+export const ALL_PIECES = "All pieces";
+
+// The pieces a line goes to, as a list of sub-design numbers. `run` is every
+// piece the design covers, and is what a blank box means.
+export function piecesOfLine(line: Pick<DiaLine, "pieces">, run: string[]): string[] {
+  const named = (line.pieces || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!named.length) return run;
+  // Only pieces the design actually has: a sub number left behind after the
+  // run was edited must not conjure a piece that is not being made.
+  const keep = named.filter((n) => run.some((r) => r.toLowerCase() === n.toLowerCase()));
+  return keep.length ? keep : run;
+}
+
+export function lineGoesTo(line: Pick<DiaLine, "pieces">, piece: string, run: string[]): boolean {
+  return piecesOfLine(line, run).some((p) => p.toLowerCase() === piece.trim().toLowerCase());
+}
 
 function trimNum(p: string): string {
   const n = parseFloat(p);

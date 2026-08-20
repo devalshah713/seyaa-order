@@ -11,7 +11,8 @@ import {
   BLANK_DIA_LINE, formatDiaLines, shapesFromLines, type DiaLine,
 } from "@/lib/pdConfig";
 import {
-  parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, MAX_PIECES,
+  parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, splitPiece,
+  MAX_PIECES,
 } from "@/lib/designNo";
 
 export type PdInitial = {
@@ -81,6 +82,12 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   const run = useMemo(() => parseDesignNo(designNo), [designNo]);
   const pieces = useMemo(() => pieceNumbers(run), [run]);
   const count = designNo.trim() ? pieceCount(run) : 0;
+  // Just the piece numbers — "005", "006" — which is how a diamond size names
+  // the pieces it goes into, and how the register writes them.
+  const subs = useMemo(
+    () => pieces.map((p) => splitPiece(p).sub).filter(Boolean),
+    [pieces]
+  );
 
   // "49 to 41" is a slip, not a run — reading it as one would silently make a
   // single piece numbered 41, so it is called out instead.
@@ -156,6 +163,10 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   // Pointers" line — both are composed from the rows above.
   const diaShape = shapesFromLines(diaLines) || f.diaShape;
   const diaText = formatDiaLines(diaLines) || f.diaWeightPointers;
+  // Typed diamonds with no rows behind them: the sheet reads fine on paper and
+  // is empty to everything downstream.
+  const legacyDia =
+    !!f.diaWeightPointers.trim() && !formatDiaLines(diaLines).trim();
   const photoUrl = f.photoPath ? `/api/photo?p=${encodeURIComponent(f.photoPath)}` : "";
 
   return (
@@ -282,8 +293,20 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
               for the MM and the weight of one stone — write it in cts or pts and
               that is how it prints.
             </p>
-            <DiamondSizePicker lines={diaLines} onChange={setDiaLines} />
+            <DiamondSizePicker lines={diaLines} onChange={setDiaLines} run={subs} />
             {diaText && <p className="dia-preview">{diaText}</p>}
+            {/* Sheets written before these rows existed carry their diamond
+                line as one typed sentence. It still prints, but nothing
+                downstream can read it — the demand comes out blank and the
+                register has no sizes to issue — so it is put in front of
+                whoever opens the sheet next. */}
+            {legacyDia && (
+              <p className="dia-legacy">
+                This sheet&rsquo;s diamonds were written as one line before these
+                rows existed: <b>{f.diaWeightPointers}</b>. Enter them above, or
+                the demand and the jangad have no sizes to work from.
+              </p>
+            )}
           </div>
           <div className="two">
             <label className="field"><span>Gold purity</span>

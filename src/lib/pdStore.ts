@@ -107,6 +107,9 @@ function normalizeDiaLines(input: unknown): DiaLine[] {
       return {
         shape: str(r.shape), size: str(r.size), mm: str(r.mm),
         pointer: str(r.pointer), pcs: str(r.pcs),
+        // Which pieces of the run this size is set into. Blank is the ordinary
+        // case and means all of them.
+        pieces: str(r.pieces),
       };
     })
     .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs);

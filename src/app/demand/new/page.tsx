@@ -1,5 +1,6 @@
 import { getPdSheet } from "@/lib/pdStore";
-import { bagsWanted, rowsFromPdSheet } from "@/lib/demandConfig";
+import { rowsFromPdSheet } from "@/lib/demandConfig";
+import { parseDesignNo, pieceNumbers, splitPiece } from "@/lib/designNo";
 import { todayInput } from "@/lib/memoFormat";
 import DemandForm from "./DemandForm";
 
@@ -25,10 +26,16 @@ export default async function NewDemandPage({
         date: todayInput(),
         issuedTo: "",
         notes: "",
-        rows: rowsFromPdSheet(sheet.sku || sheet.pdNo, sheet.diaLines, sheet.quantity),
+        rows: rowsFromPdSheet(
+          sheet.sku || sheet.pdNo,
+          sheet.diaLines,
+          sheet.quantity,
+          // The pieces the design covers, so a size that names one of them is
+          // counted as one bag and a size that names none is counted as all.
+          pieceNumbers(parseDesignNo(sheet.sku)).map((p) => splitPiece(p).sub).filter(Boolean)
+        ),
         pdId: sheet.id,
         pdNo: sheet.pdNo,
-        pieces: bagsWanted(sheet.quantity),
       }}
     />
   );

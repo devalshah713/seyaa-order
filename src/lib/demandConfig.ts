@@ -2,7 +2,9 @@
 // sheet exists. Columns mirror the paper format:
 //   Date | Design No | Diamond Shape | Diamond Pointers | Number Of Pcs |
 //   Comments | BAGS | CVD/HPHT
-import { formatPointer, pointerHasUnit, type DiaLine } from "./pdConfig";
+import {
+  formatPointer, piecesOfLine, pointerHasUnit, type DiaLine,
+} from "./pdConfig";
 
 export type DemandRow = {
   designNo: string;
@@ -35,20 +37,26 @@ export function pointersLabel(line: DiaLine): string {
 
 // Seed a demand from a PD sheet: one row per diamond size on that design.
 //
-// One bag per row. A diamond line on the PD sheet is one piece's worth of
-// stones — "SN-BR-TN-OV-14CT-005-006" written with two oval sizes is piece 005
-// in the first size and piece 006 in the second, so the diamond department
-// packs one bag for each. It is deliberately not the sheet's quantity written
-// onto every row: that asked for a bag per piece *per size*, so a two-piece
-// design with two sizes came out at four bags instead of two.
+// BAGS is how many pieces take that size, because a bag is one piece's stones
+// of one size — sizes cannot share a bag and neither can pieces. Which pieces a
+// size goes into is on the PD sheet itself, so nothing here is guessed:
 //
-// `quantity` is not used to work the bags out any more, but it is what the
-// total is checked against — see bagsWanted below.
+//   Earrings drawn PEAR 1CT and PEAR 1.5CT, both in each of 039 and 040
+//     -> 2 bags on each row, 4 in all
+//   Bracelets drawn 5.25*3.75 for 005 and 5.5*3.75 for 006
+//     -> 1 bag on each row, 2 in all
+//   Five bracelets of one sieve -> 5 bags on the one row
+//   One MIX piece of three sizes -> 1 bag on each row, 3 in all
+//
+// PCS stays one piece's worth, as the sheet writes it — "1CT EACH - 2 PCS" is
+// two stones in an earring, not two across the pair.
 export function rowsFromPdSheet(
   designNo: string,
   lines: DiaLine[] | undefined,
-  quantity = ""
+  quantity = "",
+  run: string[] = []
 ): DemandRow[] {
+  const pieces = run.length ? run : fallbackRun(quantity);
   const rows = (lines || [])
     .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs)
     .map((l) => ({
@@ -57,7 +65,7 @@ export function rowsFromPdSheet(
       pointers: pointersLabel(l),
       pcs: l.pcs.trim(),
       comments: "",
-      bags: "1",
+      bags: String(piecesOfLine(l, pieces).length),
       growth: "CVD",
     }));
   // Nothing entered on the sheet yet: one row standing for the whole design, so
@@ -65,15 +73,21 @@ export function rowsFromPdSheet(
   return rows.length ? rows : [{ ...BLANK_DEMAND_ROW, designNo, bags: quantity.trim() }];
 }
 
-// How many bags the design should come to — one per piece. A demand that does
-// not add up to this is either short of a piece or carrying a spare, and both
-// are worth saying out loud before the stones are packed.
-export function bagsWanted(quantity: string): number {
-  return parseInt((quantity || "").trim(), 10) || 0;
+// A design number with no run in it — a single piece — still makes pieces, and
+// the quantity is all there is to go on.
+function fallbackRun(quantity: string): string[] {
+  const n = parseInt((quantity || "").trim(), 10) || 1;
+  return Array.from({ length: Math.max(1, n) }, (_, i) => String(i + 1));
 }
 
+// Stones to count out, not stones per piece: a row reading 2 pcs against 2 bags
+// is four stones leaving the department.
 export function totalPcs(rows: DemandRow[]): number {
-  return rows.reduce((n, r) => n + (parseInt(r.pcs, 10) || 0), 0);
+  return rows.reduce((n, r) => {
+    const pcs = parseInt(r.pcs, 10) || 0;
+    const bags = parseInt(r.bags, 10) || 0;
+    return n + pcs * (bags || 1);
+  }, 0);
 }
 export function totalBags(rows: DemandRow[]): number {
   return rows.reduce((n, r) => n + (parseInt(r.bags, 10) || 0), 0);
