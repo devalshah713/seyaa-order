@@ -5,8 +5,8 @@ import Combo from "@/components/Combo";
 import { formatDate, todayInput } from "@/lib/memoFormat";
 import { splitPiece } from "@/lib/designNo";
 import {
-  BLANK_JANGAD, SETTINGS, columnsFor, isMergedColumn, mergeSpans,
-  type JangadField,
+  BLANK_JANGAD, SETTINGS, columnsFor, isMergedColumn, linesForPiece, mergeSpans,
+  sizesPerPiece, type JangadField,
 } from "@/lib/jangadConfig";
 import type { JangadSeed } from "@/lib/jangadStore";
 
@@ -59,15 +59,16 @@ export default function NewJangadForm() {
     }
   }
 
-  // Rows are the pieces crossed with the diamond sizes — one line per stone
-  // size per piece, which is how the workbook is written.
+  // One entry per stone size per piece, which is how the workbook is written —
+  // but only the sizes that piece actually takes. A sheet drawn with a size per
+  // piece gives each one its own; a MIX piece takes them all. See linesForPiece.
   //
   // Issuing splits the run: only some of the five pieces get diamonds now, so
   // the design and the piece go in separate columns — "SN-BR-AMF-10CT" and
   // "63" — rather than repeating the whole run on every line.
   function build(s: JangadSeed, pieces: Set<string>, d: string, memo: string, mfgName: string): Draft[] {
     const out: Draft[] = [];
-    for (const p of s.pieces) {
+    for (const [i, p] of s.pieces.entries()) {
       if (!pieces.has(p.no)) continue;
       const { design, sub } = splitPiece(p.no);
       const base = {
@@ -81,13 +82,14 @@ export default function NewJangadForm() {
         stockCode: p.stockNo,
         status: "Issued",
       };
-      for (const l of s.lines) {
+      const mine = linesForPiece(s.lines, i, s.pieces.length);
+      for (const l of mine) {
         // Diamond Carats stays empty on purpose — the bag is weighed.
         out.push({ ...base, shape: l.shape, size: l.size, pcs: l.pcs, growth: l.growth });
       }
       // A design with no diamond sizes on its PD sheet still gets a line, so
       // the entry can be made by hand rather than not at all.
-      if (!s.lines.length) out.push(base);
+      if (!mine.length) out.push(base);
     }
     return out;
   }
@@ -256,9 +258,13 @@ export default function NewJangadForm() {
                 ))}
               </div>
               <p className="pieces-hint">
-                {seed.lines.length
-                  ? `${seed.lines.length} diamond ${seed.lines.length === 1 ? "size" : "sizes"} on this design — ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`
-                  : "This design has no diamond sizes on its PD sheet, so the sizes are yours to fill in."}
+                {!seed.lines.length
+                  ? "This design has no diamond sizes on its PD sheet, so the sizes are yours to fill in."
+                  : sizesPerPiece(seed.lines.length, seed.pieces.length)
+                  // Worth saying plainly: the sheet drew a size per piece, so
+                  // each one takes its own bag rather than all of them.
+                  ? `${seed.lines.length} diamond sizes and ${seed.pieces.length} pieces on this design — one size each, so one bag a piece. ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`
+                  : `${seed.lines.length} diamond ${seed.lines.length === 1 ? "size" : "sizes"} on this design — ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`}
               </p>
               {reissuing.length > 0 && (
                 <p className="hint warn">
