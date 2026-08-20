@@ -1,5 +1,5 @@
 import { getPdSheet } from "@/lib/pdStore";
-import { rowsFromPdSheet } from "@/lib/demandConfig";
+import { bagsWanted, rowsFromPdSheet } from "@/lib/demandConfig";
 import { todayInput } from "@/lib/memoFormat";
 import DemandForm from "./DemandForm";
 
@@ -28,6 +28,7 @@ export default async function NewDemandPage({
         rows: rowsFromPdSheet(sheet.sku || sheet.pdNo, sheet.diaLines, sheet.quantity),
         pdId: sheet.id,
         pdNo: sheet.pdNo,
+        pieces: bagsWanted(sheet.quantity),
       }}
     />
   );

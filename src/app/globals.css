@@ -1469,3 +1469,12 @@ table.sb-sub tfoot td.sb-num { color: var(--panel-ink); }
 table.jg-table table.sb-sub tfoot tr.sb-grand td {
   font-weight: 700; color: var(--panel-ink); border-top: 2px solid var(--panel-line);
 }
+
+/* One bag per piece: said on the demand form when the rows do not add up to
+   the pieces the PD sheet is for. */
+.dd-bags {
+  margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: #b26a23;
+  padding: 8px 11px; border-radius: 8px;
+  background: color-mix(in srgb, #B26A23 7%, transparent);
+  border: 1px solid color-mix(in srgb, #B26A23 22%, transparent);
+}

@@ -35,16 +35,20 @@ export function pointersLabel(line: DiaLine): string {
 
 // Seed a demand from a PD sheet: one row per diamond size on that design.
 //
-// `quantity` is how many pieces of jewellery are being made, and that is what
-// drives BAGS — one bag of diamonds per piece. It is deliberately not the
-// diamond count: an order for 2 bracelets is 2 bags however many stones each
-// one takes.
+// One bag per row. A diamond line on the PD sheet is one piece's worth of
+// stones — "SN-BR-TN-OV-14CT-005-006" written with two oval sizes is piece 005
+// in the first size and piece 006 in the second, so the diamond department
+// packs one bag for each. It is deliberately not the sheet's quantity written
+// onto every row: that asked for a bag per piece *per size*, so a two-piece
+// design with two sizes came out at four bags instead of two.
+//
+// `quantity` is not used to work the bags out any more, but it is what the
+// total is checked against — see bagsWanted below.
 export function rowsFromPdSheet(
   designNo: string,
   lines: DiaLine[] | undefined,
   quantity = ""
 ): DemandRow[] {
-  const bags = quantity.trim();
   const rows = (lines || [])
     .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs)
     .map((l) => ({
@@ -53,10 +57,19 @@ export function rowsFromPdSheet(
       pointers: pointersLabel(l),
       pcs: l.pcs.trim(),
       comments: "",
-      bags,
+      bags: "1",
       growth: "CVD",
     }));
-  return rows.length ? rows : [{ ...BLANK_DEMAND_ROW, designNo, bags }];
+  // Nothing entered on the sheet yet: one row standing for the whole design, so
+  // the pieces it is for is the honest figure to start it at.
+  return rows.length ? rows : [{ ...BLANK_DEMAND_ROW, designNo, bags: quantity.trim() }];
+}
+
+// How many bags the design should come to — one per piece. A demand that does
+// not add up to this is either short of a piece or carrying a spare, and both
+// are worth saying out loud before the stones are packed.
+export function bagsWanted(quantity: string): number {
+  return parseInt((quantity || "").trim(), 10) || 0;
 }
 
 export function totalPcs(rows: DemandRow[]): number {
