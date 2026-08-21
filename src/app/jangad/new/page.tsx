@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default function NewJangadPage() {
   return (
-    <div className="wrap">
+    <div className="wrap jg-wrap">
       <div className="page-head">
         <h1>Issue Diamonds</h1>
         <Link href="/jangad" className="btn">← Register</Link>

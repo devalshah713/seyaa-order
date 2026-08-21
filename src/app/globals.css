@@ -1035,7 +1035,16 @@ table.pieces-table td:nth-child(2) { width: 170px; }
 /* The accountant's screen is the workbook: a wide grid of typed cells. It is
    given the room to be wide and scrolls rather than being folded up, because
    the columns are the format the accounts team already works in. */
-.jg-wrap { max-width: 1400px; }
+/* These pages are the workbook on screen — a row is only readable when its
+   columns are, so they take the width of the window rather than the reading
+   measure the rest of the app is set to. Swiping the last few columns into
+   view is fine; swiping to reach the fourth is not. */
+.jg-wrap {
+  max-width: min(2200px, calc(100vw - 24px));
+  /* Still clear of a notch or a rounded corner on a phone. */
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
 .jg-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .jg-bar .search { margin: 0; flex: 1 1 260px; max-width: 420px; }
 .jg-bar .btn { margin-left: 0; }
@@ -1054,7 +1063,7 @@ table.jg-table th {
   position: sticky; top: 0; z-index: 2;
 }
 table.jg-table td {
-  padding: 4px 6px; vertical-align: middle;
+  padding: 3px 4px; vertical-align: middle;
   /* Ruled on all sides, like the paper — a merged cell has to read as one box
      spanning its rows, which a bottom border alone cannot show. */
   border: 1px solid var(--panel-line); border-top: 0; border-left: 0;
@@ -1063,15 +1072,31 @@ table.jg-table td:last-child { border-right: 0; }
 table.jg-table tr:last-child td { border-bottom: 0; }
 /* Written once for the whole design, so it sits centred against its rows and
    reads as the heading it is rather than as one line's value. */
-table.jg-table td.merged { background: var(--field-bg); vertical-align: middle; }
+/* Written once for the whole design and ruled down its rows. Its value sits at
+   the top of the block rather than the middle: a design of six pieces and four
+   sizes is twenty-four rows deep, and centring put the date and the design
+   number a screen below the first row they belong to. */
+table.jg-table td.merged {
+  background: var(--field-bg); vertical-align: top; padding-top: 6px;
+}
 table.jg-table td.merged input,
 table.jg-table td.merged .combo input { background: var(--panel); }
 table.jg-table input, table.jg-table .combo input {
-  font-size: 12.5px; padding: 6px 7px; min-width: 92px; background: var(--field-bg);
+  font-size: 12.5px; padding: 5px 6px; min-width: 74px; background: var(--field-bg);
 }
-table.jg-table td[data-label="Design Number"] input,
-table.jg-table td[data-label="Sub Design No"] input { min-width: 150px; }
-table.jg-table td[data-label="Comments"] input { min-width: 200px; }
+table.jg-table td[data-label="Design Number"] input { min-width: 132px; }
+table.jg-table td[data-label="Sub Design No"] input { min-width: 62px; }
+table.jg-table td[data-label="Comments"] input { min-width: 160px; }
+/* Boxes that only ever hold a few characters need no more room than that. */
+table.jg-table td[data-label="Diamond Pcs"] input,
+table.jg-table td[data-label="Diamond Carats"] input,
+table.jg-table td[data-label="Cvd/Hpht"] input,
+table.jg-table td[data-label="Price"] input,
+table.jg-table td[data-label="Dia Cts Used"] input,
+table.jg-table td[data-label="Dia Pcs Used"] input,
+table.jg-table td[data-label="Difference Cts Return"] input,
+table.jg-table td[data-label="Diamond Pcs Return"] input { min-width: 62px; }
+table.jg-table th { padding: 8px 5px; }
 table.jg-table input.jg-fixed {
   background: transparent; border-color: transparent; color: var(--gold);
   font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 600;
