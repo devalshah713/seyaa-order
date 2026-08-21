@@ -1072,13 +1072,17 @@ table.jg-table td:last-child { border-right: 0; }
 table.jg-table tr:last-child td { border-bottom: 0; }
 /* Written once for the whole design, so it sits centred against its rows and
    reads as the heading it is rather than as one line's value. */
-/* Written once for the whole design and ruled down its rows. Its value sits at
-   the top of the block rather than the middle: a design of six pieces and four
-   sizes is twenty-four rows deep, and centring put the date and the design
-   number a screen below the first row they belong to. */
+/* Written once for the whole design and ruled down its rows — so its value sits
+   in the middle of the box it spans, across and down, the way it does on the
+   paper this replaces. */
 table.jg-table td.merged {
-  background: var(--field-bg); vertical-align: top; padding-top: 6px;
+  background: var(--field-bg); vertical-align: middle; text-align: center;
 }
+/* The value is inside a form control, so the cell's own centring does not
+   reach it. */
+table.jg-table td.merged input,
+table.jg-table td.merged .combo input,
+table.jg-table td.merged .jg-anchor { text-align: center; }
 table.jg-table td.merged input,
 table.jg-table td.merged .combo input { background: var(--panel); }
 table.jg-table input, table.jg-table .combo input {
