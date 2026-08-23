@@ -4,7 +4,8 @@ import { listPdSheets } from "./pdStore";
 import { listDemands } from "./demandStore";
 import { listJangad } from "./jangadStore";
 import { listStockEntries } from "./stockBookStore";
-import { listMemos } from "./memoStore";
+import { listMemos, listParties } from "./memoStore";
+import { PARTY_KINDS } from "./memoFormat";
 import { loadPrices } from "./priceStore";
 import { allQcChecks, listQcRecords } from "./qcStore";
 import { EXPORT_COLUMNS, JANGAD_HEADERS } from "./jangadConfig";
@@ -200,6 +201,33 @@ async function memoRows(): Promise<string[][]> {
   return [MEMO_HEADER, ...rows];
 }
 
+// --- Lists -------------------------------------------------------------------
+// Every controlled list the office keeps: the categories a design can be, the
+// manufacturers work goes to, and the QC checks each category is looked over
+// for. Names alone are not enough — a check means nothing without the category
+// it belongs to — so what each entry sits under is a column of its own.
+
+export const LISTS_HEADER = ["List", "Belongs to", "Name", "Short code"];
+
+async function listRows(): Promise<string[][]> {
+  const all = await Promise.all(PARTY_KINDS.map((k) => listParties(k.key)));
+  const nameOf = new Map<string, string>();
+  all.flat().forEach((p) => nameOf.set(p.id, p.name));
+
+  const rows: string[][] = [];
+  PARTY_KINDS.forEach((kind, i) => {
+    const entries = [...all[i]].sort((a, b) => {
+      const pa = nameOf.get(a.parentId || "") || "";
+      const pb = nameOf.get(b.parentId || "") || "";
+      return pa.localeCompare(pb) || a.name.localeCompare(b.name);
+    });
+    for (const e of entries) {
+      rows.push([kind.label, nameOf.get(e.parentId || "") || "", e.name, e.code || ""]);
+    }
+  });
+  return [LISTS_HEADER, ...rows];
+}
+
 // --- The sync itself ---------------------------------------------------------
 
 export type TabResult = { tab: string; rows: number; error?: string };
@@ -215,6 +243,7 @@ function tabs(): { tab: string; build: () => Promise<string[][]> }[] {
     { tab: "Stock Book", build: stockRows },
     { tab: "QC", build: qcRows },
     { tab: "Memos", build: memoRows },
+    { tab: "Lists", build: listRows },
   ];
 }
 
