@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { PARTY_KINDS, type Party, type PartyKind } from "@/lib/memoFormat";
+import {
+  PARTY_KINDS, hasCode, suggestCode, type Party, type PartyKind,
+} from "@/lib/memoFormat";
 
 // Every controlled list on one screen: who a memo goes to, who makes a design,
 // and the boxes on a PD sheet. All the same shape, all chosen from and not
@@ -26,6 +28,9 @@ export default function PartiesClient({
   // Which listed name each old typed one is being put onto. Starts at what the
   // matching suggested, and is a dropdown so a wrong guess is one change away.
   const [onto, setOnto] = useState<Record<string, string>>({});
+  // The short form this entry lends a design number — BR, TN, AMF.
+  const [code, setCode] = useState("");
+  const [editCode, setEditCode] = useState("");
 
   async function call(url: string, init: RequestInit): Promise<boolean> {
     setError(""); setNotice("");
@@ -42,13 +47,14 @@ export default function PartiesClient({
     const ok = await call("/api/parties", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nameToAdd, kind, parentId }),
+      body: JSON.stringify({ name: nameToAdd, kind, parentId, code }),
     });
     if (ok) {
       // The parent stays put: a category's sub-categories are added one after
       // another, so re-choosing it every time is wasted work.
       setNotice(`Added ${nameToAdd.trim()}.`);
       setName("");
+      setCode("");
     }
     setBusy(false);
   }
@@ -57,8 +63,8 @@ export default function PartiesClient({
     if (await call(`/api/parties/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName }),
-    })) setEditId("");
+      body: JSON.stringify({ name: editName, code: editCode }),
+    })) { setEditId(""); setEditCode(""); }
   }
 
   async function remove(p: Party) {
@@ -114,11 +120,12 @@ export default function PartiesClient({
   const showUnlisted = kind === "party";
 
   const switchTo = (k: PartyKind) => {
-    setKind(k); setName(""); setEditId(""); setParentId("");
+    setKind(k); setName(""); setCode(""); setEditId(""); setParentId("");
     setError(""); setNotice("");
   };
 
   // The list this one hangs off, and what it holds.
+  const coded = hasCode(kind);
   const parentKind = meta.parent;
   const parents = parentKind ? lists[parentKind] || [] : [];
   const parentMeta = PARTY_KINDS.find((k) => k.key === parentKind);
@@ -156,8 +163,15 @@ export default function PartiesClient({
               </select></label>
           )}
           <label className="field"><span>New {noun}</span>
-            <input value={name} onChange={(e) => setName(e.target.value)}
+            <input value={name}
+              onChange={(e) => setName(e.target.value)}
               placeholder={`e.g. ${(lists[kind] || [])[0]?.name || "a new name"}`} /></label>
+          {coded && (
+            <label className="field"><span>Code</span>
+              <input className="code-in" value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder={name.trim() ? suggestCode(name) : "BR"} /></label>
+          )}
           <button type="submit" className="btn btn-primary"
             disabled={busy || !name.trim() || (!!parentKind && !parentId)}>
             {busy ? "Adding…" : `Add ${noun}`}
@@ -231,6 +245,7 @@ export default function PartiesClient({
         <table className="history">
           <thead><tr>
             <th>{meta.label}</th>
+            {coded && <th>Code</th>}
             {parentKind && <th>Under</th>}
             <th>Added by</th>
             <th className="actions-col">Actions</th>
@@ -249,6 +264,15 @@ export default function PartiesClient({
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void saveRename(p.id); } }} />
                   ) : p.name}
                 </td>
+                {coded && (
+                  <td className="code-cell">
+                    {editId === p.id ? (
+                      <input className="code-in" value={editCode}
+                        onChange={(e) => setEditCode(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void saveRename(p.id); } }} />
+                    ) : <code>{p.code || suggestCode(p.name)}</code>}
+                  </td>
+                )}
                 {parentKind && <td>{nameById.get(p.parentId || "") || "—"}</td>}
                 <td>{p.createdBy}</td>
                 <td className="row-actions">
@@ -259,7 +283,7 @@ export default function PartiesClient({
                     </>
                   ) : (
                     <>
-                      <button className="rowbtn" onClick={() => { setEditId(p.id); setEditName(p.name); }}>Rename</button>
+                      <button className="rowbtn" onClick={() => { setEditId(p.id); setEditName(p.name); setEditCode(p.code || suggestCode(p.name)); }}>Rename</button>
                       <button className="rowbtn danger" onClick={() => remove(p)}>Remove</button>
                     </>
                   )}

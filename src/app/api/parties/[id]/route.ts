@@ -13,14 +13,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Only an admin can change a party." }, { status: 403 });
   }
   let name = "";
+  let code: string | undefined;
   try {
-    const body = (await req.json()) as { name?: unknown };
+    const body = (await req.json()) as { name?: unknown; code?: unknown };
     name = typeof body.name === "string" ? body.name : "";
+    if (typeof body.code === "string") code = body.code;
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const result = await renameParty(params.id, name);
+  const result = await renameParty(params.id, name, code);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

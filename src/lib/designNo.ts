@@ -273,3 +273,47 @@ export function summarisePieces(pieces: PdPiece[] | undefined): PieceSummary {
     open: live.filter((p) => p.status === "pending").length,
   };
 }
+
+// --- Building one -------------------------------------------------------------
+// A design number is read left to right and every part of it means something:
+//
+//   SN-BR-TN-5CT      Seyaa N, Bracelet, Tennis, 5 carats total
+//   SN-BR-TN-OV-14CT  ... with the stone shape as well
+//   SN-BR-AMF-10CT    Bracelet, All Mix Fancy
+//
+// So it is built rather than typed: the codes come off the category, its
+// sub-category and its sub-sub-category, and the weight off the sheet. Nothing
+// is invented here — a level with no code contributes nothing.
+
+export const HOUSE_CODE = "SN"; // Seyaa N
+
+// "5" -> "5CT"; "5.5 cts" -> "5.5CT"; "10CT" is already written.
+export function caratCode(raw: string): string {
+  const t = (raw || "").trim();
+  if (!t) return "";
+  const n = parseFloat(t.replace(/[^0-9.]/g, ""));
+  if (!isFinite(n) || n <= 0) {
+    // Not a number: printed as written, tidied, so nothing is silently dropped.
+    return t.toUpperCase().replace(/[^A-Z0-9.]/g, "");
+  }
+  return `${parseFloat(n.toFixed(3))}CT`;
+}
+
+export function buildDesignNo(parts: {
+  category?: string;
+  subCategory?: string;
+  subSubCategory?: string;
+  tdw?: string;
+  house?: string;
+}): string {
+  const clean = (v?: string) => (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return [
+    clean(parts.house ?? HOUSE_CODE),
+    clean(parts.category),
+    clean(parts.subCategory),
+    clean(parts.subSubCategory),
+    caratCode(parts.tdw || ""),
+  ]
+    .filter(Boolean)
+    .join("-");
+}

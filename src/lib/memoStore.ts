@@ -27,6 +27,9 @@ import {
   type StockOutcome,
   SEED_LISTS,
   closestName,
+  hasCode,
+  normalizeCode,
+  suggestCode,
   partyKindOf,
   parentKindOf,
   type PartyKind,
@@ -266,7 +269,7 @@ export async function listParties(kind: PartyKind = "party"): Promise<Party[]> {
 
 // Several lists at once, for a screen that needs more than one — one read of
 // the store instead of one per list.
-export type ListEntry = { name: string; parent: string };
+export type ListEntry = { name: string; parent: string; code: string };
 
 export async function listPartyNames(
   kinds: PartyKind[]
@@ -287,6 +290,7 @@ export async function listPartyNames(
       .map((p) => ({
         name: p.name,
         parent: (p.parentId && nameById.get(p.parentId)) || "",
+        code: p.code || "",
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -340,7 +344,8 @@ export async function createParty(
   name: string,
   by: string,
   kind: PartyKind = "party",
-  parentId = ""
+  parentId = "",
+  code = ""
 ): Promise<{ ok: true; party: Party } | { ok: false; error: string }> {
   const clean = name.trim().replace(/\s+/g, " ");
   if (clean.length < 2) return { ok: false, error: "Give the party a name." };
@@ -374,6 +379,7 @@ export async function createParty(
     name: clean,
     kind,
     ...(parentId ? { parentId } : {}),
+    ...(hasCode(kind) ? { code: normalizeCode(code) || suggestCode(clean) } : {}),
     createdAt: new Date().toISOString(),
     createdBy: by,
   };
@@ -384,19 +390,31 @@ export async function createParty(
 
 export async function renameParty(
   id: string,
-  name: string
+  name: string,
+  code?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const clean = name.trim().replace(/\s+/g, " ");
   if (clean.length < 2) return { ok: false, error: "Give the party a name." };
 
   const token = requireToken();
   const db = await readDB(token);
-  const i = db.parties.findIndex((p) => p.id === id);
-  if (i === -1) return { ok: false, error: "Party not found." };
-  if (db.parties.some((p) => p.id !== id && partyKey(p.name) === partyKey(clean))) {
-    return { ok: false, error: "Another party already has that name." };
-  }
-  db.parties[i] = { ...db.parties[i], name: clean };
+  const party = db.parties.find((p) => p.id === id);
+  if (!party) return { ok: false, error: "Party not found." };
+
+  const kind = partyKindOf(party);
+  const clash = db.parties.find(
+    (p) =>
+      p.id !== id &&
+      partyKindOf(p) === kind &&
+      (p.parentId || "") === (party.parentId || "") &&
+      partyKey(p.name) === partyKey(clean)
+  );
+  if (clash) return { ok: false, error: `Already on the list as "${clash.name}".` };
+
+  party.name = clean;
+  // Only the coded lists carry one, and an emptied box falls back to the
+  // suggestion rather than leaving a design number a piece short.
+  if (hasCode(kind)) party.code = normalizeCode(code || "") || suggestCode(clean);
   await writeDB(db, token);
   return { ok: true };
 }

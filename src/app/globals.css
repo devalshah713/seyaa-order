@@ -1555,3 +1555,19 @@ table.jg-table table.sb-sub tfoot tr.sb-grand td {
 @media (max-width: 860px) {
   .ul-onto { min-width: 0; flex: 1 1 160px; }
 }
+
+/* The short form a list entry lends a design number. */
+.code-in {
+  width: 90px; text-transform: uppercase; font-family: ui-monospace, Menlo, monospace;
+  letter-spacing: .5px;
+}
+.party-add .field:has(.code-in) { flex: 0 0 auto; }
+td.code-cell code {
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-weight: 600;
+  color: var(--gold); letter-spacing: .5px;
+}
+
+/* Under the SKU box: whether the number is being built or typed. */
+.sku-built { margin: 6px 2px 0; font-size: 11px; color: var(--panel-muted); line-height: 1.5; }
+.sku-built .linkbtn { font-size: 11px; }
+.pd-skubox input[readonly] { background: var(--panel); color: var(--gold); font-weight: 600; }

@@ -49,19 +49,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let name = "";
   let kind: PartyKind = "party";
   let parentId = "";
+  let code = "";
   try {
     const body = (await req.json()) as {
-      name?: unknown; kind?: unknown; parentId?: unknown;
+      name?: unknown; kind?: unknown; parentId?: unknown; code?: unknown;
     };
     name = typeof body.name === "string" ? body.name : "";
     if (isPartyKind(body.kind)) kind = body.kind;
     if (typeof body.parentId === "string") parentId = body.parentId;
+    if (typeof body.code === "string") code = body.code;
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
   try {
-    const result = await createParty(name, admin.username, kind, parentId);
+    const result = await createParty(name, admin.username, kind, parentId, code);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ party: result.party }, { status: 201 });
   } catch (err) {

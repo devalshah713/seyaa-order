@@ -160,6 +160,9 @@ export type Party = {
   // flat set: a sub-category belongs to a category, a sub-sub to a sub. Held by
   // id so renaming a parent keeps its children.
   parentId?: string;
+  // The short form this level contributes to a design number — BR for Bracelet,
+  // TN for Tennis. Only the three category levels use one.
+  code?: string;
   createdAt: string;
   createdBy: string;
 };
@@ -189,6 +192,37 @@ export const PARTY_KINDS: {
 
 export const parentKindOf = (kind: PartyKind): PartyKind | undefined =>
   PARTY_KINDS.find((k) => k.key === kind)?.parent;
+
+// The lists whose entries carry a code, because they are the ones a design
+// number is built out of.
+export const CODED_KINDS: PartyKind[] = ["category", "subCategory", "subSubCategory"];
+export const hasCode = (kind: PartyKind) => CODED_KINDS.includes(kind);
+
+// A code is written as it prints: no spaces, no punctuation, upper case.
+export function normalizeCode(raw: string): string {
+  return (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+// Seyaa's own shorthand, so adding "Bracelet" offers "BR" rather than leaving
+// somebody to remember it. Only a suggestion — the box is typed into freely.
+const KNOWN_CODES: Record<string, string> = {
+  necklace: "NK", bracelet: "BR", earrings: "ER", earring: "ER",
+  pendant: "PEND", ring: "RG", bangle: "BN", chain: "CH",
+  "straight line": "SL", "all mix fancy": "AMF", hoops: "HP", hoop: "HP",
+  "hip hop": "HIP", fancy: "FN", solitaire: "SLT", studs: "STUD", stud: "STUD",
+  korean: "KO", tennis: "TN", oval: "OV", pear: "PE", marquise: "MQ",
+  emerald: "EM", round: "RD", princess: "PR", cushion: "CU", heart: "HE",
+  baguette: "BG", radiant: "RAD",
+};
+
+export function suggestCode(name: string): string {
+  const key = partyKey(name);
+  if (KNOWN_CODES[key]) return KNOWN_CODES[key];
+  // Anything else: the initials of a multi-word name, or its first letters.
+  const words = key.split(" ").filter(Boolean);
+  if (words.length > 1) return normalizeCode(words.map((w) => w[0]).join(""));
+  return normalizeCode(key.slice(0, 3));
+}
 
 export const isPartyKind = (v: unknown): v is PartyKind =>
   typeof v === "string" && PARTY_KINDS.some((k) => k.key === v);

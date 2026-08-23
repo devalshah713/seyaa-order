@@ -14,7 +14,8 @@ export default async function EditPdPage({ params }: { params: { id: string } })
       initial={{
         id: s.id, pdNo: s.pdNo, photoPath: s.photoPath, sku: s.sku,
         product: s.product, category: s.category || s.product,
-        subCategory: s.subCategory, subSubCategory: s.subSubCategory || "", type: s.type,
+        subCategory: s.subCategory, subSubCategory: s.subSubCategory || "",
+        type: s.type, tdw: s.tdw || "",
         diaQuality: s.diaQuality, goldWeight: s.goldWeight, locks: s.locks,
         orderType: s.orderType, assignedDate: s.assignedDate,
         assignedTo: s.assignedTo, size: s.size, diaShape: s.diaShape, zone: s.zone,

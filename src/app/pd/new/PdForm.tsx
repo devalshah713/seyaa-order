@@ -14,7 +14,7 @@ import {
 } from "@/lib/pdConfig";
 import {
   parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, splitPiece,
-  MAX_PIECES,
+  buildDesignNo, MAX_PIECES,
 } from "@/lib/designNo";
 
 export type PdInitial = {
@@ -23,7 +23,7 @@ export type PdInitial = {
   photoPath: string;
   sku: string;
   product: string; category: string; subCategory: string;
-  subSubCategory: string; type: string;
+  subSubCategory: string; type: string; tdw: string;
   diaQuality: string; goldWeight: string; locks: string; orderType: string; assignedDate: string;
   assignedTo: string; size: string; diaShape: string; zone: string;
   goldPurity: string; goldColor: string; priceRange: string; diaWeightPointers: string;
@@ -34,7 +34,7 @@ export type PdInitial = {
 
 const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
   photoPath: "", sku: "",
-  product: "", category: "", subCategory: "", subSubCategory: "", type: "",
+  product: "", category: "", subCategory: "", subSubCategory: "", type: "", tdw: "",
   diaQuality: DEFAULT_DIA_QUALITY, goldWeight: "", locks: "", orderType: "Stock", assignedDate: "",
   assignedTo: "", size: "", diaShape: "", zone: "USA",
   goldPurity: "14KT", goldColor: "White Gold", priceRange: "", diaWeightPointers: "",
@@ -56,7 +56,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   // stored and printed.
   const [sku, setSku] = useState(() => splitDesignNo(initial?.sku || ""));
   const setSkuPart = (k: keyof typeof sku, v: string) => setSku((s) => ({ ...s, [k]: v }));
-  const designNo = joinDesignNo(sku.base, sku.from, sku.to);
+  // Set below, once the lists are in and the codes are known.
+  let designNo = joinDesignNo(sku.base, sku.from, sku.to);
 
   const [pdNo, setPdNo] = useState(initial?.pdNo || "PD/…");
   const [diaLines, setDiaLines] = useState<DiaLine[]>(
@@ -92,7 +93,7 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   // rather than falling back to options that were deliberately cleared out.
   // One row of a controlled list: its name, and the name of what it sits
   // under. (memoStore is server-only, so the shape is restated here.)
-  type ListEntry = { name: string; parent: string };
+  type ListEntry = { name: string; parent: string; code: string };
   const [lists, setLists] = useState<Record<string, ListEntry[]>>({});
   useEffect(() => {
     let off = false;
@@ -115,6 +116,22 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   const subCats = under("subCategory", f.category);
   const subSubCats = under("subSubCategory", f.subCategory);
 
+  // The design number is read left to right and every part means something, so
+  // it is built out of the codes rather than typed: SN, then the category, its
+  // sub, its sub-sub, then the carats. Typing over it is still allowed — an old
+  // number being re-entered has to go in as it stands.
+  const codeOf = (kind: string, name: string) =>
+    (lists[kind] || []).find((e) => e.name === name)?.code || "";
+  const suggested = buildDesignNo({
+    category: codeOf("category", f.category),
+    subCategory: codeOf("subCategory", f.subCategory),
+    subSubCategory: codeOf("subSubCategory", f.subSubCategory),
+    tdw: f.tdw,
+  });
+  const [ownNumber, setOwnNumber] = useState(() => !!initial?.sku);
+  // While it is being built, the box shows what the choices come to.
+  const skuBase = ownNumber ? sku.base : suggested;
+
   // Changing a level empties the ones below it: a sub-category from the old
   // category is not under the new one, and leaving it there is a sheet that
   // quietly contradicts itself.
@@ -122,6 +139,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
     setF((prev) => ({ ...prev, category: v, product: v, subCategory: "", subSubCategory: "" }));
   const setSubCategory = (v: string) =>
     setF((prev) => ({ ...prev, subCategory: v, subSubCategory: "" }));
+
+  designNo = joinDesignNo(skuBase, sku.from, sku.to);
 
   // Said once, wherever a dropdown has nothing in it yet.
   const emptyNote = (kind: string, what: string) =>
@@ -245,10 +264,31 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           <div className="pd-skubox">
             <div className="cap">SKU No.</div>
             <input
-              value={sku.base}
+              value={skuBase}
               onChange={(e) => setSkuPart("base", e.target.value)}
               placeholder="SN-BR-AMF"
+              readOnly={!ownNumber}
+              title={ownNumber ? undefined : "Built from the category, sub-category and carats below"}
             />
+            <p className="sku-built">
+              {ownNumber ? (
+                <>
+                  Typed by hand.{" "}
+                  <button type="button" className="linkbtn"
+                    onClick={() => { setOwnNumber(false); }}>
+                    Build it from the design instead
+                  </button>
+                </>
+              ) : (
+                <>
+                  Built from the category, sub-category and carats.{" "}
+                  <button type="button" className="linkbtn"
+                    onClick={() => { setSkuPart("base", suggested); setOwnNumber(true); }}>
+                    Type it myself
+                  </button>
+                </>
+              )}
+            </p>
             <div className="sku-run">
               <label className="field">
                 <span>From</span>
@@ -345,6 +385,10 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
 
         <fieldset className="group">
           <legend>Diamond &amp; Gold</legend>
+          {/* What the design number's "5CT" comes from. */}
+          <label className="field"><span>Total diamond weight (cts)</span>
+            <input value={f.tdw} inputMode="decimal"
+              onChange={(e) => set("tdw", e.target.value)} placeholder="5" /></label>
           <label className="field"><span>Dia. quality</span>
             <Picker value={f.diaQuality || DEFAULT_DIA_QUALITY}
               onChange={(v) => set("diaQuality", v)}

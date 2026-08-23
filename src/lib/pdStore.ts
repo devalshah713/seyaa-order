@@ -28,6 +28,9 @@ export type PdSheet = {
   subCategory: string;
   subSubCategory: string;
   type: string;
+  // Total diamond weight, which the design number is built from — the "5CT" in
+  // SN-BR-TN-5CT.
+  tdw: string;
   diaQuality: string;
   goldWeight: string;
   locks: string;
@@ -93,6 +96,7 @@ export function normalizePdInput(body: Record<string, unknown>): NewPdSheet {
     product: s("category") || s("product"),
     category: s("category") || s("product"),
     subCategory: s("subCategory"), subSubCategory: s("subSubCategory"),
+    tdw: s("tdw"),
     type: s("type"), diaQuality: s("diaQuality"), goldWeight: s("goldWeight"),
     locks: s("locks"), orderType: s("orderType"), assignedDate: s("assignedDate"),
     assignedTo: s("assignedTo"), size: s("size"), diaShape: s("diaShape"), zone: s("zone"),
