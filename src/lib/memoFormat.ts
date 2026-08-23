@@ -144,11 +144,13 @@ export function formatDate(dateInput: string): string {
 // everyone else picks from it.
 // ---------------------------------------------------------------------------
 
-// Two controlled lists, kept in one place because they are the same thing —
-// a name staff may choose but not invent. "party" is who a memo goes to;
-// "mfg" is who a design is made by. A party saved before this existed has no
-// kind, and is a memo party.
-export type PartyKind = "party" | "mfg";
+// The controlled lists — every set of names staff may choose from but not
+// invent. They are all the same shape, so they are all one thing with a kind
+// rather than six separate stores and six separate admin screens.
+//
+// A party saved before kinds existed has none, and is a memo party.
+export type PartyKind =
+  | "party" | "mfg" | "product" | "category" | "subCategory" | "type";
 
 export type Party = {
   id: string;
@@ -158,11 +160,31 @@ export type Party = {
   createdBy: string;
 };
 
+export const PARTY_KINDS: {
+  key: PartyKind; label: string; noun: string; blurb: string;
+}[] = [
+  { key: "party", label: "Memo parties", noun: "party",
+    blurb: "Who a memo can be issued to." },
+  { key: "mfg", label: "Manufacturers", noun: "manufacturer",
+    blurb: "Who a PD sheet can be assigned to." },
+  { key: "product", label: "Products", noun: "product",
+    blurb: "The Product box on a PD sheet." },
+  { key: "category", label: "Categories", noun: "category",
+    blurb: "The Category box on a PD sheet." },
+  { key: "subCategory", label: "Sub-categories", noun: "sub-category",
+    blurb: "Offered on a PD sheet's Sub-category, which also takes anything typed." },
+  { key: "type", label: "Types", noun: "type",
+    blurb: "The Type box on a PD sheet." },
+];
+
+export const isPartyKind = (v: unknown): v is PartyKind =>
+  typeof v === "string" && PARTY_KINDS.some((k) => k.key === v);
+
 export const partyKindOf = (p: Party): PartyKind => p.kind || "party";
 
-// The manufacturers Seyaa works with. Written into the list the first time it
-// is read so the PD sheet works from day one; after that the list is the
-// admin's, and these are not put back if one is removed.
+// What each list starts as. Written in the first time that list is read, so
+// every screen works from day one; after that the list is the admin's, and a
+// name removed is not put back.
 export const SEED_MFGS = [
   "Seyaa Factory",
   "Pratik C6",
@@ -171,6 +193,23 @@ export const SEED_MFGS = [
   "Sky Jewels",
   "Anthem Jewels",
 ];
+
+export const SEED_LISTS: Partial<Record<PartyKind, readonly string[]>> = {
+  mfg: SEED_MFGS,
+  product: [
+    "Tennis Necklace", "Necklace", "Necklace Set", "Tennis Bracelet", "Bracelet",
+    "Ring", "Earrings", "Pendant", "Bangle", "Chain",
+  ],
+  category: [
+    "Korean Necklace", "Tennis", "Solitaire", "Cluster", "Halo",
+    "Eternity", "Bridal", "Daily Wear", "Cocktail",
+  ],
+  subCategory: [
+    "Tennis Necklace", "Tennis Bracelet", "Riviera", "Line Necklace",
+    "Choker", "Station Necklace", "Solitaire Ring", "Band",
+  ],
+  type: ["Modern", "Classic", "Traditional", "Fusion", "Minimal"],
+};
 
 // Names are compared with case, spacing and punctuation ignored, so
 // "seyya soli ( hardik)" cannot be added alongside "Seyya Soli (Hardik)".

@@ -4,7 +4,8 @@
 // may add to them.
 import { NextRequest, NextResponse } from "next/server";
 import { currentSession, requireAdmin } from "@/lib/currentUser";
-import { createParty, listParties } from "@/lib/memoStore";
+import { createParty, listParties, listPartyNames } from "@/lib/memoStore";
+import { isPartyKind, type PartyKind } from "@/lib/memoFormat";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,10 +14,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!(await currentSession())) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-  // ?kind=mfg is the manufacturers a design can be assigned to; the default is
-  // the parties a memo can be issued to.
-  const kind = req.nextUrl.searchParams.get("kind") === "mfg" ? "mfg" : "party";
+  const params = req.nextUrl.searchParams;
   try {
+    // ?kinds=product,category,… answers with several lists in one go, which is
+    // what a form with more than one dropdown wants.
+    const many = params.get("kinds");
+    if (many) {
+      const kinds = many.split(",").map((k) => k.trim()).filter(isPartyKind);
+      if (!kinds.length) {
+        return NextResponse.json({ error: "No such list." }, { status: 400 });
+      }
+      return NextResponse.json({ lists: await listPartyNames(kinds) });
+    }
+    // ?kind=… is one list in full, with who added each name.
+    const one = params.get("kind");
+    const kind: PartyKind = isPartyKind(one) ? one : "party";
     return NextResponse.json({ parties: await listParties(kind) });
   } catch (err) {
     return NextResponse.json({ error: msg(err) }, { status: 503 });
@@ -33,11 +45,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let name = "";
-  let kind: "party" | "mfg" = "party";
+  let kind: PartyKind = "party";
   try {
     const body = (await req.json()) as { name?: unknown; kind?: unknown };
     name = typeof body.name === "string" ? body.name : "";
-    if (body.kind === "mfg") kind = "mfg";
+    if (isPartyKind(body.kind)) kind = body.kind;
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }

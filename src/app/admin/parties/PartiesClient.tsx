@@ -1,18 +1,16 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Party, PartyKind } from "@/lib/memoFormat";
+import { PARTY_KINDS, type Party, type PartyKind } from "@/lib/memoFormat";
 
-// Two lists, same shape, kept on one screen: who a memo can be issued to, and
-// who a design can be assigned to. Both are chosen from and neither is typed
-// into anywhere else in the app.
+// Every controlled list on one screen: who a memo goes to, who makes a design,
+// and the boxes on a PD sheet. All the same shape, all chosen from and not
+// typed into anywhere else, so all one table with a tab each.
 export default function PartiesClient({
-  parties,
-  mfgs,
+  lists,
   unlisted,
 }: {
-  parties: Party[];
-  mfgs: Party[];
+  lists: Record<string, Party[]>;
   unlisted: { name: string; memos: number }[];
 }) {
   const router = useRouter();
@@ -58,9 +56,11 @@ export default function PartiesClient({
     await call(`/api/parties/${p.id}`, { method: "DELETE" });
   }
 
-  const mfg = kind === "mfg";
-  const list = mfg ? mfgs : parties;
-  const noun = mfg ? "manufacturer" : "party";
+  const meta = PARTY_KINDS.find((k) => k.key === kind)!;
+  const list = lists[kind] || [];
+  const noun = meta.noun;
+  // Only the memo list has a history of typed names behind it.
+  const showUnlisted = kind === "party";
 
   const switchTo = (k: PartyKind) => {
     setKind(k); setName(""); setEditId(""); setError(""); setNotice("");
@@ -68,24 +68,22 @@ export default function PartiesClient({
 
   return (
     <>
-      <div className="kind-tabs">
-        <button className={!mfg ? "active" : ""} onClick={() => switchTo("party")}>
-          Memo parties ({parties.length})
-        </button>
-        <button className={mfg ? "active" : ""} onClick={() => switchTo("mfg")}>
-          Manufacturers ({mfgs.length})
-        </button>
+      <div className="kind-tabs many">
+        {PARTY_KINDS.map((k) => (
+          <button key={k.key} className={kind === k.key ? "active" : ""}
+            onClick={() => switchTo(k.key)}>
+            {k.label} ({(lists[k.key] || []).length})
+          </button>
+        ))}
       </div>
       <p className="jg-blurb">
-        {mfg
-          ? "Who a PD sheet can be assigned to. The design team chooses from this list; nobody else can add to it."
-          : "Who a memo can be issued to. Staff choose from this list; nobody else can add to it."}
+        {meta.blurb} Staff choose from this list; only an admin changes it.
       </p>
 
       <form className="party-add" onSubmit={(e) => { e.preventDefault(); void add(name); }}>
-        <label className="field"><span>{mfg ? "Manufacturer name" : "Party name"}</span>
+        <label className="field"><span>New {noun}</span>
           <input value={name} onChange={(e) => setName(e.target.value)}
-            placeholder={mfg ? "e.g. Sky Jewels" : "e.g. Ghanshyam Bhai"} /></label>
+            placeholder={`e.g. ${(lists[kind] || [])[0]?.name || "a new name"}`} /></label>
         <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>
           {busy ? "Adding…" : `Add ${noun}`}
         </button>
@@ -94,7 +92,7 @@ export default function PartiesClient({
       {error && <p className="save-error">{error}</p>}
       {notice && <p className="notice">{notice}</p>}
 
-      {!mfg && unlisted.length > 0 && (
+      {showUnlisted && unlisted.length > 0 && (
         <div className="unlisted">
           <h2>Names already used on memos</h2>
           <p>
@@ -117,13 +115,15 @@ export default function PartiesClient({
       <h2 className="party-h">On the list ({list.length})</h2>
       {list.length === 0 ? (
         <p className="empty-state">
-          {mfg
-            ? "No manufacturers yet. A PD sheet cannot be assigned until one is added."
-            : "No parties yet. Until one is added, memos still accept any name."}
+          Nothing on this list yet — the boxes it fills have nothing to offer
+          until something is added.
         </p>
       ) : (
         <table className="history">
-          <thead><tr><th>{mfg ? "Manufacturer" : "Party"}</th><th>Added by</th><th className="actions-col">Actions</th></tr></thead>
+          <thead><tr>
+            <th>{meta.label}</th><th>Added by</th>
+            <th className="actions-col">Actions</th>
+          </tr></thead>
           <tbody>
             {list.map((p) => (
               <tr key={p.id}>

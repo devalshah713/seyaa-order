@@ -85,17 +85,24 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   const pieces = useMemo(() => pieceNumbers(run), [run]);
   const count = designNo.trim() ? pieceCount(run) : 0;
 
-  // Who a design may be assigned to. A controlled list: staff choose from it,
-  // and only an admin adds to it.
-  const [mfgs, setMfgs] = useState<string[]>([]);
+  // The controlled lists behind this sheet's dropdowns: staff choose from them,
+  // and only an admin changes them. Held as data rather than in the code so a
+  // new product does not need a deploy.
+  //
+  // The constants stay as the fallback. A sheet half-filled because a fetch
+  // failed is worse than one offering last week's list.
+  const [lists, setLists] = useState<Record<string, string[]>>({});
   useEffect(() => {
     let off = false;
-    fetch("/api/parties?kind=mfg")
-      .then((r) => (r.ok ? r.json() : { parties: [] }))
-      .then((d) => { if (!off) setMfgs((d.parties || []).map((p: { name: string }) => p.name)); })
+    fetch("/api/parties?kinds=mfg,product,category,subCategory,type")
+      .then((r) => (r.ok ? r.json() : { lists: {} }))
+      .then((d) => { if (!off) setLists(d.lists || {}); })
       .catch(() => {});
     return () => { off = true; };
   }, []);
+  const listOf = (kind: string, fallback: readonly string[]) =>
+    lists[kind]?.length ? lists[kind] : [...fallback];
+  const mfgs = listOf("mfg", []);
   // Just the piece numbers — "005", "006" — which is how a diamond size names
   // the pieces it goes into, and how the register writes them.
   const subs = useMemo(
@@ -283,19 +290,20 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           <legend>Product</legend>
           <label className="field"><span>Product</span>
             <Picker value={f.product} onChange={(v) => set("product", v)}
-              options={PRODUCTS} prompt="Choose a product…" /></label>
+              options={listOf("product", PRODUCTS)} prompt="Choose a product…" /></label>
           <label className="field"><span>Category</span>
             <Picker value={f.category} onChange={(v) => set("category", v)}
-              options={CATEGORIES} prompt="Choose a category…" /></label>
+              options={listOf("category", CATEGORIES)} prompt="Choose a category…" /></label>
           {/* The one that stays open: a sub-category describes the design, and
               a new one is the designer's to write. The list is there to be
               picked from when it already says the right thing. */}
           <label className="field"><span>Sub-category</span>
-            <Combo value={f.subCategory} onChange={(v) => set("subCategory", v)} options={SUB_CATEGORIES} placeholder="Tennis Necklace" /></label>
+            <Combo value={f.subCategory} onChange={(v) => set("subCategory", v)}
+              options={listOf("subCategory", SUB_CATEGORIES)} placeholder="Tennis Necklace" /></label>
           <div className="two">
             <label className="field"><span>Type</span>
               <Picker value={f.type} onChange={(v) => set("type", v)}
-                options={TYPES} prompt="Choose a type…" /></label>
+                options={listOf("type", TYPES)} prompt="Choose a type…" /></label>
             <label className="field"><span>{sizeLabel(f.product)}</span>
               <input value={f.size} onChange={(e) => set("size", e.target.value)} placeholder={'16.5" INCH'} /></label>
           </div>

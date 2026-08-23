@@ -25,7 +25,7 @@ import {
   type Party,
   type StockEvent,
   type StockOutcome,
-  SEED_MFGS,
+  SEED_LISTS,
   partyKindOf,
   type PartyKind,
 } from "./memoFormat";
@@ -101,9 +101,11 @@ export type DB = {
   events: StockEvent[];
   orders: Order[];
   parties: Party[];
-  // Set once the built-in manufacturers have been written in, so removing one
-  // does not bring it back on the next read.
+  // Set once a list's built-in names have been written in, so removing one does
+  // not bring it back on the next read. `mfgSeeded` is the first version of
+  // this, kept so a store written by it is not seeded twice.
   mfgSeeded?: boolean;
+  seeded?: Partial<Record<PartyKind, boolean>>;
 };
 
 export function isStorageConfigured(): boolean {
@@ -254,24 +256,54 @@ export async function getMemo(id: string): Promise<Memo | null> {
 export async function listParties(kind: PartyKind = "party"): Promise<Party[]> {
   const token = requireToken();
   let db = await readDB(token);
-  // The manufacturers are put in once, so the PD sheet has something to choose
-  // from before anyone visits the admin screen. The flag means a manufacturer
-  // an admin later removes stays removed.
-  if (kind === "mfg" && !db.mfgSeeded) {
-    const now = new Date().toISOString();
-    for (const name of SEED_MFGS) {
-      if (db.parties.some((p) => partyKey(p.name) === partyKey(name))) continue;
-      db.parties.push({
-        id: randomUUID(), name, kind: "mfg", createdAt: now, createdBy: "system",
-      });
-    }
-    db.mfgSeeded = true;
-    await writeDB(db, token);
-    db = await readDB(token);
-  }
+  if (await seedList(db, kind, token)) db = await readDB(token);
   return db.parties
     .filter((p) => partyKindOf(p) === kind)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Several lists at once, for a screen that needs more than one — one read of
+// the store instead of one per list.
+export async function listPartyNames(
+  kinds: PartyKind[]
+): Promise<Record<string, string[]>> {
+  const token = requireToken();
+  let db = await readDB(token);
+  let wrote = false;
+  for (const kind of kinds) wrote = (await seedList(db, kind, token)) || wrote;
+  if (wrote) db = await readDB(token);
+
+  const out: Record<string, string[]> = {};
+  for (const kind of kinds) {
+    out[kind] = db.parties
+      .filter((p) => partyKindOf(p) === kind)
+      .map((p) => p.name)
+      .sort((a, b) => a.localeCompare(b));
+  }
+  return out;
+}
+
+// Writes a list's built-in names in, once. Returns whether it wrote.
+async function seedList(db: DB, kind: PartyKind, token: string): Promise<boolean> {
+  const seed = SEED_LISTS[kind];
+  if (!seed) return false;
+  // mfgSeeded is the flag the first version of this used.
+  if (db.seeded?.[kind] || (kind === "mfg" && db.mfgSeeded)) return false;
+
+  const now = new Date().toISOString();
+  for (const name of seed) {
+    const clash = db.parties.some(
+      (p) => partyKindOf(p) === kind && partyKey(p.name) === partyKey(name)
+    );
+    if (clash) continue;
+    db.parties.push({
+      id: randomUUID(), name, kind, createdAt: now, createdBy: "system",
+    });
+  }
+  db.seeded = { ...db.seeded, [kind]: true };
+  if (kind === "mfg") db.mfgSeeded = true;
+  await writeDB(db, token);
+  return true;
 }
 
 export async function createParty(
