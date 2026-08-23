@@ -144,12 +144,33 @@ export function formatDate(dateInput: string): string {
 // everyone else picks from it.
 // ---------------------------------------------------------------------------
 
+// Two controlled lists, kept in one place because they are the same thing —
+// a name staff may choose but not invent. "party" is who a memo goes to;
+// "mfg" is who a design is made by. A party saved before this existed has no
+// kind, and is a memo party.
+export type PartyKind = "party" | "mfg";
+
 export type Party = {
   id: string;
   name: string;
+  kind?: PartyKind;
   createdAt: string;
   createdBy: string;
 };
+
+export const partyKindOf = (p: Party): PartyKind => p.kind || "party";
+
+// The manufacturers Seyaa works with. Written into the list the first time it
+// is read so the PD sheet works from day one; after that the list is the
+// admin's, and these are not put back if one is removed.
+export const SEED_MFGS = [
+  "Seyaa Factory",
+  "Pratik C6",
+  "Rajkumar - Zaveri Bazaar",
+  "Rakesh Babu - Zaveri Bazaar",
+  "Sky Jewels",
+  "Anthem Jewels",
+];
 
 // Names are compared with case, spacing and punctuation ignored, so
 // "seyya soli ( hardik)" cannot be added alongside "Seyya Soli (Hardik)".

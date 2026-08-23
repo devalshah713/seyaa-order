@@ -25,6 +25,9 @@ import {
   type Party,
   type StockEvent,
   type StockOutcome,
+  SEED_MFGS,
+  partyKindOf,
+  type PartyKind,
 } from "./memoFormat";
 
 const DB_PATH = "memos/db.json";
@@ -98,6 +101,9 @@ export type DB = {
   events: StockEvent[];
   orders: Order[];
   parties: Party[];
+  // Set once the built-in manufacturers have been written in, so removing one
+  // does not bring it back on the next read.
+  mfgSeeded?: boolean;
 };
 
 export function isStorageConfigured(): boolean {
@@ -245,22 +251,44 @@ export async function getMemo(id: string): Promise<Memo | null> {
 // Parties
 // ---------------------------------------------------------------------------
 
-export async function listParties(): Promise<Party[]> {
+export async function listParties(kind: PartyKind = "party"): Promise<Party[]> {
   const token = requireToken();
-  const db = await readDB(token);
-  return db.parties.slice().sort((a, b) => a.name.localeCompare(b.name));
+  let db = await readDB(token);
+  // The manufacturers are put in once, so the PD sheet has something to choose
+  // from before anyone visits the admin screen. The flag means a manufacturer
+  // an admin later removes stays removed.
+  if (kind === "mfg" && !db.mfgSeeded) {
+    const now = new Date().toISOString();
+    for (const name of SEED_MFGS) {
+      if (db.parties.some((p) => partyKey(p.name) === partyKey(name))) continue;
+      db.parties.push({
+        id: randomUUID(), name, kind: "mfg", createdAt: now, createdBy: "system",
+      });
+    }
+    db.mfgSeeded = true;
+    await writeDB(db, token);
+    db = await readDB(token);
+  }
+  return db.parties
+    .filter((p) => partyKindOf(p) === kind)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function createParty(
   name: string,
-  by: string
+  by: string,
+  kind: PartyKind = "party"
 ): Promise<{ ok: true; party: Party } | { ok: false; error: string }> {
   const clean = name.trim().replace(/\s+/g, " ");
   if (clean.length < 2) return { ok: false, error: "Give the party a name." };
 
   const token = requireToken();
   const db = await readDB(token);
-  const existing = db.parties.find((p) => partyKey(p.name) === partyKey(clean));
+  // Names collide only within their own list: a factory that is also a memo
+  // party is two entries, because the two lists are chosen from separately.
+  const existing = db.parties.find(
+    (p) => partyKindOf(p) === kind && partyKey(p.name) === partyKey(clean)
+  );
   if (existing) {
     return { ok: false, error: `Already on the list as "${existing.name}".` };
   }
@@ -268,6 +296,7 @@ export async function createParty(
   const party: Party = {
     id: randomUUID(),
     name: clean,
+    kind,
     createdAt: new Date().toISOString(),
     createdBy: by,
   };

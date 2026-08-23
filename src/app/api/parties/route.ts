@@ -1,5 +1,7 @@
-// The controlled list of parties. Anyone signed in may read it — the memo form
-// needs it to offer choices — but only an admin may add to it.
+// The controlled lists of names staff may choose but not invent: who a memo
+// goes to, and who a design is made by. Anyone signed in may read them — the
+// memo form and the PD sheet need them to offer choices — but only an admin
+// may add to them.
 import { NextRequest, NextResponse } from "next/server";
 import { currentSession, requireAdmin } from "@/lib/currentUser";
 import { createParty, listParties } from "@/lib/memoStore";
@@ -7,12 +9,15 @@ import { createParty, listParties } from "@/lib/memoStore";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!(await currentSession())) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+  // ?kind=mfg is the manufacturers a design can be assigned to; the default is
+  // the parties a memo can be issued to.
+  const kind = req.nextUrl.searchParams.get("kind") === "mfg" ? "mfg" : "party";
   try {
-    return NextResponse.json({ parties: await listParties() });
+    return NextResponse.json({ parties: await listParties(kind) });
   } catch (err) {
     return NextResponse.json({ error: msg(err) }, { status: 503 });
   }
@@ -28,15 +33,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let name = "";
+  let kind: "party" | "mfg" = "party";
   try {
-    const body = (await req.json()) as { name?: unknown };
+    const body = (await req.json()) as { name?: unknown; kind?: unknown };
     name = typeof body.name === "string" ? body.name : "";
+    if (body.kind === "mfg") kind = "mfg";
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
   try {
-    const result = await createParty(name, admin.username);
+    const result = await createParty(name, admin.username, kind);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ party: result.party }, { status: 201 });
   } catch (err) {

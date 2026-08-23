@@ -251,23 +251,39 @@ export default function MemoForm({
         <fieldset className="group">
           <legend>{gold ? "Factory" : "Recipient"}</legend>
           <label className="field"><span>{gold ? "Factory / Karigar" : "To"}</span>
-            <input
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              list={parties.length ? "party-list" : undefined}
-              placeholder={parties.length ? "Start typing to search…" : (gold ? "Factory name / karigar" : "Recipient name / firm")}
-              autoComplete="off"
-            />
+            {/* Chosen, not typed. A memo goes to somebody already on the list;
+                a new name is an admin's decision, not a spelling. */}
+            {parties.length > 0 ? (
+              <select value={to} onChange={(e) => setTo(e.target.value)}>
+                <option value="">
+                  {gold ? "Choose a factory / karigar…" : "Choose a recipient…"}
+                </option>
+                {/* A memo saved to someone since taken off the list still shows
+                    who it went to, rather than reopening as blank. */}
+                {to.trim() !== "" && !partyOk && <option value={to}>{to}</option>}
+                {parties.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            ) : (
+              // Nothing on the list yet. Typing is left open rather than
+              // locking the memo book until somebody visits the admin screen.
+              <input
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                placeholder={gold ? "Factory name / karigar" : "Recipient name / firm"}
+                autoComplete="off"
+              />
+            )}
           </label>
-          {parties.length > 0 && (
-            <datalist id="party-list">
-              {parties.map((p) => <option key={p} value={p} />)}
-            </datalist>
-          )}
-          {to.trim() !== "" && !partyOk && (
+          {parties.length === 0 && (
             <p className="party-warn">
-              <strong>{to.trim()}</strong> is not on the party list. Pick one from the list —
-              only an admin can add a new party.
+              No parties on the list yet — ask an admin to add them under Parties,
+              and this becomes a dropdown.
+            </p>
+          )}
+          {parties.length > 0 && to.trim() !== "" && !partyOk && (
+            <p className="party-warn">
+              <strong>{to.trim()}</strong> is no longer on the party list. Pick
+              one from the list — only an admin can add a new party.
             </p>
           )}
           <label className="field"><span>Through</span>

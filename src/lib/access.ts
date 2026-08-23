@@ -39,8 +39,7 @@ export function sanitizeModules(input: unknown): ModuleKey[] {
 
 // Every path each module owns — pages and the APIs behind them.
 const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
-  // /api/parties feeds the memo form's party dropdown, so it belongs to memos.
-  { key: "memos", prefixes: ["/memo", "/api/memos", "/api/parties"] },
+  { key: "memos", prefixes: ["/memo", "/api/memos"] },
   { key: "orders", prefixes: ["/orders", "/api/orders"] },
   { key: "stock", prefixes: ["/stock", "/api/stock", "/api/stock-sheet"] },
   // Photo upload/serving exists for the PD sheet's design image.
@@ -54,6 +53,10 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
   { key: "stockbook", prefixes: ["/stockbook", "/api/stockbook", "/api/prices"] },
 ];
 
+// /api/parties is deliberately not listed: the memo form and the PD sheet both
+// read it, so it belongs to neither. Its own route requires a session, and
+// admin for anything that writes.
+//
 // The module a path belongs to, or null for shared things (the home page, auth,
 // admin screens) that aren't gated per feature.
 export function moduleForPath(pathname: string): ModuleKey | null {

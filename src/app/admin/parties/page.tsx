@@ -11,15 +11,17 @@ export default async function PartiesPage() {
   if (!session) redirect("/login?next=/admin/parties");
   if (session.role !== "admin") redirect("/");
 
-  const [parties, unlisted] = await Promise.all([listParties(), unlistedPartyNames()]);
+  const [parties, mfgs, unlisted] = await Promise.all([
+    listParties(), listParties("mfg"), unlistedPartyNames(),
+  ]);
 
   return (
     <div className="wrap">
       <div className="page-head">
         <h1>Parties</h1>
-        <p>Everyone a memo can be issued to. Only admins can change this list.</p>
+        <p>The names staff may choose but not invent. Only admins can change these lists.</p>
       </div>
-      <PartiesClient parties={parties} unlisted={unlisted} />
+      <PartiesClient parties={parties} mfgs={mfgs} unlisted={unlisted} />
     </div>
   );
 }

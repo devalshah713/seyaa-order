@@ -19,9 +19,11 @@ export const SUB_CATEGORIES = [
 
 export const TYPES = ["Modern", "Classic", "Traditional", "Fusion", "Minimal"];
 
-export const DIA_QUALITIES = [
-  "VVS-EF", "VS-EF", "VVS-GH", "VS-GH", "SI-GH", "SI-IJ", "VVS-DEF", "VS-FG",
-];
+// The one quality Seyaa buys. Prefilled and not typed over — a sheet reading
+// anything else would send the diamond department looking for goods that are
+// not held.
+export const DIA_QUALITIES = ["VVS/VS-EF"];
+export const DEFAULT_DIA_QUALITY = DIA_QUALITIES[0];
 
 export const DIA_SHAPES = [
   "Round", "Oval", "Pear", "Marquise", "Emerald", "Princess",

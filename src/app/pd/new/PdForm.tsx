@@ -8,6 +8,7 @@ import { todayInput } from "@/lib/memoFormat";
 import {
   PRODUCTS, CATEGORIES, SUB_CATEGORIES, TYPES, DIA_QUALITIES,
   GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, sizeLabel,
+  DEFAULT_DIA_QUALITY,
   BLANK_DIA_LINE, formatDiaLines, shapesFromLines, type DiaLine,
 } from "@/lib/pdConfig";
 import {
@@ -32,7 +33,7 @@ export type PdInitial = {
 const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
   photoPath: "", sku: "",
   product: "", category: "", subCategory: "", type: "",
-  diaQuality: "", goldWeight: "", locks: "", orderType: "Stock", assignedDate: "",
+  diaQuality: DEFAULT_DIA_QUALITY, goldWeight: "", locks: "", orderType: "Stock", assignedDate: "",
   assignedTo: "", size: "", diaShape: "", zone: "USA",
   goldPurity: "14KT", goldColor: "White Gold", priceRange: "", diaWeightPointers: "",
   quantity: "", orderBy: "Seyaa Solitaire", deliveryDate: "",
@@ -82,6 +83,18 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   const run = useMemo(() => parseDesignNo(designNo), [designNo]);
   const pieces = useMemo(() => pieceNumbers(run), [run]);
   const count = designNo.trim() ? pieceCount(run) : 0;
+
+  // Who a design may be assigned to. A controlled list: staff choose from it,
+  // and only an admin adds to it.
+  const [mfgs, setMfgs] = useState<string[]>([]);
+  useEffect(() => {
+    let off = false;
+    fetch("/api/parties?kind=mfg")
+      .then((r) => (r.ok ? r.json() : { parties: [] }))
+      .then((d) => { if (!off) setMfgs((d.parties || []).map((p: { name: string }) => p.name)); })
+      .catch(() => {});
+    return () => { off = true; };
+  }, []);
   // Just the piece numbers — "005", "006" — which is how a diamond size names
   // the pieces it goes into, and how the register writes them.
   const subs = useMemo(
@@ -284,7 +297,15 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
         <fieldset className="group">
           <legend>Diamond &amp; Gold</legend>
           <label className="field"><span>Dia. quality</span>
-            <Combo value={f.diaQuality} onChange={(v) => set("diaQuality", v)} options={DIA_QUALITIES} placeholder="VVS-EF" /></label>
+            <select value={f.diaQuality || DEFAULT_DIA_QUALITY}
+              onChange={(e) => set("diaQuality", e.target.value)}>
+              {/* A sheet saved with an older quality keeps it on screen rather
+                  than silently reading as something it is not. */}
+              {!DIA_QUALITIES.includes(f.diaQuality) && f.diaQuality && (
+                <option value={f.diaQuality}>{f.diaQuality}</option>
+              )}
+              {DIA_QUALITIES.map((q) => <option key={q} value={q}>{q}</option>)}
+            </select></label>
 
           <div className="field">
             <span>Diamond sizes</span>
@@ -354,7 +375,20 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           <legend>People &amp; Dates</legend>
           <div className="two">
             <label className="field"><span>Assigned to</span>
-              <input value={f.assignedTo} onChange={(e) => set("assignedTo", e.target.value)} placeholder="PRATIK C6" /></label>
+              <select value={f.assignedTo} onChange={(e) => set("assignedTo", e.target.value)}>
+                <option value="">Choose a manufacturer…</option>
+                {/* A sheet assigned to someone since taken off the list still
+                    shows who it went to. */}
+                {f.assignedTo && !mfgs.some((m) => m === f.assignedTo) && (
+                  <option value={f.assignedTo}>{f.assignedTo}</option>
+                )}
+                {mfgs.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              {mfgs.length === 0 && (
+                <p className="dia-note">
+                  No manufacturers on the list yet — an admin adds them under Parties.
+                </p>
+              )}</label>
             <label className="field"><span>PD Merchandiser</span>
               <input value={f.pdMerchandiser} onChange={(e) => set("pdMerchandiser", e.target.value)} placeholder="Pritesh Bhosale" /></label>
           </div>
