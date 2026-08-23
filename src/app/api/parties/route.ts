@@ -4,7 +4,9 @@
 // may add to them.
 import { NextRequest, NextResponse } from "next/server";
 import { currentSession, requireAdmin } from "@/lib/currentUser";
-import { createParty, listParties, listPartyNames } from "@/lib/memoStore";
+import {
+  clearParties, createParty, listParties, listPartyNames,
+} from "@/lib/memoStore";
 import { isPartyKind, type PartyKind } from "@/lib/memoFormat";
 
 export const dynamic = "force-dynamic";
@@ -65,4 +67,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 function msg(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong.";
+}
+
+// Emptying a whole list, so a set of built-in options can be cleared out before
+// the real ones are entered. One at a time, and named — there is no "delete
+// everything".
+export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  if (!(await requireAdmin())) {
+    return NextResponse.json(
+      { error: "Only an admin can clear a list." },
+      { status: 403 }
+    );
+  }
+  const kind = req.nextUrl.searchParams.get("kind");
+  if (!isPartyKind(kind)) {
+    return NextResponse.json({ error: "No such list." }, { status: 400 });
+  }
+  try {
+    return NextResponse.json({ removed: await clearParties(kind) });
+  } catch (err) {
+    return NextResponse.json({ error: msg(err) }, { status: 503 });
+  }
 }

@@ -306,6 +306,19 @@ async function seedList(db: DB, kind: PartyKind, token: string): Promise<boolean
   return true;
 }
 
+// Empties a list. Also marks it seeded, so a list whose built-in names were
+// just cleared out does not have them written back on the next read.
+export async function clearParties(kind: PartyKind): Promise<number> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const before = db.parties.length;
+  db.parties = db.parties.filter((p) => partyKindOf(p) !== kind);
+  db.seeded = { ...db.seeded, [kind]: true };
+  if (kind === "mfg") db.mfgSeeded = true;
+  await writeDB(db, token);
+  return before - db.parties.length;
+}
+
 export async function createParty(
   name: string,
   by: string,

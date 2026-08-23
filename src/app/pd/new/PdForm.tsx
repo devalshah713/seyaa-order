@@ -7,7 +7,7 @@ import DiamondSizePicker from "@/components/DiamondSizePicker";
 import Picker from "@/components/Picker";
 import { todayInput } from "@/lib/memoFormat";
 import {
-  PRODUCTS, CATEGORIES, SUB_CATEGORIES, TYPES, DIA_QUALITIES,
+  SUB_CATEGORIES, DIA_QUALITIES,
   GOLD_PURITIES, GOLD_COLORS, ZONES, LOCKS, ORDER_TYPES, sizeLabel,
   DEFAULT_DIA_QUALITY,
   BLANK_DIA_LINE, formatDiaLines, shapesFromLines, type DiaLine,
@@ -87,10 +87,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
 
   // The controlled lists behind this sheet's dropdowns: staff choose from them,
   // and only an admin changes them. Held as data rather than in the code so a
-  // new product does not need a deploy.
-  //
-  // The constants stay as the fallback. A sheet half-filled because a fetch
-  // failed is worse than one offering last week's list.
+  // new product does not need a deploy — and so an empty list stays empty
+  // rather than falling back to options that were deliberately cleared out.
   const [lists, setLists] = useState<Record<string, string[]>>({});
   useEffect(() => {
     let off = false;
@@ -100,9 +98,14 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
       .catch(() => {});
     return () => { off = true; };
   }, []);
-  const listOf = (kind: string, fallback: readonly string[]) =>
-    lists[kind]?.length ? lists[kind] : [...fallback];
-  const mfgs = listOf("mfg", []);
+  const listOf = (kind: string) => lists[kind] || [];
+  const mfgs = listOf("mfg");
+
+  // Said once, wherever a dropdown has nothing in it yet.
+  const emptyNote = (kind: string, what: string) =>
+    listOf(kind).length === 0 ? (
+      <p className="dia-note">Nothing on the {what} list yet — an admin adds them under Lists.</p>
+    ) : null;
   // Just the piece numbers — "005", "006" — which is how a diamond size names
   // the pieces it goes into, and how the register writes them.
   const subs = useMemo(
@@ -290,20 +293,24 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           <legend>Product</legend>
           <label className="field"><span>Product</span>
             <Picker value={f.product} onChange={(v) => set("product", v)}
-              options={listOf("product", PRODUCTS)} prompt="Choose a product…" /></label>
+              options={listOf("product")} prompt="Choose a product…" />
+            {emptyNote("product", "product")}</label>
           <label className="field"><span>Category</span>
             <Picker value={f.category} onChange={(v) => set("category", v)}
-              options={listOf("category", CATEGORIES)} prompt="Choose a category…" /></label>
+              options={listOf("category")} prompt="Choose a category…" />
+            {emptyNote("category", "category")}</label>
           {/* The one that stays open: a sub-category describes the design, and
               a new one is the designer's to write. The list is there to be
               picked from when it already says the right thing. */}
           <label className="field"><span>Sub-category</span>
             <Combo value={f.subCategory} onChange={(v) => set("subCategory", v)}
-              options={listOf("subCategory", SUB_CATEGORIES)} placeholder="Tennis Necklace" /></label>
+              options={listOf("subCategory").length ? listOf("subCategory") : SUB_CATEGORIES}
+              placeholder="Tennis Necklace" /></label>
           <div className="two">
             <label className="field"><span>Type</span>
               <Picker value={f.type} onChange={(v) => set("type", v)}
-                options={listOf("type", TYPES)} prompt="Choose a type…" /></label>
+                options={listOf("type")} prompt="Choose a type…" />
+              {emptyNote("type", "type")}</label>
             <label className="field"><span>{sizeLabel(f.product)}</span>
               <input value={f.size} onChange={(e) => set("size", e.target.value)} placeholder={'16.5" INCH'} /></label>
           </div>

@@ -194,21 +194,15 @@ export const SEED_MFGS = [
   "Anthem Jewels",
 ];
 
+// Only the lists that start with something. Products, categories and types
+// start empty on purpose: Seyaa's own are being entered, and a built-in set
+// would have to be cleared out first.
 export const SEED_LISTS: Partial<Record<PartyKind, readonly string[]>> = {
   mfg: SEED_MFGS,
-  product: [
-    "Tennis Necklace", "Necklace", "Necklace Set", "Tennis Bracelet", "Bracelet",
-    "Ring", "Earrings", "Pendant", "Bangle", "Chain",
-  ],
-  category: [
-    "Korean Necklace", "Tennis", "Solitaire", "Cluster", "Halo",
-    "Eternity", "Bridal", "Daily Wear", "Cocktail",
-  ],
   subCategory: [
     "Tennis Necklace", "Tennis Bracelet", "Riviera", "Line Necklace",
     "Choker", "Station Necklace", "Solitaire Ring", "Band",
   ],
-  type: ["Modern", "Classic", "Traditional", "Fusion", "Minimal"],
 };
 
 // Names are compared with case, spacing and punctuation ignored, so

@@ -56,6 +56,22 @@ export default function PartiesClient({
     await call(`/api/parties/${p.id}`, { method: "DELETE" });
   }
 
+  // Clearing a whole list, for when a set of built-in options is being replaced
+  // with Seyaa's own. Named in the prompt, because it cannot be undone.
+  async function clearAll() {
+    const meta = PARTY_KINDS.find((k) => k.key === kind)!;
+    const n = (lists[kind] || []).length;
+    if (!n) return;
+    if (!window.confirm(
+      `Remove all ${n} from ${meta.label}? Sheets already saved keep what they say, but the list starts empty.`
+    )) return;
+    setBusy(true);
+    if (await call(`/api/parties?kind=${kind}`, { method: "DELETE" })) {
+      setNotice(`${meta.label} cleared.`);
+    }
+    setBusy(false);
+  }
+
   const meta = PARTY_KINDS.find((k) => k.key === kind)!;
   const list = lists[kind] || [];
   const noun = meta.noun;
@@ -112,7 +128,14 @@ export default function PartiesClient({
         </div>
       )}
 
-      <h2 className="party-h">On the list ({list.length})</h2>
+      <div className="party-h-row">
+        <h2 className="party-h">On the list ({list.length})</h2>
+        {list.length > 0 && (
+          <button type="button" className="rowbtn danger" onClick={clearAll} disabled={busy}>
+            Remove all
+          </button>
+        )}
+      </div>
       {list.length === 0 ? (
         <p className="empty-state">
           Nothing on this list yet — the boxes it fills have nothing to offer

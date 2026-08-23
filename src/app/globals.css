@@ -1534,3 +1534,7 @@ table.jg-table table.sb-sub tfoot tr.sb-grand td {
   .kind-tabs.many::-webkit-scrollbar { display: none; }
   .kind-tabs.many button { flex: 0 0 auto; white-space: nowrap; }
 }
+
+/* "On the list (n)" with the clear-the-lot button beside it. */
+.party-h-row { display: flex; align-items: baseline; gap: 12px; }
+.party-h-row .party-h { margin-right: auto; }

@@ -1,23 +1,15 @@
 // Field options and the SKU auto-builder for the Product Development (PD) sheet.
-// Every option list is a *suggestion* — the form's combo inputs accept any typed
-// value, so the team is never blocked by a missing option.
-
-export const PRODUCTS = [
-  "Tennis Necklace", "Necklace", "Necklace Set", "Tennis Bracelet", "Bracelet",
-  "Ring", "Earrings", "Pendant", "Bangle", "Chain",
-];
-
-export const CATEGORIES = [
-  "Korean Necklace", "Tennis", "Solitaire", "Cluster", "Halo",
-  "Eternity", "Bridal", "Daily Wear", "Cocktail",
-];
+//
+// Product, Category and Type are not here: they are chosen from lists an admin
+// keeps under Lists, so a new product does not need a deploy. What is left are
+// the lists that are still suggestions — a combo takes anything typed, so a
+// missing option never blocks the sheet.
 
 export const SUB_CATEGORIES = [
   "Tennis Necklace", "Tennis Bracelet", "Riviera", "Line Necklace",
   "Choker", "Station Necklace", "Solitaire Ring", "Band",
 ];
 
-export const TYPES = ["Modern", "Classic", "Traditional", "Fusion", "Minimal"];
 
 // The one quality Seyaa buys. Prefilled and not typed over — a sheet reading
 // anything else would send the diamond department looking for goods that are
