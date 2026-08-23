@@ -38,6 +38,13 @@ async function run(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   if (!isSheetConfigured()) {
+    // A sheet that fills itself from its own Apps Script needs nothing from
+    // this route, and the scheduler still calls it every night. Say plainly
+    // that there was nothing to do, rather than logging a nightly failure for
+    // a setup nobody chose.
+    if (cronOk(req)) {
+      return NextResponse.json({ at: istStamp(), skipped: "Not set up to push — the sheet fills itself." });
+    }
     return NextResponse.json(
       { error: sheetSetupHint() || "The Google Sheet is not set up yet." },
       { status: 501 }
