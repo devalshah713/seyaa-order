@@ -26,6 +26,7 @@ import {
   type StockEvent,
   type StockOutcome,
   SEED_LISTS,
+  closestName,
   partyKindOf,
   parentKindOf,
   type PartyKind,
@@ -460,10 +461,22 @@ export async function resolveParty(
 // Distinct party names already written on memos that are not on the list —
 // what the free-text era left behind, so an admin can see the variants and
 // add the correct spelling of each.
-export async function unlistedPartyNames(): Promise<{ name: string; memos: number }[]> {
+export type UnlistedName = {
+  name: string;
+  memos: number;
+  // The listed party this was probably meant to be, worked out from the name
+  // itself. Null when nothing is close enough to put in front of someone.
+  match: string;
+  score: number;
+};
+
+export async function unlistedPartyNames(): Promise<UnlistedName[]> {
   const token = requireToken();
   const db = await readDB(token);
-  const known = new Set(db.parties.map((p) => partyKey(p.name)));
+  const parties = db.parties.filter((p) => partyKindOf(p) === "party");
+  const known = new Set(parties.map((p) => partyKey(p.name)));
+  const listed = parties.map((p) => p.name);
+
   const counts = new Map<string, { name: string; memos: number }>();
   for (const m of db.memos) {
     const key = partyKey(m.to);
@@ -471,7 +484,45 @@ export async function unlistedPartyNames(): Promise<{ name: string; memos: numbe
     const prev = counts.get(key);
     counts.set(key, { name: prev?.name || m.to, memos: (prev?.memos || 0) + 1 });
   }
-  return [...counts.values()].sort((a, b) => b.memos - a.memos);
+
+  return [...counts.values()]
+    .map((u) => {
+      const best = closestName(u.name, listed);
+      return { ...u, match: best?.name || "", score: best?.score || 0 };
+    })
+    .sort((a, b) => b.score - a.score || b.memos - a.memos);
+}
+
+// Puts every memo carrying a typed name onto a name from the list. This is the
+// only way an old memo's recipient changes: the memo form has not accepted a
+// typed name since the list came in.
+export async function replacePartyOnMemos(
+  from: string,
+  to: string
+): Promise<{ ok: true; memos: number } | { ok: false; error: string }> {
+  const fromKey = partyKey(from);
+  if (!fromKey) return { ok: false, error: "Nothing to replace." };
+
+  const token = requireToken();
+  const db = await readDB(token);
+  const target = db.parties.find(
+    (p) => partyKindOf(p) === "party" && partyKey(p.name) === partyKey(to)
+  );
+  if (!target) return { ok: false, error: `${to} is not on the party list.` };
+
+  const now = new Date().toISOString();
+  let changed = 0;
+  for (const m of db.memos) {
+    if (partyKey(m.to) !== fromKey) continue;
+    m.to = target.name; // the list's spelling, not the one typed that day
+    // The memo's paper says something different now, so the nightly backup
+    // fetches its PDF again rather than keeping the old one.
+    m.updatedAt = now;
+    changed++;
+  }
+  if (!changed) return { ok: false, error: `No memos are under "${from}".` };
+  await writeDB(db, token);
+  return { ok: true, memos: changed };
 }
 
 // ---------------------------------------------------------------------------

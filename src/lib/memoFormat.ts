@@ -220,6 +220,76 @@ export function partyKey(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+// --- Matching a typed name to one on the list --------------------------------
+// Memos written before the list existed carry whatever was typed that day:
+// "ghanshyambhai", "Ghanshyam bhai ", "GHANSHYAMBHAI JI". Sorting them out by
+// eye across years of memos is the job nobody does, so the likely match is
+// worked out and offered.
+
+// Spacing is the commonest difference, so it is taken out entirely.
+const squash = (name: string) => partyKey(name).replace(/ /g, "");
+
+// How many single-character edits turn one string into the other. Bounded
+// work: these are names, not documents.
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(
+        prev[j] + 1,
+        row[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+// 1 is the same name, 0 is nothing in common.
+export function nameCloseness(a: string, b: string): number {
+  const x = squash(a);
+  const y = squash(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+
+  // The shorter is how the longer starts: "Rakesh Babu" written on an old memo
+  // against "Rakesh Babu - Zaveri Bazaar" on the list. Scored on the match
+  // rather than on the tail, because a long suffix is exactly what was left
+  // off. Six characters in, so initials and single words like "Bhai" do not
+  // reach for a name that merely begins with them.
+  if (long.startsWith(short) && short.length >= 6) return 0.85;
+
+  // Otherwise contained but not from the start, which is weaker.
+  if (long.includes(short) && short.length >= 4) {
+    return 0.9 * (short.length / long.length) + 0.1;
+  }
+
+  const distance = editDistance(x, y);
+  return Math.max(0, 1 - distance / Math.max(x.length, y.length));
+}
+
+// The listed name a typed one most likely meant, or null when nothing is close
+// enough to suggest. Deliberately shy: a wrong suggestion acted on in bulk is
+// worse than no suggestion.
+export function closestName(
+  typed: string,
+  listed: readonly string[],
+  floor = 0.72
+): { name: string; score: number } | null {
+  let best: { name: string; score: number } | null = null;
+  for (const name of listed) {
+    const score = nameCloseness(typed, name);
+    if (!best || score > best.score) best = { name, score };
+  }
+  return best && best.score >= floor ? best : null;
+}
+
 // ---------------------------------------------------------------------------
 // Orders
 //

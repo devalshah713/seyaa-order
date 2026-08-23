@@ -11,7 +11,7 @@ export default function PartiesClient({
   unlisted,
 }: {
   lists: Record<string, Party[]>;
-  unlisted: { name: string; memos: number }[];
+  unlisted: { name: string; memos: number; match: string; score: number }[];
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<PartyKind>("party");
@@ -23,6 +23,9 @@ export default function PartiesClient({
   const [editName, setEditName] = useState("");
   // What a new entry will sit under, on the lists that are a tree.
   const [parentId, setParentId] = useState("");
+  // Which listed name each old typed one is being put onto. Starts at what the
+  // matching suggested, and is a dropdown so a wrong guess is one change away.
+  const [onto, setOnto] = useState<Record<string, string>>({});
 
   async function call(url: string, init: RequestInit): Promise<boolean> {
     setError(""); setNotice("");
@@ -65,6 +68,31 @@ export default function PartiesClient({
 
   // Clearing a whole list, for when a set of built-in options is being replaced
   // with Seyaa's own. Named in the prompt, because it cannot be undone.
+  // Rewrites every memo carrying the old typed name.
+  async function replaceOnMemos(u: { name: string; memos: number; match: string }) {
+    // The same fallback the dropdown renders with: until it is touched, what is
+    // on screen is the suggested match, and that is what the button must act on.
+    const to = onto[u.name] ?? u.match;
+    if (!to) return;
+    if (!window.confirm(
+      `Put ${u.memos} memo${u.memos === 1 ? "" : "s"} from "${u.name}" onto "${to}"? The memos will read ${to} from now on.`
+    )) return;
+    setBusy(true);
+    const res = await fetch("/api/parties/replace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from: u.name, to }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) setError(d.error || "That didn't work.");
+    else {
+      setNotice(`${d.memos} memo${d.memos === 1 ? "" : "s"} now read ${to}.`);
+      setError("");
+      router.refresh();
+    }
+    setBusy(false);
+  }
+
   async function clearAll() {
     const meta = PARTY_KINDS.find((k) => k.key === kind)!;
     const n = (lists[kind] || []).length;
@@ -144,18 +172,44 @@ export default function PartiesClient({
         <div className="unlisted">
           <h2>Names already used on memos</h2>
           <p>
-            These were typed as free text before the list existed. Add the correct spelling of
-            each — and look for the same party appearing twice.
+            Typed as free text before the list existed. Each is shown against the
+            party it looks like — check it, then put those memos onto that name.
+            The memos keep everything else; only who they are addressed to changes.
           </p>
           <ul>
-            {unlisted.map((u) => (
-              <li key={u.name}>
-                <span className="ul-name">{u.name}</span>
-                <span className="ul-count">{u.memos} memo{u.memos === 1 ? "" : "s"}</span>
-                <button type="button" className="rowbtn" onClick={() => add(u.name)}>Add as-is</button>
-                <button type="button" className="rowbtn" onClick={() => setName(u.name)}>Edit then add</button>
-              </li>
-            ))}
+            {unlisted.map((u) => {
+              const chosen = onto[u.name] ?? u.match;
+              return (
+                <li key={u.name}>
+                  <span className="ul-name">{u.name}</span>
+                  <span className="ul-count">{u.memos} memo{u.memos === 1 ? "" : "s"}</span>
+                  <span className="ul-arrow" aria-hidden>→</span>
+                  <select
+                    className="ul-onto"
+                    value={chosen}
+                    onChange={(e) => setOnto({ ...onto, [u.name]: e.target.value })}
+                  >
+                    <option value="">Leave it alone</option>
+                    {(lists.party || []).map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                  {/* How sure the match is, so a guess is not mistaken for a fact. */}
+                  {u.match && chosen === u.match && (
+                    <span className={`ul-score ${u.score >= 0.95 ? "sure" : ""}`}>
+                      {u.score >= 0.95 ? "same name" : "looks like it"}
+                    </span>
+                  )}
+                  <button type="button" className="rowbtn" disabled={busy || !chosen}
+                    onClick={() => replaceOnMemos(u)}>
+                    Replace on {u.memos}
+                  </button>
+                  <button type="button" className="rowbtn" onClick={() => add(u.name)}>
+                    Add as a new party
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
