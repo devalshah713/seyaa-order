@@ -21,6 +21,8 @@ export default function PartiesClient({
   const [notice, setNotice] = useState("");
   const [editId, setEditId] = useState("");
   const [editName, setEditName] = useState("");
+  // What a new entry will sit under, on the lists that are a tree.
+  const [parentId, setParentId] = useState("");
 
   async function call(url: string, init: RequestInit): Promise<boolean> {
     setError(""); setNotice("");
@@ -37,9 +39,14 @@ export default function PartiesClient({
     const ok = await call("/api/parties", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nameToAdd, kind }),
+      body: JSON.stringify({ name: nameToAdd, kind, parentId }),
     });
-    if (ok) { setNotice(`Added ${nameToAdd.trim()}.`); setName(""); }
+    if (ok) {
+      // The parent stays put: a category's sub-categories are added one after
+      // another, so re-choosing it every time is wasted work.
+      setNotice(`Added ${nameToAdd.trim()}.`);
+      setName("");
+    }
     setBusy(false);
   }
 
@@ -79,8 +86,17 @@ export default function PartiesClient({
   const showUnlisted = kind === "party";
 
   const switchTo = (k: PartyKind) => {
-    setKind(k); setName(""); setEditId(""); setError(""); setNotice("");
+    setKind(k); setName(""); setEditId(""); setParentId("");
+    setError(""); setNotice("");
   };
+
+  // The list this one hangs off, and what it holds.
+  const parentKind = meta.parent;
+  const parents = parentKind ? lists[parentKind] || [] : [];
+  const parentMeta = PARTY_KINDS.find((k) => k.key === parentKind);
+  const nameById = new Map(
+    Object.values(lists).flat().map((p) => [p.id, p.name])
+  );
 
   return (
     <>
@@ -96,14 +112,30 @@ export default function PartiesClient({
         {meta.blurb} Staff choose from this list; only an admin changes it.
       </p>
 
-      <form className="party-add" onSubmit={(e) => { e.preventDefault(); void add(name); }}>
-        <label className="field"><span>New {noun}</span>
-          <input value={name} onChange={(e) => setName(e.target.value)}
-            placeholder={`e.g. ${(lists[kind] || [])[0]?.name || "a new name"}`} /></label>
-        <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>
-          {busy ? "Adding…" : `Add ${noun}`}
-        </button>
-      </form>
+      {parentKind && parents.length === 0 ? (
+        <p className="party-warn">
+          Add a {parentMeta?.noun} first — a {noun} has to sit under one.
+        </p>
+      ) : (
+        <form className="party-add" onSubmit={(e) => { e.preventDefault(); void add(name); }}>
+          {parentKind && (
+            <label className="field"><span>Under which {parentMeta?.noun}</span>
+              <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+                <option value="">Choose one…</option>
+                {parents.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select></label>
+          )}
+          <label className="field"><span>New {noun}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)}
+              placeholder={`e.g. ${(lists[kind] || [])[0]?.name || "a new name"}`} /></label>
+          <button type="submit" className="btn btn-primary"
+            disabled={busy || !name.trim() || (!!parentKind && !parentId)}>
+            {busy ? "Adding…" : `Add ${noun}`}
+          </button>
+        </form>
+      )}
 
       {error && <p className="save-error">{error}</p>}
       {notice && <p className="notice">{notice}</p>}
@@ -144,11 +176,18 @@ export default function PartiesClient({
       ) : (
         <table className="history">
           <thead><tr>
-            <th>{meta.label}</th><th>Added by</th>
+            <th>{meta.label}</th>
+            {parentKind && <th>Under</th>}
+            <th>Added by</th>
             <th className="actions-col">Actions</th>
           </tr></thead>
           <tbody>
-            {list.map((p) => (
+            {[...list].sort((a, b) => {
+              if (!parentKind) return 0;
+              const pa = nameById.get(a.parentId || "") || "";
+              const pb = nameById.get(b.parentId || "") || "";
+              return pa.localeCompare(pb) || a.name.localeCompare(b.name);
+            }).map((p) => (
               <tr key={p.id}>
                 <td className="memono">
                   {editId === p.id ? (
@@ -156,6 +195,7 @@ export default function PartiesClient({
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void saveRename(p.id); } }} />
                   ) : p.name}
                 </td>
+                {parentKind && <td>{nameById.get(p.parentId || "") || "—"}</td>}
                 <td>{p.createdBy}</td>
                 <td className="row-actions">
                   {editId === p.id ? (

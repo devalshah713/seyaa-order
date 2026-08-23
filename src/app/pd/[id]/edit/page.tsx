@@ -13,7 +13,8 @@ export default async function EditPdPage({ params }: { params: { id: string } })
     <PdForm
       initial={{
         id: s.id, pdNo: s.pdNo, photoPath: s.photoPath, sku: s.sku,
-        product: s.product, category: s.category, subCategory: s.subCategory, type: s.type,
+        product: s.product, category: s.category || s.product,
+        subCategory: s.subCategory, subSubCategory: s.subSubCategory || "", type: s.type,
         diaQuality: s.diaQuality, goldWeight: s.goldWeight, locks: s.locks,
         orderType: s.orderType, assignedDate: s.assignedDate,
         assignedTo: s.assignedTo, size: s.size, diaShape: s.diaShape, zone: s.zone,

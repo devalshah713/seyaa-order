@@ -48,16 +48,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let name = "";
   let kind: PartyKind = "party";
+  let parentId = "";
   try {
-    const body = (await req.json()) as { name?: unknown; kind?: unknown };
+    const body = (await req.json()) as {
+      name?: unknown; kind?: unknown; parentId?: unknown;
+    };
     name = typeof body.name === "string" ? body.name : "";
     if (isPartyKind(body.kind)) kind = body.kind;
+    if (typeof body.parentId === "string") parentId = body.parentId;
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
   try {
-    const result = await createParty(name, admin.username, kind);
+    const result = await createParty(name, admin.username, kind, parentId);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ party: result.party }, { status: 201 });
   } catch (err) {

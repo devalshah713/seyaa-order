@@ -22,7 +22,8 @@ export type PdInitial = {
   pdNo: string;
   photoPath: string;
   sku: string;
-  product: string; category: string; subCategory: string; type: string;
+  product: string; category: string; subCategory: string;
+  subSubCategory: string; type: string;
   diaQuality: string; goldWeight: string; locks: string; orderType: string; assignedDate: string;
   assignedTo: string; size: string; diaShape: string; zone: string;
   goldPurity: string; goldColor: string; priceRange: string; diaWeightPointers: string;
@@ -33,7 +34,7 @@ export type PdInitial = {
 
 const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
   photoPath: "", sku: "",
-  product: "", category: "", subCategory: "", type: "",
+  product: "", category: "", subCategory: "", subSubCategory: "", type: "",
   diaQuality: DEFAULT_DIA_QUALITY, goldWeight: "", locks: "", orderType: "Stock", assignedDate: "",
   assignedTo: "", size: "", diaShape: "", zone: "USA",
   goldPurity: "14KT", goldColor: "White Gold", priceRange: "", diaWeightPointers: "",
@@ -89,17 +90,38 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   // and only an admin changes them. Held as data rather than in the code so a
   // new product does not need a deploy — and so an empty list stays empty
   // rather than falling back to options that were deliberately cleared out.
-  const [lists, setLists] = useState<Record<string, string[]>>({});
+  // One row of a controlled list: its name, and the name of what it sits
+  // under. (memoStore is server-only, so the shape is restated here.)
+  type ListEntry = { name: string; parent: string };
+  const [lists, setLists] = useState<Record<string, ListEntry[]>>({});
   useEffect(() => {
     let off = false;
-    fetch("/api/parties?kinds=mfg,product,category,subCategory,type")
+    fetch("/api/parties?kinds=mfg,category,subCategory,subSubCategory,type")
       .then((r) => (r.ok ? r.json() : { lists: {} }))
       .then((d) => { if (!off) setLists(d.lists || {}); })
       .catch(() => {});
     return () => { off = true; };
   }, []);
-  const listOf = (kind: string) => lists[kind] || [];
+  const listOf = (kind: string) => (lists[kind] || []).map((e) => e.name);
   const mfgs = listOf("mfg");
+
+  // Bracelet narrows to Tennis Bracelet, which narrows to All Mix Fancy. Only
+  // what sits under what is already chosen is offered; before a parent is
+  // chosen there is nothing sensible to offer, so nothing is.
+  const under = (kind: string, parent: string) =>
+    parent.trim()
+      ? (lists[kind] || []).filter((e) => e.parent === parent).map((e) => e.name)
+      : [];
+  const subCats = under("subCategory", f.category);
+  const subSubCats = under("subSubCategory", f.subCategory);
+
+  // Changing a level empties the ones below it: a sub-category from the old
+  // category is not under the new one, and leaving it there is a sheet that
+  // quietly contradicts itself.
+  const setCategory = (v: string) =>
+    setF((prev) => ({ ...prev, category: v, product: v, subCategory: "", subSubCategory: "" }));
+  const setSubCategory = (v: string) =>
+    setF((prev) => ({ ...prev, subCategory: v, subSubCategory: "" }));
 
   // Said once, wherever a dropdown has nothing in it yet.
   const emptyNote = (kind: string, what: string) =>
@@ -291,27 +313,32 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
 
         <fieldset className="group">
           <legend>Product</legend>
-          <label className="field"><span>Product</span>
-            <Picker value={f.product} onChange={(v) => set("product", v)}
-              options={listOf("product")} prompt="Choose a product…" />
-            {emptyNote("product", "product")}</label>
           <label className="field"><span>Category</span>
-            <Picker value={f.category} onChange={(v) => set("category", v)}
+            <Picker value={f.category} onChange={setCategory}
               options={listOf("category")} prompt="Choose a category…" />
             {emptyNote("category", "category")}</label>
-          {/* The one that stays open: a sub-category describes the design, and
-              a new one is the designer's to write. The list is there to be
-              picked from when it already says the right thing. */}
           <label className="field"><span>Sub-category</span>
-            <Combo value={f.subCategory} onChange={(v) => set("subCategory", v)}
-              options={listOf("subCategory").length ? listOf("subCategory") : SUB_CATEGORIES}
-              placeholder="Tennis Necklace" /></label>
+            <Combo value={f.subCategory} onChange={setSubCategory}
+              options={subCats} placeholder={f.category ? "Tennis Bracelet" : "Choose a category first"} />
+            {f.category && subCats.length === 0 && (
+              <p className="dia-note">
+                Nothing under {f.category} yet — an admin adds sub-categories under Lists.
+              </p>
+            )}</label>
+          <label className="field"><span>Sub-sub-category</span>
+            <Combo value={f.subSubCategory} onChange={(v) => set("subSubCategory", v)}
+              options={subSubCats} placeholder={f.subCategory ? "All Mix Fancy (AMF)" : "Choose a sub-category first"} />
+            {f.subCategory && subSubCats.length === 0 && (
+              <p className="dia-note">
+                Nothing under {f.subCategory} yet — an admin adds sub-sub-categories under Lists.
+              </p>
+            )}</label>
           <div className="two">
             <label className="field"><span>Type</span>
               <Picker value={f.type} onChange={(v) => set("type", v)}
                 options={listOf("type")} prompt="Choose a type…" />
               {emptyNote("type", "type")}</label>
-            <label className="field"><span>{sizeLabel(f.product)}</span>
+            <label className="field"><span>{sizeLabel(f.category)}</span>
               <input value={f.size} onChange={(e) => set("size", e.target.value)} placeholder={'16.5" INCH'} /></label>
           </div>
         </fieldset>

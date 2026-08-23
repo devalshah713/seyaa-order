@@ -150,32 +150,45 @@ export function formatDate(dateInput: string): string {
 //
 // A party saved before kinds existed has none, and is a memo party.
 export type PartyKind =
-  | "party" | "mfg" | "product" | "category" | "subCategory" | "type";
+  | "party" | "mfg" | "category" | "subCategory" | "subSubCategory" | "type";
 
 export type Party = {
   id: string;
   name: string;
   kind?: PartyKind;
+  // The entry this one sits under, for the lists that are a tree rather than a
+  // flat set: a sub-category belongs to a category, a sub-sub to a sub. Held by
+  // id so renaming a parent keeps its children.
+  parentId?: string;
   createdAt: string;
   createdBy: string;
 };
 
+// `parent` is the list an entry hangs off. Three of these are one chain —
+// Bracelet, then Tennis Bracelet, then All Mix Fancy — so choosing a category
+// on a PD sheet narrows what the next box offers.
 export const PARTY_KINDS: {
   key: PartyKind; label: string; noun: string; blurb: string;
+  parent?: PartyKind;
 }[] = [
   { key: "party", label: "Memo parties", noun: "party",
     blurb: "Who a memo can be issued to." },
   { key: "mfg", label: "Manufacturers", noun: "manufacturer",
     blurb: "Who a PD sheet can be assigned to." },
-  { key: "product", label: "Products", noun: "product",
-    blurb: "The Product box on a PD sheet." },
   { key: "category", label: "Categories", noun: "category",
-    blurb: "The Category box on a PD sheet." },
+    blurb: "The top of the chain on a PD sheet — Bracelet, Necklace, Ring." },
   { key: "subCategory", label: "Sub-categories", noun: "sub-category",
-    blurb: "Offered on a PD sheet's Sub-category, which also takes anything typed." },
+    parent: "category",
+    blurb: "Under a category: Bracelet → Tennis Bracelet. Only the ones under the chosen category are offered." },
+  { key: "subSubCategory", label: "Sub-sub-categories", noun: "sub-sub-category",
+    parent: "subCategory",
+    blurb: "Under a sub-category: Tennis Bracelet → All Mix Fancy (AMF)." },
   { key: "type", label: "Types", noun: "type",
     blurb: "The Type box on a PD sheet." },
 ];
+
+export const parentKindOf = (kind: PartyKind): PartyKind | undefined =>
+  PARTY_KINDS.find((k) => k.key === kind)?.parent;
 
 export const isPartyKind = (v: unknown): v is PartyKind =>
   typeof v === "string" && PARTY_KINDS.some((k) => k.key === v);
@@ -199,10 +212,6 @@ export const SEED_MFGS = [
 // would have to be cleared out first.
 export const SEED_LISTS: Partial<Record<PartyKind, readonly string[]>> = {
   mfg: SEED_MFGS,
-  subCategory: [
-    "Tennis Necklace", "Tennis Bracelet", "Riviera", "Line Necklace",
-    "Choker", "Station Necklace", "Solitaire Ring", "Band",
-  ],
 };
 
 // Names are compared with case, spacing and punctuation ignored, so

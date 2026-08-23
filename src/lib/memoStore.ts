@@ -27,6 +27,7 @@ import {
   type StockOutcome,
   SEED_LISTS,
   partyKindOf,
+  parentKindOf,
   type PartyKind,
 } from "./memoFormat";
 
@@ -264,21 +265,29 @@ export async function listParties(kind: PartyKind = "party"): Promise<Party[]> {
 
 // Several lists at once, for a screen that needs more than one — one read of
 // the store instead of one per list.
+export type ListEntry = { name: string; parent: string };
+
 export async function listPartyNames(
   kinds: PartyKind[]
-): Promise<Record<string, string[]>> {
+): Promise<Record<string, ListEntry[]>> {
   const token = requireToken();
   let db = await readDB(token);
   let wrote = false;
   for (const kind of kinds) wrote = (await seedList(db, kind, token)) || wrote;
   if (wrote) db = await readDB(token);
 
-  const out: Record<string, string[]> = {};
+  // The parent goes out by name, not id: a form holds what was chosen, not the
+  // row it came from, so the name is what it can filter on.
+  const nameById = new Map(db.parties.map((p) => [p.id, p.name]));
+  const out: Record<string, ListEntry[]> = {};
   for (const kind of kinds) {
     out[kind] = db.parties
       .filter((p) => partyKindOf(p) === kind)
-      .map((p) => p.name)
-      .sort((a, b) => a.localeCompare(b));
+      .map((p) => ({
+        name: p.name,
+        parent: (p.parentId && nameById.get(p.parentId)) || "",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
   return out;
 }
@@ -312,7 +321,14 @@ export async function clearParties(kind: PartyKind): Promise<number> {
   const token = requireToken();
   const db = await readDB(token);
   const before = db.parties.length;
-  db.parties = db.parties.filter((p) => partyKindOf(p) !== kind);
+  const gone = new Set(
+    db.parties.filter((p) => partyKindOf(p) === kind).map((p) => p.id)
+  );
+  // Everything under them goes too — a sub-category with no category above it
+  // can never be offered again.
+  db.parties = db.parties.filter(
+    (p) => partyKindOf(p) !== kind && !(p.parentId && gone.has(p.parentId))
+  );
   db.seeded = { ...db.seeded, [kind]: true };
   if (kind === "mfg") db.mfgSeeded = true;
   await writeDB(db, token);
@@ -322,17 +338,31 @@ export async function clearParties(kind: PartyKind): Promise<number> {
 export async function createParty(
   name: string,
   by: string,
-  kind: PartyKind = "party"
+  kind: PartyKind = "party",
+  parentId = ""
 ): Promise<{ ok: true; party: Party } | { ok: false; error: string }> {
   const clean = name.trim().replace(/\s+/g, " ");
   if (clean.length < 2) return { ok: false, error: "Give the party a name." };
 
   const token = requireToken();
   const db = await readDB(token);
-  // Names collide only within their own list: a factory that is also a memo
-  // party is two entries, because the two lists are chosen from separately.
+  // A list that hangs off another needs to know what it hangs off, or nothing
+  // can ever offer it.
+  const needsParent = !!parentKindOf(kind);
+  if (needsParent && !parentId) {
+    return { ok: false, error: "Choose what this sits under." };
+  }
+  if (parentId && !db.parties.some((p) => p.id === parentId)) {
+    return { ok: false, error: "That parent is no longer on the list." };
+  }
+
+  // Names collide only within their own list, and within a tree only under the
+  // same parent: "Oval" under two different sub-categories is two real things.
   const existing = db.parties.find(
-    (p) => partyKindOf(p) === kind && partyKey(p.name) === partyKey(clean)
+    (p) =>
+      partyKindOf(p) === kind &&
+      (p.parentId || "") === (parentId || "") &&
+      partyKey(p.name) === partyKey(clean)
   );
   if (existing) {
     return { ok: false, error: `Already on the list as "${existing.name}".` };
@@ -342,6 +372,7 @@ export async function createParty(
     id: randomUUID(),
     name: clean,
     kind,
+    ...(parentId ? { parentId } : {}),
     createdAt: new Date().toISOString(),
     createdBy: by,
   };
@@ -379,14 +410,26 @@ export async function deleteParty(
 
   // A party named on an existing memo stays on the list — removing it would
   // leave that memo pointing at something the list no longer knows about.
-  const used = db.memos.filter((m) => partyKey(m.to) === partyKey(party.name)).length;
+  // Only memo parties can be on a memo; a category never is.
+  const used = partyKindOf(party) !== "party"
+    ? 0
+    : db.memos.filter((m) => partyKey(m.to) === partyKey(party.name)).length;
   if (used > 0) {
     return {
       ok: false,
       error: `${party.name} is on ${used} memo${used === 1 ? "" : "s"} and cannot be removed. Rename it instead.`,
     };
   }
-  db.parties = db.parties.filter((p) => p.id !== id);
+  // Anything hanging off it goes too, however deep: a sub-sub-category whose
+  // sub-category is gone can never be reached, and left behind it would
+  // reappear the day something with the old id is added.
+  const doomed = new Set([id]);
+  for (let pass = 0; pass < 4; pass++) {
+    for (const p of db.parties) {
+      if (p.parentId && doomed.has(p.parentId)) doomed.add(p.id);
+    }
+  }
+  db.parties = db.parties.filter((p) => !doomed.has(p.id));
   await writeDB(db, token);
   return { ok: true };
 }

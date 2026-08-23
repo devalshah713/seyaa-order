@@ -8,6 +8,7 @@ export type PdSheetData = {
   product: string;
   category: string;
   subCategory: string;
+  subSubCategory?: string;
   type: string;
   diaQuality: string;
   goldWeight: string;
@@ -48,9 +49,9 @@ export default function PdSheetView({ data }: { data: PdSheetData }) {
 
   const left: Cell[] = [
     { label: "SKU No.", value: data.sku },
-    { label: "Product", value: data.product },
-    { label: "Category", value: data.category, accent: true },
+    { label: "Category", value: data.category || data.product, accent: true },
     { label: "Sub-category", value: data.subCategory },
+    { label: "Sub-sub-category", value: data.subSubCategory || "" },
     { label: "Type", value: data.type },
     { label: "Dia. quality", value: data.diaQuality },
     { label: "Gold weight", value: data.goldWeight },
@@ -61,7 +62,7 @@ export default function PdSheetView({ data }: { data: PdSheetData }) {
 
   const right: Cell[] = [
     { label: "Assigned to", value: data.assignedTo },
-    { label: sizeLabel(data.product), value: data.size, accent: true },
+    { label: sizeLabel(data.category || data.product), value: data.size, accent: true },
     { label: "Dia. Shape", value: data.diaShape },
     { label: "Zone", value: data.zone },
     { label: "Gold purity", value: purity },

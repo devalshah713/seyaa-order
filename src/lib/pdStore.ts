@@ -21,9 +21,12 @@ export type PdSheet = {
   sku: string; // design number, entered by the team
 
   // Left column
+  // `product` is the category — the top of the chain — kept under its old name
+  // so the jangad's Product column and everything else reading it still work.
   product: string;
   category: string;
   subCategory: string;
+  subSubCategory: string;
   type: string;
   diaQuality: string;
   goldWeight: string;
@@ -85,7 +88,11 @@ export function normalizePdInput(body: Record<string, unknown>): NewPdSheet {
   const s = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
   return {
     photoPath: s("photoPath"), sku: s("sku"),
-    product: s("product"), category: s("category"), subCategory: s("subCategory"),
+    // The category is the product: one value, two names, so nothing downstream
+    // has to learn a new one.
+    product: s("category") || s("product"),
+    category: s("category") || s("product"),
+    subCategory: s("subCategory"), subSubCategory: s("subSubCategory"),
     type: s("type"), diaQuality: s("diaQuality"), goldWeight: s("goldWeight"),
     locks: s("locks"), orderType: s("orderType"), assignedDate: s("assignedDate"),
     assignedTo: s("assignedTo"), size: s("size"), diaShape: s("diaShape"), zone: s("zone"),
