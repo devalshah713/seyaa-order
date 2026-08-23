@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MemoSheet from "@/components/MemoSheet";
+import Picker from "@/components/Picker";
 import {
   GOLD_FORMS,
   GOLD_PURPOSES,
@@ -254,15 +255,8 @@ export default function MemoForm({
             {/* Chosen, not typed. A memo goes to somebody already on the list;
                 a new name is an admin's decision, not a spelling. */}
             {parties.length > 0 ? (
-              <select value={to} onChange={(e) => setTo(e.target.value)}>
-                <option value="">
-                  {gold ? "Choose a factory / karigar…" : "Choose a recipient…"}
-                </option>
-                {/* A memo saved to someone since taken off the list still shows
-                    who it went to, rather than reopening as blank. */}
-                {to.trim() !== "" && !partyOk && <option value={to}>{to}</option>}
-                {parties.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <Picker value={to} onChange={setTo} options={parties}
+                prompt={gold ? "Choose a factory / karigar…" : "Choose a recipient…"} />
             ) : (
               // Nothing on the list yet. Typing is left open rather than
               // locking the memo book until somebody visits the admin screen.

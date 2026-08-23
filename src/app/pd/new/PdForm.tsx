@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import Combo from "@/components/Combo";
 import DiamondSizePicker from "@/components/DiamondSizePicker";
+import Picker from "@/components/Picker";
 import { todayInput } from "@/lib/memoFormat";
 import {
   PRODUCTS, CATEGORIES, SUB_CATEGORIES, TYPES, DIA_QUALITIES,
@@ -281,14 +282,20 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
         <fieldset className="group">
           <legend>Product</legend>
           <label className="field"><span>Product</span>
-            <Combo value={f.product} onChange={(v) => set("product", v)} options={PRODUCTS} placeholder="Tennis Necklace" /></label>
+            <Picker value={f.product} onChange={(v) => set("product", v)}
+              options={PRODUCTS} prompt="Choose a product…" /></label>
           <label className="field"><span>Category</span>
-            <Combo value={f.category} onChange={(v) => set("category", v)} options={CATEGORIES} placeholder="Korean Necklace" /></label>
+            <Picker value={f.category} onChange={(v) => set("category", v)}
+              options={CATEGORIES} prompt="Choose a category…" /></label>
+          {/* The one that stays open: a sub-category describes the design, and
+              a new one is the designer's to write. The list is there to be
+              picked from when it already says the right thing. */}
           <label className="field"><span>Sub-category</span>
             <Combo value={f.subCategory} onChange={(v) => set("subCategory", v)} options={SUB_CATEGORIES} placeholder="Tennis Necklace" /></label>
           <div className="two">
             <label className="field"><span>Type</span>
-              <Combo value={f.type} onChange={(v) => set("type", v)} options={TYPES} placeholder="Modern" /></label>
+              <Picker value={f.type} onChange={(v) => set("type", v)}
+                options={TYPES} prompt="Choose a type…" /></label>
             <label className="field"><span>{sizeLabel(f.product)}</span>
               <input value={f.size} onChange={(e) => set("size", e.target.value)} placeholder={'16.5" INCH'} /></label>
           </div>
@@ -297,15 +304,9 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
         <fieldset className="group">
           <legend>Diamond &amp; Gold</legend>
           <label className="field"><span>Dia. quality</span>
-            <select value={f.diaQuality || DEFAULT_DIA_QUALITY}
-              onChange={(e) => set("diaQuality", e.target.value)}>
-              {/* A sheet saved with an older quality keeps it on screen rather
-                  than silently reading as something it is not. */}
-              {!DIA_QUALITIES.includes(f.diaQuality) && f.diaQuality && (
-                <option value={f.diaQuality}>{f.diaQuality}</option>
-              )}
-              {DIA_QUALITIES.map((q) => <option key={q} value={q}>{q}</option>)}
-            </select></label>
+            <Picker value={f.diaQuality || DEFAULT_DIA_QUALITY}
+              onChange={(v) => set("diaQuality", v)}
+              options={DIA_QUALITIES} prompt="Choose a quality…" /></label>
 
           <div className="field">
             <span>Diamond sizes</span>
@@ -375,15 +376,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           <legend>People &amp; Dates</legend>
           <div className="two">
             <label className="field"><span>Assigned to</span>
-              <select value={f.assignedTo} onChange={(e) => set("assignedTo", e.target.value)}>
-                <option value="">Choose a manufacturer…</option>
-                {/* A sheet assigned to someone since taken off the list still
-                    shows who it went to. */}
-                {f.assignedTo && !mfgs.some((m) => m === f.assignedTo) && (
-                  <option value={f.assignedTo}>{f.assignedTo}</option>
-                )}
-                {mfgs.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <Picker value={f.assignedTo} onChange={(v) => set("assignedTo", v)}
+                options={mfgs} prompt="Choose a manufacturer…" />
               {mfgs.length === 0 && (
                 <p className="dia-note">
                   No manufacturers on the list yet — an admin adds them under Parties.

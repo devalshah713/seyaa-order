@@ -47,9 +47,11 @@ export const ORDER_TYPES = ["Stock", "Custom", "Repeat", "Sample", "Exhibition"]
 // rings get "Ring Size", and so on.
 export function sizeLabel(product: string): string {
   const p = product.trim().toLowerCase();
+  // Earrings before rings: "earrings" contains "ring", so the ring test would
+  // otherwise claim it and ask a pair of earrings for its finger size.
+  if (p.includes("earring")) return "Earring Length";
   if (p.includes("ring")) return "Ring Size";
   if (p.includes("bracelet") || p.includes("bangle")) return "Bracelet Size";
-  if (p.includes("earring")) return "Earring Length";
   if (p.includes("pendant")) return "Pendant Size";
   return "Neck Length";
 }
