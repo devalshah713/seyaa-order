@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { syncDesignRegisterQuietly } from "@/lib/designRegister";
 import { createPdSheet, listPdSheets, nextPdNo, normalizePdInput } from "@/lib/pdStore";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const sheet = await createPdSheet(input);
+    // The Google Sheet is a copy of the register, so it is rewritten whenever
+    // the register changes. Quietly: a design must save whether Google answers
+    // or not.
+    await syncDesignRegisterQuietly();
     return NextResponse.json({ sheet });
   } catch (err) {
     return NextResponse.json(

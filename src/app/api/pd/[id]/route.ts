@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updatePdSheet, deletePdSheet, normalizePdInput } from "@/lib/pdStore";
+import { syncDesignRegisterQuietly } from "@/lib/designRegister";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,7 @@ export async function PATCH(
   try {
     const sheet = await updatePdSheet(params.id, input);
     if (!sheet) return NextResponse.json({ error: "PD sheet not found." }, { status: 404 });
+    await syncDesignRegisterQuietly();
     return NextResponse.json({ sheet });
   } catch (err) {
     return NextResponse.json(
@@ -42,6 +44,7 @@ export async function DELETE(
   try {
     const ok = await deletePdSheet(params.id);
     if (!ok) return NextResponse.json({ error: "PD sheet not found." }, { status: 404 });
+    await syncDesignRegisterQuietly();
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

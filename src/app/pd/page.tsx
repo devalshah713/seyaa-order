@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listPdSheets, isPdStorageConfigured, type PdSheet } from "@/lib/pdStore";
 import PdHistoryTable from "./PdHistoryTable";
+import SheetSync from "./SheetSync";
 
 export const metadata = { title: "PD Sheets — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function PdListPage() {
         <h1>PD Sheets</h1>
         <Link href="/pd/new" className="btn btn-primary">+ New PD Sheet</Link>
       </div>
+      <SheetSync />
       {error ? (
         <div className="notice">{error}</div>
       ) : sheets.length === 0 ? (
