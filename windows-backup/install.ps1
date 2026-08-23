@@ -6,9 +6,11 @@
 #    2. fetch the backup script
 #    3. ask for the backup token, once
 #    4. run a backup there and then, so you know it works
-#    5. set it to run every night at midnight
+#    5. set it to run every night at midnight, and again whenever you
+#       sign in — so a night the PC was off is caught up on next time
 #
-#  Nothing to edit, nothing to copy between windows.
+#  No administrator rights. Nothing to edit. Nothing to copy between
+#  windows.
 # =====================================================================
 
 $ErrorActionPreference = "Stop"
@@ -21,24 +23,23 @@ function Step($msg) { Write-Host ""; Write-Host "== $msg" -ForegroundColor Cyan 
 function Bad($msg)  { Write-Host $msg -ForegroundColor Red }
 function Good($msg) { Write-Host $msg -ForegroundColor Green }
 
-# Registering a scheduled task needs administrator, so ask Windows for it
-# rather than making somebody know to right-click.
-$me = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-if (-not $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-  Say "Asking Windows for administrator rights..."
-  Start-Process powershell -Verb RunAs -ArgumentList @(
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
-  )
-  exit
-}
-
 Write-Host ""
 Write-Host "  SEYAA SOLITAIRE - nightly backup setup" -ForegroundColor Yellow
 Write-Host "  ---------------------------------------"
+Write-Host "  This does not need an administrator password."
 
 # --- 1. The folder ----------------------------------------------------
 Step "Making $Root"
-New-Item -ItemType Directory -Force -Path $Root | Out-Null
+try {
+  New-Item -ItemType Directory -Force -Path $Root | Out-Null
+} catch {
+  # A locked-down C:\ is the one thing that can stop this, and the fix is
+  # simply to keep the backups under this account's own folder instead.
+  $Root = Join-Path $env:USERPROFILE "SeyaaBackups"
+  $Dest = Join-Path $Root "backup.ps1"
+  New-Item -ItemType Directory -Force -Path $Root | Out-Null
+  Say "C:\ would not allow it, so the backups will live in $Root instead."
+}
 Good "Ready."
 
 # --- 2. The backup script ---------------------------------------------
@@ -61,10 +62,14 @@ if (Test-Path $beside) {
   }
 }
 
+# The folder may have moved, so make sure the script saves where we decided.
+$content = Get-Content $Dest -Raw
+$content = $content -replace '(?m)^\$Root\s*=\s*".*"', ('$Root = "' + $Root.Replace('$', '$$') + '"')
+
 # --- 3. The token -----------------------------------------------------
 Step "The backup token"
 Say "This is the long line you saved in Notepad when you set it in Vercel."
-Say "Nothing is shown as you paste - right-click in this window to paste."
+Say "Nothing shows as you paste - right-click in this window to paste."
 $secure = Read-Host "Paste the token" -AsSecureString
 $bstr   = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
@@ -81,10 +86,9 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 
 # A $ in the token would be read as a capture group by -replace, so it is
 # doubled on the way in.
-$safe    = $token.Replace('$', '$$')
-$content = Get-Content $Dest -Raw
-$content = $content -replace '(?m)^\$Token\s*=\s*".*"', ('$Token   = "' + $safe + '"')
+$content = $content -replace '(?m)^\$Token\s*=\s*".*"', ('$Token   = "' + $token.Replace('$', '$$') + '"')
 Set-Content -Path $Dest -Value $content -Encoding UTF8
+$token = $null
 
 if ((Get-Content $Dest -Raw) -match "PASTE_YOUR_BACKUP_TOKEN_HERE") {
   Bad "The token did not go in. The backup script may be a different version."
@@ -92,7 +96,6 @@ if ((Get-Content $Dest -Raw) -match "PASTE_YOUR_BACKUP_TOKEN_HERE") {
   exit 1
 }
 Good "Saved into $Dest."
-$token = $null
 
 # --- 4. Prove it works before scheduling anything ---------------------
 Step "Running a backup now, to check it works"
@@ -103,7 +106,7 @@ $run = Start-Process powershell -Wait -PassThru -NoNewWindow -ArgumentList @(
 
 if ($run.ExitCode -ne 0) {
   Write-Host ""
-  Bad "That did not work, so the nightly job has NOT been set up."
+  Bad "That did not work, so nothing has been scheduled."
   Bad "The last few lines of the log say why:"
   Write-Host ""
   Get-Content (Join-Path $Root "backup.log") -Tail 8 -ErrorAction SilentlyContinue
@@ -114,69 +117,69 @@ if ($run.ExitCode -ne 0) {
 }
 Good "Backup worked. Files are in $Root."
 
-# --- 5. Every night at midnight ---------------------------------------
-Step "Setting it to run every night at 12:00 AM"
+# --- 5. Every night, and every time you sign in -----------------------
+Step "Setting the timer"
 
 # An older setup made the task under a different name. Clear it, or the
 # backup runs twice a night.
-if (Get-ScheduledTask -TaskName "Seyaa Memo Backup" -ErrorAction SilentlyContinue) {
-  Unregister-ScheduledTask -TaskName "Seyaa Memo Backup" -Confirm:$false
-  Say "Removed the older 'Seyaa Memo Backup' task."
+try {
+  if (Get-ScheduledTask -TaskName "Seyaa Memo Backup" -ErrorAction SilentlyContinue) {
+    Unregister-ScheduledTask -TaskName "Seyaa Memo Backup" -Confirm:$false
+    Say "Removed the older 'Seyaa Memo Backup' task."
+  }
+} catch {
+  # It belonged to another account and needs rights we have not got. Leaving
+  # it is untidy but harmless — it will just fail on its stale token.
+  Say "An older task exists under another account; leaving it alone."
 }
 
-$action   = New-ScheduledTaskAction -Execute "powershell.exe" `
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Dest`""
-$trigger  = New-ScheduledTaskTrigger -Daily -At 12:00AM
+
+# Two triggers, which between them cover a PC that is not on at midnight:
+# the nightly one, and one for signing in. StartWhenAvailable catches up a
+# missed midnight as soon as the machine is next running.
+$triggers = @(
+  (New-ScheduledTaskTrigger -Daily -At 12:00AM),
+  (New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME")
+)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
   -DontStopOnIdleEnd -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Say ""
-Say "Is this a PC somebody is normally signed in to, or a server you connect to?"
-Say "  S = a server, reached over RDP or AnyDesk  (backup runs even with nobody signed in)"
-Say "  D = a desk PC                              (backup runs while you are signed in)"
-$answer = (Read-Host "S/D").Trim().ToUpper()
-
-if ($answer.StartsWith("D")) {
+$scheduled = $false
+try {
   Register-ScheduledTask -TaskName "Seyaa Backup" `
-    -Action $action -Trigger $trigger -Settings $settings `
-    -Description "Nightly backup of the Seyaa portal to C:\SeyaaBackups" `
+    -Action $action -Trigger $triggers -Settings $settings `
+    -Description "Nightly backup of the Seyaa portal to $Root" `
     -RunLevel Limited -Force | Out-Null
-  Good "Done - it runs at midnight while you are signed in."
-  Say  "Disconnect your session rather than signing out, or it gets skipped."
-} else {
-  Say ""
-  Say "Windows can only run something with nobody signed in if it can sign in"
-  Say "as somebody itself. Your Windows password stays on this PC - it goes"
-  Say "straight into the Windows task store and into no file."
-  $account = Read-Host "Windows account (press Enter for $env:USERNAME)"
-  if ([string]::IsNullOrWhiteSpace($account)) { $account = $env:USERNAME }
+  $scheduled = $true
+  Good "Done."
+  Say  "  - every night at 12:00 AM"
+  Say  "  - and again each time you sign in, so a night the PC was off is caught up"
+} catch {
+  Bad "Windows would not let this account create a scheduled task:"
+  Bad "  $($_.Exception.Message)"
+}
 
-  $pwSecure = Read-Host "Windows password for $account" -AsSecureString
-  $pwBstr   = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pwSecure)
-  try {
-    $pwPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($pwBstr)
-    Register-ScheduledTask -TaskName "Seyaa Backup" `
-      -Action $action -Trigger $trigger -Settings $settings `
-      -Description "Nightly backup of the Seyaa portal to C:\SeyaaBackups" `
-      -User $account -Password $pwPlain -RunLevel Limited -Force | Out-Null
-  } catch {
-    Bad "Windows would not accept that account or password: $($_.Exception.Message)"
-    Bad "The backup script is installed and works - only the nightly timer is missing."
-    Bad "Run this installer again to have another go at it."
-    Read-Host "Press Enter to close"
-    exit 1
-  } finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pwBstr)
-    $pwPlain = $null
-    [GC]::Collect()
-  }
-  Good "Done - it runs at midnight whether anyone is signed in or not."
-  Say  "If you ever change that Windows password, run this installer again."
+if (-not $scheduled) {
+  # Last resort, and it still gets the important half: a shortcut in Startup
+  # runs the backup every time this account signs in. No rights needed at all.
+  Step "Falling back to a shortcut in your Startup folder"
+  $startup = [Environment]::GetFolderPath("Startup")
+  $lnk = Join-Path $startup "Seyaa Backup.lnk"
+  $shell = New-Object -ComObject WScript.Shell
+  $s = $shell.CreateShortcut($lnk)
+  $s.TargetPath = "powershell.exe"
+  $s.Arguments  = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$Dest`""
+  $s.WorkingDirectory = $Root
+  $s.Description = "Backs up the Seyaa portal"
+  $s.Save()
+  Good "Done. The backup now runs every time you sign in to this PC."
 }
 
 Write-Host ""
 Write-Host "  ALL SET" -ForegroundColor Green
-Write-Host "  Backups land in $Root every night at midnight."
+Write-Host "  Backups land in $Root."
 Write-Host "  $Root\backup.log says what happened each time."
 Write-Host "  It also refreshes the Google Sheet on every run."
 Write-Host ""
