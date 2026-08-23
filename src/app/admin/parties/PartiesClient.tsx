@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   PARTY_KINDS, hasCode, suggestCode, type Party, type PartyKind,
 } from "@/lib/memoFormat";
+import { STANDARD_QC_CHECKS } from "@/lib/qcConfig";
 
 // Every controlled list on one screen: who a memo goes to, who makes a design,
 // and the boxes on a PD sheet. All the same shape, all chosen from and not
@@ -74,6 +75,41 @@ export default function PartiesClient({
 
   // Clearing a whole list, for when a set of built-in options is being replaced
   // with Seyaa's own. Named in the prompt, because it cannot be undone.
+  // Fifteen checks typed out per category is not a job anybody would do twice,
+  // so Seyaa's own set goes in at once. Anything already on the list is left
+  // alone, so pressing it again after adding one by hand is harmless.
+  async function addStandardSet() {
+    const under = parents.find((p) => p.id === parentId);
+    if (!under) return;
+    const have = new Set(
+      (lists.qcCheck || [])
+        .filter((c) => c.parentId === parentId)
+        .map((c) => c.name.toLowerCase())
+    );
+    const missing = STANDARD_QC_CHECKS.filter((c) => !have.has(c.toLowerCase()));
+    if (!missing.length) {
+      setNotice(`${under.name} already has all fifteen.`);
+      return;
+    }
+    if (!window.confirm(
+      `Add ${missing.length} standard check${missing.length === 1 ? "" : "s"} to ${under.name}? You can remove the ones it does not need afterwards.`
+    )) return;
+
+    setBusy(true); setError(""); setNotice("");
+    let added = 0;
+    for (const name of missing) {
+      const res = await fetch("/api/parties", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, kind: "qcCheck", parentId }),
+      });
+      if (res.ok) added++;
+    }
+    setNotice(`Added ${added} check${added === 1 ? "" : "s"} to ${under.name}.`);
+    setBusy(false);
+    router.refresh();
+  }
+
   // Rewrites every memo carrying the old typed name.
   async function replaceOnMemos(u: { name: string; memos: number; match: string }) {
     // The same fallback the dropdown renders with: until it is touched, what is
@@ -176,6 +212,12 @@ export default function PartiesClient({
             disabled={busy || !name.trim() || (!!parentKind && !parentId)}>
             {busy ? "Adding…" : `Add ${noun}`}
           </button>
+          {kind === "qcCheck" && (
+            <button type="button" className="btn" disabled={busy || !parentId}
+              onClick={addStandardSet}>
+              Add the standard 15
+            </button>
+          )}
         </form>
       )}
 

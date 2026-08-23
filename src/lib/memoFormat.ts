@@ -150,7 +150,8 @@ export function formatDate(dateInput: string): string {
 //
 // A party saved before kinds existed has none, and is a memo party.
 export type PartyKind =
-  | "party" | "mfg" | "category" | "subCategory" | "subSubCategory" | "type";
+  | "party" | "mfg" | "category" | "subCategory" | "subSubCategory" | "type"
+  | "qcCheck";
 
 export type Party = {
   id: string;
@@ -188,6 +189,12 @@ export const PARTY_KINDS: {
     blurb: "Under a sub-category: Tennis Bracelet → All Mix Fancy (AMF)." },
   { key: "type", label: "Types", noun: "type",
     blurb: "The Type box on a PD sheet." },
+  // Per category, because a bracelet is not checked for its ring size and a
+  // ring is not checked for its length. Most of the checks repeat across
+  // categories; each category still keeps its own list of them.
+  { key: "qcCheck", label: "QC checks", noun: "QC check",
+    parent: "category",
+    blurb: "What a piece of this category is checked for. Only these appear when it is QC'd." },
 ];
 
 export const parentKindOf = (kind: PartyKind): PartyKind | undefined =>

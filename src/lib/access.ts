@@ -6,7 +6,8 @@
 // An admin always has everything. For everyone else, access is the explicit
 // list of module keys stored on their account and carried in their session.
 
-export type ModuleKey = "memos" | "orders" | "stock" | "pd" | "jangad" | "stockbook";
+export type ModuleKey =
+  | "memos" | "orders" | "stock" | "pd" | "jangad" | "stockbook" | "qc";
 
 export const MODULES: {
   key: ModuleKey;
@@ -20,6 +21,7 @@ export const MODULES: {
   { key: "pd", label: "PD Sheets", description: "Product development sheets", home: "/pd" },
   { key: "jangad", label: "Diamond Jangad", description: "Accounts entry for diamonds issued, used and returned", home: "/jangad" },
   { key: "stockbook", label: "Stock Book", description: "Finished jewellery taken into stock and valued", home: "/stockbook" },
+  { key: "qc", label: "QC", description: "Checking a finished piece over, once it is in stock", home: "/qc" },
 ];
 
 export const MODULE_KEYS: ModuleKey[] = MODULES.map((m) => m.key);
@@ -51,6 +53,9 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
   // The price list is only ever read to value a piece of stock, so it belongs
   // to this module rather than standing on its own.
   { key: "stockbook", prefixes: ["/stockbook", "/api/stockbook", "/api/prices"] },
+  // QC reads the stock book to know what it may check, but it is the checker's
+  // screen — they get this without getting the valuations.
+  { key: "qc", prefixes: ["/qc", "/api/qc"] },
 ];
 
 // /api/parties is deliberately not listed: the memo form and the PD sheet both

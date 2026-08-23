@@ -8,6 +8,8 @@ import { buildMemoWorkbook } from "@/lib/memoExport";
 import { exportStockBookDb, listStockEntries } from "@/lib/stockBookStore";
 import { loadPrices } from "@/lib/priceStore";
 import { buildStockWorkbook } from "@/lib/stockBookExport";
+import { allQcChecks, exportQcDb, listQcRecords } from "@/lib/qcStore";
+import { buildQcWorkbook } from "@/lib/qcExport";
 import { isBackupConfigured, tokenOk } from "@/lib/backup";
 
 // Secret-protected backup download for the user's own PC to pull nightly.
@@ -15,6 +17,7 @@ import { isBackupConfigured, tokenOk } from "@/lib/backup";
 //   ?format=xlsx   -> readable Excel of all memos
 //   ?format=jangad -> the diamond jangad register in the accounts workbook
 //   ?format=stockbook -> the stock book in the company's own stock workbook
+//   ?format=qc     -> the QC register, one row per check
 // Auth: `x-backup-token` header or `?token=` must equal BACKUP_TOKEN.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -66,6 +69,20 @@ export async function GET(req: NextRequest): Promise<Response> {
       });
     }
 
+    if (format === "qc") {
+      const [records, checks] = await Promise.all([listQcRecords(), allQcChecks()]);
+      const buffer = await buildQcWorkbook(records, checks);
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          "content-type":
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "content-disposition": `attachment; filename="Seyaa QC ${stamp}.xlsx"`,
+          "cache-control": "no-store",
+        },
+      });
+    }
+
     if (format === "xlsx") {
       const db = await exportDb();
       const buffer = await buildMemoWorkbook(db.memos, db.events);
@@ -90,7 +107,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     // The price list goes with it: without the rates, the stock book's own
     // figures cannot be worked out again from the backup.
     const prices = await loadPrices().catch(() => null);
-    return new NextResponse(JSON.stringify({ ...db, pd, demand, jangad, stockbook, prices }), {
+    const qc = await exportQcDb().catch(() => ({ records: [], seq: 0 }));
+    return new NextResponse(JSON.stringify({ ...db, pd, demand, jangad, stockbook, prices, qc }), {
       status: 200,
       headers: {
         "content-type": "application/json",
