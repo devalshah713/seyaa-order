@@ -56,6 +56,19 @@ try {
     -OutFile (Join-Path $dataDir "qc.xlsx") -UseBasicParsing
   Log "Saved qc.xlsx"
 
+  # 2e) Refresh the Google Sheet copy — every module on its own tab.
+  #     Vercel's own scheduler does this nightly too; running it here as well
+  #     costs nothing (each tab is replaced, not appended to) and means the
+  #     sheet is current whenever this PC has done its backup.
+  #     Non-fatal: the sheet is a copy, the files above are the backup.
+  try {
+    $sheet = Invoke-RestMethod -Uri "$BaseUrl/api/backup/sheets" -Method Post -Headers $headers
+    $counts = ($sheet.tabs | ForEach-Object { "{0}: {1}" -f $_.tab, $_.rows }) -join ", "
+    Log ("Google Sheet updated -- " + $counts)
+  } catch {
+    Log ("Google Sheet skipped: " + $_.Exception.Message)
+  }
+
   # 3) PDFs — only new or edited memos (incremental)
   $data = Get-Content (Join-Path $dataDir "data.json") -Raw | ConvertFrom-Json
   $new = 0; $skip = 0

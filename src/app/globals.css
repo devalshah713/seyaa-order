@@ -63,7 +63,10 @@ a { color: inherit; }
 .topbar .mark { width: 28px; height: 28px; color: var(--gold); flex: none; }
 .topbar .brand { font-family: var(--serif); font-size: 15px; letter-spacing: 1.4px;
   text-transform: uppercase; font-weight: 600; }
-.topbar nav { margin-left: auto; display: flex; gap: 6px; }
+/* Wraps onto a second line rather than spilling off the edge: there are more
+   modules than fit across a laptop, and a link nobody can reach is worse than
+   a slightly taller bar. */
+.topbar nav { margin-left: auto; display: flex; gap: 6px 6px; flex-wrap: wrap; justify-content: flex-end; }
 .topbar nav a {
   text-decoration: none; font-size: 13px; color: var(--panel-muted);
   padding: 7px 13px; border-radius: 8px; font-weight: 550;
@@ -1670,3 +1673,25 @@ table.qc-sub td.ans.na { color: var(--panel-muted); }
   ol.qc-list li + li { margin-top: 8px; border-top: 1px solid var(--panel-line); }
   .qc-ans { flex: 1; padding: 10px 8px; }
 }
+
+/* ---------- Backups ---------- */
+.bk-card {
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 18px;
+}
+.bk-card h2 {
+  font-family: var(--serif); font-size: 19px; margin: 0 0 8px; color: var(--panel-ink);
+}
+.bk-lede { font-size: 13px; color: var(--panel-muted); line-height: 1.65; margin: 0 0 10px; }
+.bk-lede b { color: var(--panel-ink); font-weight: 600; }
+.bk-lede a { color: var(--gold); }
+.bk-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+.bk-stamp { font-size: 12px; color: var(--panel-muted); }
+.bk-table { margin-top: 14px; }
+.bk-ok { color: #2f8f4e; font-weight: 600; }
+.bk-bad { color: #b23; font-weight: 600; }
+.bk-list {
+  margin: 0 0 12px; padding-left: 18px; font-size: 13px;
+  color: var(--panel-muted); line-height: 1.9;
+}
+.bk-list b { color: var(--panel-ink); font-weight: 600; font-family: var(--mono, ui-monospace, monospace); }

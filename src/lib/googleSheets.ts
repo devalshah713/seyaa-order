@@ -138,38 +138,105 @@ async function sheetsFetch(token: string, path: string, init?: RequestInit) {
   return res;
 }
 
-// Makes sure the tab exists, so a fresh spreadsheet does not have to be set up
-// by hand first.
-async function ensureTab(token: string, id: string, title: string): Promise<void> {
-  const res = await sheetsFetch(token, `${id}?fields=sheets.properties.title`);
-  const data = (await res.json()) as { sheets?: { properties?: { title?: string } }[] };
-  const titles = (data.sheets || []).map((s) => s.properties?.title);
-  if (titles.includes(title)) return;
+// A tab name in A1 notation. Quoted always — "Stock Book" has a space in it and
+// would otherwise be read as a range rather than a name.
+const a1 = (tab: string, ref = "") =>
+  `'${tab.replace(/'/g, "''")}'${ref ? `!${ref}` : ""}`;
+
+type TabProps = { sheetId?: number; title?: string; gridProperties?: { rowCount?: number; columnCount?: number } };
+
+// Makes sure the tab exists and is big enough for what is about to go in it, so
+// a fresh spreadsheet does not have to be set up by hand first and a wide table
+// — QC runs past forty columns — does not fall off the default grid.
+async function ensureTab(
+  token: string,
+  id: string,
+  title: string,
+  needRows: number,
+  needCols: number
+): Promise<void> {
+  const res = await sheetsFetch(
+    token,
+    `${id}?fields=sheets.properties(sheetId,title,gridProperties)`
+  );
+  const data = (await res.json()) as { sheets?: { properties?: TabProps }[] };
+  const found = (data.sheets || [])
+    .map((s) => s.properties)
+    .find((p) => p?.title === title);
+
+  if (!found) {
+    await sheetsFetch(token, `${id}:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{
+          addSheet: {
+            properties: {
+              title,
+              gridProperties: {
+                rowCount: Math.max(needRows + 50, 100),
+                columnCount: Math.max(needCols + 5, 26),
+              },
+            },
+          },
+        }],
+      }),
+    });
+    return;
+  }
+
+  const rowCount = found.gridProperties?.rowCount || 0;
+  const colCount = found.gridProperties?.columnCount || 0;
+  if (rowCount >= needRows && colCount >= needCols) return;
+  // Only ever grown. Shrinking a grid deletes whatever was past the edge, and
+  // this sheet is the office's to add columns to if they want them.
   await sheetsFetch(token, `${id}:batchUpdate`, {
     method: "POST",
     body: JSON.stringify({
-      requests: [{ addSheet: { properties: { title } } }],
+      requests: [{
+        updateSheetProperties: {
+          properties: {
+            sheetId: found.sheetId,
+            gridProperties: {
+              rowCount: Math.max(rowCount, needRows + 50, 100),
+              columnCount: Math.max(colCount, needCols + 5, 26),
+            },
+          },
+          fields: "gridProperties.rowCount,gridProperties.columnCount",
+        },
+      }],
     }),
   });
 }
 
-// Replaces everything on the tab with these rows, the first being the header.
-export async function writeSheet(rows: string[][]): Promise<number> {
+// Replaces everything on one tab with these rows, the first being the header.
+export async function writeTab(tab: string, rows: string[][]): Promise<number> {
   if (!isSheetConfigured()) throw new Error(sheetSetupHint() || "Google Sheet is not set up.");
   const id = sheetId();
-  const tab = sheetTab();
   const token = await accessToken();
-  await ensureTab(token, id, tab);
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 1);
+  await ensureTab(token, id, tab, Math.max(rows.length, 1), width);
 
-  const range = encodeURIComponent(`${tab}!A:Z`);
-  await sheetsFetch(token, `${id}/values/${range}:clear`, { method: "POST", body: "{}" });
+  // Clearing the whole tab rather than a fixed range: yesterday's copy may have
+  // been longer than today's, and a half-cleared tab reads as real data.
   await sheetsFetch(
     token,
-    `${id}/values/${range}?valueInputOption=USER_ENTERED`,
+    `${id}/values/${encodeURIComponent(a1(tab))}:clear`,
+    { method: "POST", body: "{}" }
+  );
+  if (!rows.length) return 0;
+  await sheetsFetch(
+    token,
+    `${id}/values/${encodeURIComponent(a1(tab, "A1"))}?valueInputOption=USER_ENTERED`,
     { method: "PUT", body: JSON.stringify({ values: rows }) }
   );
   // The header line, minus itself.
   return Math.max(0, rows.length - 1);
+}
+
+// The design-number register's own tab, which is what most of the portal means
+// when it says "the sheet".
+export async function writeSheet(rows: string[][]): Promise<number> {
+  return writeTab(sheetTab(), rows);
 }
 
 export function sheetUrl(): string {

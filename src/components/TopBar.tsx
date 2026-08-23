@@ -91,6 +91,7 @@ export default function TopBar({ user }: Props) {
             <>
               <Link href="/admin/parties" className={path === "/admin/parties" ? "active" : ""}>Lists</Link>
               <Link href="/admin/users" className={on("/admin/users") ? "active" : ""}>Users</Link>
+              <Link href="/admin/backup" className={on("/admin/backup") ? "active" : ""}>Backups</Link>
             </>
           )}
           {/* `display: contents` on wide screens, so the bar is laid out exactly

@@ -49,11 +49,20 @@ function backupReachablePath(pathname: string): boolean {
   );
 }
 
+// Vercel's scheduler runs the nightly Google Sheet copy. It has no session
+// either; it proves itself with the CRON_SECRET the project is given, which
+// Vercel sends as a bearer token on the scheduled request.
+function cronOk(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isPublic(pathname)) return NextResponse.next();
 
   if (backupReachablePath(pathname) && backupTokenOk(req)) return NextResponse.next();
+  if (pathname === "/api/backup/sheets" && cronOk(req)) return NextResponse.next();
 
   const secret = process.env.AUTH_SECRET;
   if (secret) {
