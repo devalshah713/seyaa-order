@@ -224,6 +224,25 @@ export function istStamp(now = new Date()): string {
   return `${ist.toISOString().slice(0, 10)} ${ist.toISOString().slice(11, 16)} IST`;
 }
 
+// Every tab's rows, without writing anything.
+//
+// This is what a Google Apps Script attached to the sheet asks for: the script
+// runs as its owner and writes the rows itself, so the sheet needs no service
+// account, no Google Cloud project and no sharing. Same builders either way —
+// the two routes into the sheet can never show different figures.
+export async function buildAllTabs(): Promise<{ tab: string; rows: string[][] }[]> {
+  const out: { tab: string; rows: string[][] }[] = [];
+  for (const { tab, build } of tabs()) {
+    try {
+      out.push({ tab, rows: await build() });
+    } catch {
+      // One module failing must not cost the others their copy. An empty tab
+      // is left out rather than clearing what is already in the sheet.
+    }
+  }
+  return out;
+}
+
 // Writes every tab. One module failing must not cost the others their copy, so
 // each is caught on its own and reported.
 export async function syncEverythingToSheet(): Promise<TabResult[]> {

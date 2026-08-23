@@ -1695,3 +1695,13 @@ table.qc-sub td.ans.na { color: var(--panel-muted); }
   color: var(--panel-muted); line-height: 1.9;
 }
 .bk-list b { color: var(--panel-ink); font-weight: 600; font-family: var(--mono, ui-monospace, monospace); }
+.bk-sub {
+  font-family: var(--serif); font-size: 15px; margin: 18px 0 6px;
+  color: var(--panel-ink); font-weight: 600;
+}
+.bk-url {
+  font-family: var(--mono, ui-monospace, Consolas, monospace); font-size: 12.5px;
+  color: var(--gold); background: var(--field-bg); border: 1px solid var(--field-line);
+  border-radius: 8px; padding: 8px 11px; margin: 0 0 4px; overflow-x: auto;
+  white-space: nowrap;
+}

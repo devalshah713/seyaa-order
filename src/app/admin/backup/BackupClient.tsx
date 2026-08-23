@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // Where everything is kept, and the two copies of it — said plainly enough that
 // anyone can check the copies are actually happening rather than take it on
@@ -24,6 +24,10 @@ export default function BackupClient({
   const [tabs, setTabs] = useState<TabResult[] | null>(null);
   const [at, setAt] = useState("");
   const [error, setError] = useState("");
+  // Filled in after the page loads, so the address shown is the one this
+  // portal is actually being used on.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
 
   async function sync() {
     setBusy(true); setError(""); setTabs(null);
@@ -51,7 +55,22 @@ export default function BackupClient({
           book, QC and memos. It is rewritten every night at midnight IST, and
           the <b>Backup Log</b> tab says when it last ran.
         </p>
+        <p className="bk-lede">
+          There are two ways to fill it, and the sheet ends up the same either
+          way. Only one needs setting up.
+        </p>
 
+        <h3 className="bk-sub">A script in the sheet</h3>
+        <p className="bk-lede">
+          Nothing to set up on Google&rsquo;s side — no Cloud project, no service
+          account, no key file. In the sheet, open <b>Extensions &rarr; Apps
+          Script</b>, paste in <b>apps-script/Seyaa.gs</b> from the repository,
+          and run <b>setUp</b> once. It asks for the backup token, sets its own
+          nightly alarm, and fills the sheet there and then. The script reads:
+        </p>
+        <p className="bk-url">{origin || "https://…"}/api/backup/tabs</p>
+
+        <h3 className="bk-sub">Or from the portal</h3>
         {sheetConfigured ? (
           <>
             <p className="bk-lede">
@@ -67,8 +86,10 @@ export default function BackupClient({
           </>
         ) : (
           <p className="party-warn">
-            Not connected yet. {sheetHint} Add it in Vercel &rarr; Settings &rarr;
-            Environment Variables, then redeploy.
+            The portal cannot write to the sheet itself — {sheetHint} That is the
+            Google Cloud route, and it is only worth doing if you would rather
+            the portal pushed than the sheet pulled. The script above needs none
+            of it.
           </p>
         )}
 
