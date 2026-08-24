@@ -202,6 +202,21 @@ export default function NewJangadForm() {
 
   const spans = useMemo(() => mergeSpans(rows), [rows]);
 
+  // Where one piece ends and the next begins. Same reason as on the register:
+  // several stone sizes running down the page read as one undivided list
+  // otherwise, and the entries being typed belong to different pieces.
+  const blocks = useMemo(() => {
+    const startsAt = new Set<number>();
+    const ordinal: number[] = [];
+    const byPiece = spans.get("subDesignNo");
+    let n = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (byPiece?.get(i) !== undefined) { startsAt.add(i); n++; }
+      ordinal[i] = Math.max(n, 0);
+    }
+    return { startsAt, ordinal };
+  }, [rows, spans]);
+
   // Whether the sheet names a piece against any of its sizes — worth saying,
   // because it is the difference between two entries and four.
   const perPiece = (seed?.lines || []).some((l) => (l.pieces || "").trim());
@@ -363,7 +378,14 @@ export default function NewJangadForm() {
                   </thead>
                   <tbody>
                     {rows.map((r, i) => (
-                      <tr key={i} className={r.manual ? "jg-added" : undefined}>
+                      <tr
+                        key={i}
+                        className={[
+                          r.manual ? "jg-added" : "",
+                          blocks.startsAt.has(i) && i > 0 ? "jg-piece-top" : "",
+                          blocks.ordinal[i] % 2 ? "jg-piece-alt" : "",
+                        ].filter(Boolean).join(" ") || undefined}
+                      >
                         <td className="jg-sr">
                           {i + 1}
                           {r.manual && (

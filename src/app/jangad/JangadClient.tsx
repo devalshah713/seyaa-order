@@ -96,6 +96,21 @@ export default function JangadClient({
 
   const spans = useMemo(() => mergeSpans(shown), [shown]);
 
+  // Which piece each row belongs to, and which row starts one. Four stone
+  // sizes down a page look like four unrelated lines; the accountant filling
+  // in what came back needs to see at a glance where -10 ends and -11 begins.
+  const blocks = useMemo(() => {
+    const startsAt = new Set<number>();
+    const ordinal: number[] = [];
+    const byPiece = spans.get("subDesignNo");
+    let n = -1;
+    for (let i = 0; i < shown.length; i++) {
+      if (byPiece?.get(i) !== undefined) { startsAt.add(i); n++; }
+      ordinal[i] = Math.max(n, 0);
+    }
+    return { startsAt, ordinal };
+  }, [shown, spans]);
+
   const cols: JangadColumn[] =
     view === "all"
       ? JANGAD_COLUMNS
@@ -476,6 +491,10 @@ export default function JangadClient({
                         gap ? "jg-short" : "",
                         undatedStages.length ? "jg-undated" : "",
                         picked.has(r.id) ? "jg-on" : "",
+                        // A rule where a piece starts, and every other piece
+                        // shaded, so one entry reads as one block.
+                        blocks.startsAt.has(i) && i > 0 ? "jg-piece-top" : "",
+                        blocks.ordinal[i] % 2 ? "jg-piece-alt" : "",
                       ].filter(Boolean).join(" ") || undefined}
                     >
                       {/* One tick per piece, not per stone size. A bracelet

@@ -1723,3 +1723,27 @@ table.jg-table tr.jg-added .jg-sr { color: var(--gold); font-weight: 700; }
 }
 .jg-addline-label { font-size: 12.5px; color: var(--panel-muted); }
 .jg-added-note { font-size: 12px; color: var(--gold); font-weight: 600; }
+
+/* ---------- One piece, one block ---------- */
+/* Four stone sizes down a page read as four unrelated lines. What separates
+   them is a rule and a gap, not fill: the cells are full of boxes being typed
+   into, and shading them only makes the figures harder to read.
+   The padding goes on the block's first row, so the whole width of the table
+   opens up there — the design-level cells ruling down the side simply grow
+   with it, and the gap runs unbroken. */
+table.jg-table tr.jg-piece-top > td {
+  border-top: 3px solid var(--gold-soft);
+  padding-top: 13px;
+}
+
+/* Which piece a block is stays marked on the piece's own cells — its tick box
+   and its Sub Design No — where there is nothing to read underneath. */
+table.jg-table tr.jg-piece-alt > td.jg-pickcol,
+table.jg-table tr.jg-piece-alt > td.merged[data-label="Sub Design No"] {
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+}
+
+/* A hand-added line keeps its own mark whichever block it sits in. */
+table.jg-table tr.jg-added > td {
+  background: color-mix(in srgb, var(--gold) 15%, transparent);
+}
