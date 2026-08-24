@@ -460,9 +460,12 @@ export default function JangadClient({
                 {shown.map((r, i) => {
                   const gap = shortfall(r);
                   const undatedStages = missingStageDates(r);
-                  // The tick box follows the Design No cell's own merge, so it
-                  // covers exactly the rows that cell covers.
-                  const pickSpan = spans.get("designNo")?.get(i);
+                  // One box per piece — SN-BR-AMF-20CTS-10, then -11, then -12 —
+                  // because a piece is what goes out, gets studded and comes
+                  // back. Merging on the design instead would put a whole run
+                  // of pieces under one tick, which is not a thing anyone hands
+                  // over as a unit.
+                  const pickSpan = spans.get("subDesignNo")?.get(i);
                   const pickCovers = pickSpan === undefined
                     ? []
                     : shown.slice(i, i + pickSpan).map((x) => x.id);
@@ -475,11 +478,10 @@ export default function JangadClient({
                         picked.has(r.id) ? "jg-on" : "",
                       ].filter(Boolean).join(" ") || undefined}
                     >
-                      {/* One tick per design, not per stone size. A design is
-                          issued, printed and handed over as one thing, so
-                          ticking it four times to print one slip was work for
-                          nothing. The box rules down the design's rows exactly
-                          as the Design No cell beside it does. */}
+                      {/* One tick per piece, not per stone size. A bracelet
+                          with four stone sizes took four ticks to print one
+                          slip; now the box rules down its rows exactly as the
+                          Sub Design No cell beside it does. */}
                       {pickSpan !== undefined && (
                         <td
                           className={`jg-pickcol${pickSpan > 1 ? " merged" : ""}`}
@@ -494,7 +496,7 @@ export default function JangadClient({
                               el.indeterminate = some && !pickCovers.every((id) => picked.has(id));
                             }}
                             onChange={(e) => toggle(pickCovers, e.target.checked)}
-                            aria-label={`Select ${r.designNo || fullPieceNo(r)}`}
+                            aria-label={`Select ${fullPieceNo(r)}`}
                           />
                         </td>
                       )}
