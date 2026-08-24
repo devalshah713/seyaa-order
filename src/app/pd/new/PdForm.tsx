@@ -14,7 +14,7 @@ import {
 } from "@/lib/pdConfig";
 import {
   parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, splitPiece,
-  buildDesignNo, MAX_PIECES,
+  MAX_PIECES,
 } from "@/lib/designNo";
 
 export type PdInitial = {
@@ -116,21 +116,11 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   const subCats = under("subCategory", f.category);
   const subSubCats = under("subSubCategory", f.subCategory);
 
-  // The design number is read left to right and every part means something, so
-  // it is built out of the codes rather than typed: SN, then the category, its
-  // sub, its sub-sub, then the carats. Typing over it is still allowed — an old
-  // number being re-entered has to go in as it stands.
-  const codeOf = (kind: string, name: string) =>
-    (lists[kind] || []).find((e) => e.name === name)?.code || "";
-  const suggested = buildDesignNo({
-    category: codeOf("category", f.category),
-    subCategory: codeOf("subCategory", f.subCategory),
-    subSubCategory: codeOf("subSubCategory", f.subSubCategory),
-    tdw: f.tdw,
-  });
-  const [ownNumber, setOwnNumber] = useState(() => !!initial?.sku);
-  // While it is being built, the box shows what the choices come to.
-  const skuBase = ownNumber ? sku.base : suggested;
+  // The design number is typed by hand, in full — nothing here builds or
+  // suggests one from the category, sub-category or carats. Auto-generation
+  // was tried and turned off: the office wanted the number to be whatever they
+  // write on the packet, not a code the portal composes for them.
+  const skuBase = sku.base;
 
   // Changing a level empties the ones below it: a sub-category from the old
   // category is not under the new one, and leaving it there is a sheet that
@@ -267,28 +257,8 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
               value={skuBase}
               onChange={(e) => setSkuPart("base", e.target.value)}
               placeholder="SN-BR-AMF"
-              readOnly={!ownNumber}
-              title={ownNumber ? undefined : "Built from the category, sub-category and carats below"}
             />
-            <p className="sku-built">
-              {ownNumber ? (
-                <>
-                  Typed by hand.{" "}
-                  <button type="button" className="linkbtn"
-                    onClick={() => { setOwnNumber(false); }}>
-                    Build it from the design instead
-                  </button>
-                </>
-              ) : (
-                <>
-                  Built from the category, sub-category and carats.{" "}
-                  <button type="button" className="linkbtn"
-                    onClick={() => { setSkuPart("base", suggested); setOwnNumber(true); }}>
-                    Type it myself
-                  </button>
-                </>
-              )}
-            </p>
+            <p className="sku-built">Typed by hand.</p>
             <div className="sku-run">
               <label className="field">
                 <span>From</span>
