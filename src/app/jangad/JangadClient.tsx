@@ -454,13 +454,18 @@ export default function JangadClient({
                   <th className="jg-pickcol" />
                   <th className="jg-sr">#</th>
                   {cols.map((c) => <th key={c.key}>{c.header}</th>)}
-                  <th className="jg-sr" />
                 </tr>
               </thead>
               <tbody>
                 {shown.map((r, i) => {
                   const gap = shortfall(r);
                   const undatedStages = missingStageDates(r);
+                  // The tick box follows the Design No cell's own merge, so it
+                  // covers exactly the rows that cell covers.
+                  const pickSpan = spans.get("designNo")?.get(i);
+                  const pickCovers = pickSpan === undefined
+                    ? []
+                    : shown.slice(i, i + pickSpan).map((x) => x.id);
                   return (
                     <tr
                       key={r.id}
@@ -470,16 +475,33 @@ export default function JangadClient({
                         picked.has(r.id) ? "jg-on" : "",
                       ].filter(Boolean).join(" ") || undefined}
                     >
-                      <td className="jg-pickcol">
-                        <input
-                          type="checkbox"
-                          checked={picked.has(r.id)}
-                          onChange={(e) => toggle([r.id], e.target.checked)}
-                          aria-label={`Select ${fullPieceNo(r)}`}
-                        />
-                      </td>
+                      {/* One tick per design, not per stone size. A design is
+                          issued, printed and handed over as one thing, so
+                          ticking it four times to print one slip was work for
+                          nothing. The box rules down the design's rows exactly
+                          as the Design No cell beside it does. */}
+                      {pickSpan !== undefined && (
+                        <td
+                          className={`jg-pickcol${pickSpan > 1 ? " merged" : ""}`}
+                          rowSpan={pickSpan > 1 ? pickSpan : undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={pickCovers.every((id) => picked.has(id))}
+                            ref={(el) => {
+                              if (!el) return;
+                              const some = pickCovers.some((id) => picked.has(id));
+                              el.indeterminate = some && !pickCovers.every((id) => picked.has(id));
+                            }}
+                            onChange={(e) => toggle(pickCovers, e.target.checked)}
+                            aria-label={`Select ${r.designNo || fullPieceNo(r)}`}
+                          />
+                        </td>
+                      )}
                       <td className="jg-sr">
                         {i + 1}
+                        <button className="jg-drop" onClick={() => del(r)}
+                          title="Delete this entry" aria-label="Delete this entry">×</button>
                         {gap && (
                           <span
                             className="jg-flag"
@@ -529,10 +551,6 @@ export default function JangadClient({
                           </td>
                         );
                       })}
-                      <td className="jg-sr">
-                        <button className="del" onClick={() => del(r)}
-                          title="Delete entry" aria-label="Delete entry">×</button>
-                      </td>
                     </tr>
                   );
                 })}

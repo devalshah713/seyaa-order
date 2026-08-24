@@ -51,7 +51,12 @@ function Slip({ group }: { group: Group }) {
   // Columns the factory has no use for are left off rather than printed empty.
   const showSetting = rows.some((r) => r.setting);
   const showCerti = rows.some((r) => r.certiNo);
-  const cols = 7 + (showSetting ? 1 : 0) + (showCerti ? 1 : 0);
+  const optional = (showSetting ? 1 : 0) + (showCerti ? 1 : 0);
+  // Sr, Design, Sub, Product, Shape, [Setting], [Certi], Size, Pcs, Carats, CVD.
+  const cols = 9 + optional;
+  // Everything up to and including Size, so the two figures below land under
+  // Pcs and Carats — the columns they are the totals of.
+  const beforeTotals = 6 + optional;
 
   // Every row of one issue carries the same date, so the sheet takes the first.
   const date = rows[0]?.date || "";
@@ -122,13 +127,13 @@ function Slip({ group }: { group: Group }) {
           })}
           {Array.from({ length: pad }).map((_, i) => (
             <tr key={`e${i}`} className="empty">
-              {Array.from({ length: cols + 2 }).map((_, c) => <td key={c} />)}
+              {Array.from({ length: cols }).map((_, c) => <td key={c} />)}
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr>
-            <td className="tot-lab" colSpan={cols - 2}>Total</td>
+            <td className="tot-lab" colSpan={beforeTotals}>Total</td>
             <td className="c-num">{pcs || ""}</td>
             <td className="c-num">{carats ? round(carats) : ""}</td>
             <td />
