@@ -1705,3 +1705,21 @@ table.qc-sub td.ans.na { color: var(--panel-muted); }
   border-radius: 8px; padding: 8px 11px; margin: 0 0 4px; overflow-x: auto;
   white-space: nowrap;
 }
+
+/* ---------- A line added by hand on a diamond issue ---------- */
+/* Kept visibly apart from the lines the PD sheet asked for, so what was added
+   at the counter is obvious before it is saved — and removable while it still
+   can be. */
+table.jg-table tr.jg-added td { background: color-mix(in srgb, var(--gold) 13%, transparent); }
+table.jg-table tr.jg-added .jg-sr { color: var(--gold); font-weight: 700; }
+.jg-drop {
+  display: block; margin: 2px auto 0; width: 17px; height: 17px; padding: 0;
+  border: 1px solid var(--field-line); border-radius: 5px; cursor: pointer;
+  background: var(--panel); color: var(--panel-muted); font-size: 12px; line-height: 1;
+}
+.jg-drop:hover { color: #b23; border-color: #b23; }
+.jg-addline {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px;
+}
+.jg-addline-label { font-size: 12.5px; color: var(--panel-muted); }
+.jg-added-note { font-size: 12px; color: var(--gold); font-weight: 600; }

@@ -10,7 +10,11 @@ import {
 } from "@/lib/jangadConfig";
 import type { JangadSeed } from "@/lib/jangadStore";
 
-type Draft = Record<JangadField, string>;
+// `manual` marks a line the accountant added by hand rather than one the PD
+// sheet asked for. It is only ever local — the register stores the row like any
+// other — but while the form is open it keeps the line from being swept away
+// when the rows are rebuilt, and shows which lines are the extra ones.
+type Draft = Record<JangadField, string> & { manual?: boolean };
 
 // Stage one of the register: diamonds going out against a design.
 //
@@ -96,13 +100,35 @@ export default function NewJangadForm() {
     return out;
   }
 
+  // Rebuilding the rows must not throw away the lines somebody added by hand,
+  // so each one is put back after the last line of the piece it belongs to —
+  // where it has to sit, or the merged Design Number cell above it breaks in two.
+  function withManual(fresh: Draft[], manual: Draft[]): Draft[] {
+    if (!manual.length) return fresh;
+    const out: Draft[] = [];
+    fresh.forEach((row, i) => {
+      out.push(row);
+      const lastOfPiece = fresh[i + 1]?.subDesignNo !== row.subDesignNo;
+      if (lastOfPiece) {
+        out.push(...manual.filter((m) => m.subDesignNo === row.subDesignNo));
+      }
+    });
+    return out;
+  }
+
+  // A piece that is no longer ticked takes its added lines with it.
+  const rebuild = (s: JangadSeed, pieces: Set<string>) =>
+    setRows((prev) =>
+      withManual(build(s, pieces, date, memoNo, mfg), prev.filter((r) => r.manual))
+    );
+
   const togglePiece = (no: string) => {
     if (!seed) return;
     const next = new Set(picked);
     if (next.has(no)) next.delete(no);
     else next.add(no);
     setPicked(next);
-    setRows(build(seed, next, date, memoNo, mfg));
+    rebuild(seed, next);
   };
 
   const allPieces = () => {
@@ -111,8 +137,50 @@ export default function NewJangadForm() {
       picked.size === seed.pieces.length ? [] : seed.pieces.map((p) => p.no)
     );
     setPicked(next);
-    setRows(build(seed, next, date, memoNo, mfg));
+    rebuild(seed, next);
   };
+
+  // One more diamond going out against a piece than the demand asked for —
+  // two certified stones where the sheet said two stones, a replacement, a
+  // second bag. The accountant adds the line here rather than sending the PD
+  // sheet back to be changed.
+  const addLine = (sub: string) => {
+    setRows((list) => {
+      const model = list.find((r) => r.subDesignNo === sub);
+      const row: Draft = {
+        ...BLANK_JANGAD,
+        date,
+        memoNo,
+        mfgName: mfg,
+        // The piece it belongs to, copied rather than typed — these are the
+        // columns the register merges on, and they have to match exactly.
+        designNo: model?.designNo || seed?.designNo || "",
+        subDesignNo: sub,
+        product: model?.product || seed?.product || "",
+        stockCode: model?.stockCode || "",
+        status: "Issued",
+        manual: true,
+      };
+      let at = list.length - 1;
+      list.forEach((r, i) => { if (r.subDesignNo === sub) at = i; });
+      const out = list.slice();
+      out.splice(at + 1, 0, row);
+      return out;
+    });
+  };
+
+  const dropLine = (at: number) =>
+    setRows((list) => list.filter((_, i) => i !== at));
+
+  // The pieces that have rows, in the order the table shows them — what the
+  // "add a line" buttons are offered for.
+  const piecesInTable = useMemo(() => {
+    const seen: string[] = [];
+    for (const r of rows) if (!seen.includes(r.subDesignNo)) seen.push(r.subDesignNo);
+    return seen;
+  }, [rows]);
+
+  const addedCount = rows.filter((r) => r.manual).length;
 
   // Date and Memo No. are the same for the whole issue, so they are set once
   // above and pushed into every row rather than typed twenty times.
@@ -163,7 +231,9 @@ export default function NewJangadForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          rows,
+          // `manual` is the form's own bookkeeping. The register stores an
+          // added line like any other, so it does not travel.
+          rows: rows.map(({ manual, ...row }) => row),
           pdId: seed?.pdId, pdNo: seed?.pdNo, demandNo: seed?.demandNo,
           runNo: seed?.designNo,
         }),
@@ -293,8 +363,21 @@ export default function NewJangadForm() {
                   </thead>
                   <tbody>
                     {rows.map((r, i) => (
-                      <tr key={i}>
-                        <td className="jg-sr">{i + 1}</td>
+                      <tr key={i} className={r.manual ? "jg-added" : undefined}>
+                        <td className="jg-sr">
+                          {i + 1}
+                          {r.manual && (
+                            <button
+                              type="button"
+                              className="jg-drop"
+                              title="Remove this added line"
+                              aria-label={`Remove added line ${i + 1}`}
+                              onClick={() => dropLine(i)}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </td>
                         {issueCols.map((c) => {
                           const span = isMergedColumn(c.key) ? spans.get(c.key)?.get(i) : 1;
                           // No entry means a run above already covers this row.
@@ -330,10 +413,36 @@ export default function NewJangadForm() {
                 </table>
               </div>
 
+              <div className="jg-addline">
+                <span className="jg-addline-label">
+                  Need one more line than the demand asked for?
+                </span>
+                {piecesInTable.map((sub) => (
+                  <button
+                    key={sub}
+                    type="button"
+                    className="rowbtn"
+                    onClick={() => addLine(sub)}
+                  >
+                    {piecesInTable.length === 1 ? "Add a line" : `Add a line to ${sub}`}
+                  </button>
+                ))}
+              </div>
+              <p className="pieces-hint">
+                An added line goes out on the same memo, to the same factory, as
+                the rest of the piece — the shape, size, stones and rate are
+                yours to fill in. Nothing needs changing on the PD sheet.
+              </p>
+
               <div className="pieces-actions">
                 <button className="btn btn-primary" onClick={save} disabled={saving}>
                   {saving ? "Saving…" : `Save ${rows.length} ${rows.length === 1 ? "entry" : "entries"}`}
                 </button>
+                {addedCount > 0 && (
+                  <span className="jg-added-note">
+                    {addedCount === 1 ? "1 line added" : `${addedCount} lines added`} by hand
+                  </span>
+                )}
               </div>
             </>
           )}
