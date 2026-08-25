@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncDesignRegisterQuietly } from "@/lib/designRegister";
 import { createPdSheet, listPdSheets, nextPdNo, normalizePdInput } from "@/lib/pdStore";
+import { currentSession } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,7 +39,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const sheet = await createPdSheet(input);
+    // Whose sheet it is comes from the session, not the request body.
+    const session = await currentSession();
+    const sheet = await createPdSheet(input, session?.username || "");
     // The Google Sheet is a copy of the register, so it is rewritten whenever
     // the register changes. Quietly: a design must save whether Google answers
     // or not.

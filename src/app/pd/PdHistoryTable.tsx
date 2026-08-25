@@ -97,6 +97,7 @@ export default function PdHistoryTable({ sheets }: { sheets: PdSheet[] }) {
             <th>Product</th>
             <th>Assigned to</th>
             <th>Delivery</th>
+            <th>Made by</th>
             <th className="num">Pieces</th>
             <th className="actions-col">Actions</th>
           </tr>
@@ -118,6 +119,14 @@ export default function PdHistoryTable({ sheets }: { sheets: PdSheet[] }) {
                 <td>{s.product || "—"}</td>
                 <td>{s.assignedTo || "—"}</td>
                 <td>{s.deliveryDate ? formatDate(s.deliveryDate) : "—"}</td>
+                {/* Sheets written before authorship was recorded have no name
+                    on them, and there is nothing to work it out from. */}
+                <td>
+                  {s.createdBy || <span className="pd-nobody">not recorded</span>}
+                  {s.updatedBy && s.updatedBy !== s.createdBy && (
+                    <span className="sub"> · last edit {s.updatedBy}</span>
+                  )}
+                </td>
                 <td className="num">
                   {sum.total ? (
                     <>
@@ -141,7 +150,7 @@ export default function PdHistoryTable({ sheets }: { sheets: PdSheet[] }) {
             );
           })}
           {results.length === 0 && (
-            <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
+            <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
           )}
         </tbody>
       </table>

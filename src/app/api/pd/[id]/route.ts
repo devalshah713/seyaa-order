@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updatePdSheet, deletePdSheet, normalizePdInput } from "@/lib/pdStore";
+import { currentSession } from "@/lib/currentUser";
 import { syncDesignRegisterQuietly } from "@/lib/designRegister";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,8 @@ export async function PATCH(
   }
 
   try {
-    const sheet = await updatePdSheet(params.id, input);
+    const session = await currentSession();
+    const sheet = await updatePdSheet(params.id, input, session?.username || "");
     if (!sheet) return NextResponse.json({ error: "PD sheet not found." }, { status: 404 });
     await syncDesignRegisterQuietly();
     return NextResponse.json({ sheet });

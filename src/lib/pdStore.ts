@@ -68,15 +68,24 @@ export type PdSheet = {
   caratCode?: string;
   pointerRange?: string;
 
+  // Who made the sheet and who last touched it. Optional because sheets
+  // written before this was recorded have nobody's name on them, and inventing
+  // one would be worse than leaving it blank.
+  createdBy?: string;
+  updatedBy?: string;
+
   createdAt: string;
   updatedAt: string;
 };
 
 // `pieces` is left out on purpose: it is worked out from the design number, so
 // saving a sheet never carries a piece list in from the browser.
+// Authorship is taken from the signed-in session on the server, never from the
+// request body — otherwise anyone could put somebody else's name on a sheet.
 export type NewPdSheet = Omit<
   PdSheet,
   "id" | "pdNo" | "fy" | "seq" | "createdAt" | "updatedAt" | "pieces"
+  | "createdBy" | "updatedBy"
 >;
 
 export type PdDB = { counters: Record<string, number>; sheets: PdSheet[] };
@@ -160,7 +169,7 @@ async function writeDB(db: PdDB, token: string): Promise<void> {
   });
 }
 
-export async function createPdSheet(input: NewPdSheet): Promise<PdSheet> {
+export async function createPdSheet(input: NewPdSheet, by = ""): Promise<PdSheet> {
   const token = requireToken();
   const db = await readDB(token);
 
@@ -177,6 +186,8 @@ export async function createPdSheet(input: NewPdSheet): Promise<PdSheet> {
     fy,
     seq,
     pieces: reconcilePieces(input.sku, []),
+    createdBy: by || undefined,
+    updatedBy: by || undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -209,7 +220,9 @@ export async function getPdSheet(id: string): Promise<PdSheet | null> {
 }
 
 // Identity fields (id, pdNo, fy, seq, createdAt) are preserved on edit.
-export async function updatePdSheet(id: string, patch: NewPdSheet): Promise<PdSheet | null> {
+export async function updatePdSheet(
+  id: string, patch: NewPdSheet, by = ""
+): Promise<PdSheet | null> {
   const token = requireToken();
   const db = await readDB(token);
   const idx = db.sheets.findIndex((s) => s.id === id);
@@ -220,6 +233,8 @@ export async function updatePdSheet(id: string, patch: NewPdSheet): Promise<PdSh
     // Correcting the design number re-cuts the run; anything already recorded
     // against a piece that survives the change is kept.
     pieces: reconcilePieces(patch.sku, db.sheets[idx].pieces),
+    // Who made it never changes; who last touched it does.
+    updatedBy: by || db.sheets[idx].updatedBy,
     updatedAt: new Date().toISOString(),
   };
   db.sheets[idx] = updated;

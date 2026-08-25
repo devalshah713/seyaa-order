@@ -40,7 +40,7 @@ export const PD_HEADER = [
   "Dia. Weight & Pointers", "Gold Purity", "Gold Colour", "Gold Weight",
   "Size", "Locks", "Zone", "Order Type", "Quantity", "Price Range",
   "Assigned To", "Assigned Date", "Delivery Date", "Order By",
-  "PD Merchandiser", "Remarks", "Last Updated",
+  "PD Merchandiser", "Remarks", "Made By", "Last Edited By", "Last Updated",
 ];
 
 async function pdRows(): Promise<string[][]> {
@@ -57,7 +57,8 @@ async function pdRows(): Promise<string[][]> {
       dia, s.goldPurity, s.goldColor, s.goldWeight,
       s.size, s.locks, s.zone, s.orderType, s.quantity, s.priceRange,
       s.assignedTo, s.assignedDate, s.deliveryDate, s.orderBy,
-      s.pdMerchandiser, s.remarks, (s.updatedAt || "").slice(0, 10),
+      s.pdMerchandiser, s.remarks,
+      s.createdBy || "", s.updatedBy || "", (s.updatedAt || "").slice(0, 10),
     ];
   });
   rows.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));

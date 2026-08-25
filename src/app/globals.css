@@ -1747,3 +1747,6 @@ table.jg-table tr.jg-piece-alt > td.merged[data-label="Sub Design No"] {
 table.jg-table tr.jg-added > td {
   background: color-mix(in srgb, var(--gold) 15%, transparent);
 }
+/* A PD sheet from before authorship was recorded. Said plainly rather than
+   left blank, so nobody reads an empty cell as "nobody". */
+.pd-nobody { color: var(--panel-muted); font-style: italic; font-size: 12.5px; }
