@@ -37,11 +37,16 @@ export default function StockPanel({
     setStaged((s) => ({ ...s, [stockNo]: { ...(s[stockNo] || blank), ...patch } }));
   }
 
-  function markAllReturned() {
+  // A memo usually resolves one way for the whole lot: everything came back, or
+  // everything was handed over. Only pieces still out are set — one already
+  // settled keeps whatever was recorded against it.
+  function markAll(outcome: StockOutcome) {
     const next: Record<string, Staged> = { ...staged };
-    for (const l of lines) if (!l.outcome) next[l.stockNo] = { ...blank, outcome: "returned" };
+    for (const l of lines) if (!l.outcome) next[l.stockNo] = { ...blank, outcome };
     setStaged(next);
   }
+
+  const stillOut = lines.filter((l) => !l.outcome).length;
 
   async function record() {
     setError("");
@@ -80,10 +85,18 @@ export default function StockPanel({
       <div className="sp-head">
         <h2>Pieces on this memo</h2>
         <span className={`status-pill ${status}`}>{statusLabel(status, lines)}</span>
-        {status !== "closed" && (
-          <button type="button" className="btn" onClick={markAllReturned}>
-            Mark all returned
-          </button>
+        {stillOut > 0 && (
+          <div className="sp-markall">
+            <span className="sp-markall-lab">
+              Mark all {stillOut} still out as
+            </span>
+            <button type="button" className="btn" onClick={() => markAll("returned")}>
+              Returned
+            </button>
+            <button type="button" className="btn" onClick={() => markAll("delivered")}>
+              Delivered
+            </button>
+          </div>
         )}
       </div>
 
