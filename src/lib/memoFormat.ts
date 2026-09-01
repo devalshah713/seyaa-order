@@ -5,6 +5,7 @@ export const JEWELLERY_TYPES = [
   "Ring",
   "Earrings",
   "Pendant",
+  "Pendant With Chain",
   "Bracelet",
   "Necklace",
   "Necklace Set",
