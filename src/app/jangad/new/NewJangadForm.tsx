@@ -5,8 +5,8 @@ import Combo from "@/components/Combo";
 import { formatDate, todayInput } from "@/lib/memoFormat";
 import { splitPiece } from "@/lib/designNo";
 import {
-  BLANK_JANGAD, SETTINGS, columnsFor, isMergedColumn, linesForPiece, mergeSpans,
-  type JangadField,
+  BLANK_JANGAD, JANGAD_COLUMNS, SETTINGS, columnsFor, isMergedColumn,
+  linesForPiece, mergeSpans, type JangadField,
 } from "@/lib/jangadConfig";
 import type { JangadSeed } from "@/lib/jangadStore";
 
@@ -35,7 +35,11 @@ export default function NewJangadForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const issueCols = columnsFor("issue");
+  // Comments belongs to the return stage on the workbook, so the issue screen
+  // does not normally show it. An add-on is the exception: why the stones are
+  // going out is the whole point of the entry, and it has to be written at the
+  // moment they go, not looked back for weeks later.
+  const commentsCol = JANGAD_COLUMNS.find((c) => c.key === "comments")!;
 
   async function lookup() {
     const q = query.trim();
@@ -275,6 +279,10 @@ export default function NewJangadForm() {
     setRows((list) =>
       list.map((r, n) => (n >= from && n < from + span ? { ...r, [k]: v } : r))
     );
+
+  const issueCols = addOn
+    ? [...columnsFor("issue"), commentsCol]
+    : columnsFor("issue");
 
   const spans = useMemo(() => mergeSpans(rows), [rows]);
 
