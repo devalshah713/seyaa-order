@@ -1795,3 +1795,22 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
   font-family: var(--mono, ui-monospace, Consolas, monospace);
 }
 .pd-readonly b { color: var(--gold); }
+
+/* The design photo, whole and uncropped, for checking a piece against it. */
+.pd-photo-big {
+  margin: 22px 0 0; background: var(--panel); border: 1px solid var(--panel-line);
+  border-radius: 10px; padding: 14px 16px 16px;
+}
+.pd-photo-big figcaption {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  font-size: 12px; letter-spacing: .8px; text-transform: uppercase;
+  color: var(--panel-muted); font-weight: 600; margin-bottom: 12px;
+}
+.pd-photo-big figcaption a {
+  text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--gold);
+}
+/* Contained, never cropped — the whole design, however it was photographed. */
+.pd-photo-big img {
+  display: block; max-width: 100%; max-height: 70vh; margin: 0 auto;
+  object-fit: contain; border-radius: 6px;
+}

@@ -36,6 +36,24 @@ export default async function JangadPdView({ params }: { params: { id: string } 
       <div className="stage">
         <PdSheetView data={{ ...sheet, photoUrl }} />
       </div>
+
+      {/* The sheet's own photo box is a fixed slot on a paper replica: 176px
+          tall and cropped to fill, which is fine for a printed sheet and no use
+          for telling one bracelet from another. The design is what the packet
+          is being checked against, so it is also shown whole, at a size worth
+          looking at, with the original a click away. */}
+      {photoUrl && (
+        <div className="wrap no-print">
+          <figure className="pd-photo-big">
+            <figcaption>
+              Design photo
+              <a href={photoUrl} target="_blank" rel="noreferrer">Open full size ↗</a>
+            </figcaption>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoUrl} alt={`Design ${sheet.sku}`} />
+          </figure>
+        </div>
+      )}
     </>
   );
 }
