@@ -355,7 +355,20 @@ export default function JangadClient({
           onChange={(e) => { setQ(e.target.value); setFocus(null); }}
           placeholder="Design number, one piece, memo no. or stock code"
         />
-        <a href="/api/jangad/export" className="btn">Export to Excel</a>
+        {/* Ticking is what "these ones" means everywhere else on this screen —
+            it is what the issue slip prints — so the export follows it too.
+            Nothing ticked still gives the whole register, which is what an
+            archive copy wants. */}
+        <a
+          href={pickedShown.length
+            ? `/api/jangad/export?ids=${encodeURIComponent(pickedShown.join(","))}`
+            : "/api/jangad/export"}
+          className="btn"
+        >
+          {pickedShown.length
+            ? `Export ${pickedShown.length} selected`
+            : "Export to Excel"}
+        </a>
         <Link href="/jangad/new" className="btn btn-primary">+ Issue Diamonds</Link>
       </div>
 
