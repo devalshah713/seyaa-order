@@ -53,6 +53,7 @@ export default function NewJangadForm() {
       setMfg(s.assignedTo);
       const start = new Set(s.pieces.filter((p) => p.suggested).map((p) => p.no));
       setPicked(start);
+      setRemoved(new Set());
       setRows(build(s, start, date, memoNo, s.assignedTo));
     } catch (err) {
       setSeed(null);
@@ -116,11 +117,32 @@ export default function NewJangadForm() {
     return out;
   }
 
+  // Lines taken off by hand, remembered so that ticking a piece off and back on
+  // does not put them back.
+  //
+  // They are needed because the PD sheet cannot always be trusted to say which
+  // piece takes which size. Left on "All pieces", two sizes across two pieces
+  // come out as four entries when the design is really one size per piece —
+  // and the accountant with the packet in front of them can see that, while
+  // this screen cannot. Rather than have them wait on the PD sheet being
+  // corrected, they take the two lines off here.
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+
+  // What identifies a line within its piece. Not the row index: rows move as
+  // pieces are ticked on and off.
+  const keyOf = (r: Draft) => [r.subDesignNo, r.shape, r.size, r.pcs].join("|");
+
+  const assemble = (
+    s: JangadSeed, pieces: Set<string>, manual: Draft[], off: Set<string>
+  ) =>
+    withManual(
+      build(s, pieces, date, memoNo, mfg).filter((r) => !off.has(keyOf(r))),
+      manual
+    );
+
   // A piece that is no longer ticked takes its added lines with it.
   const rebuild = (s: JangadSeed, pieces: Set<string>) =>
-    setRows((prev) =>
-      withManual(build(s, pieces, date, memoNo, mfg), prev.filter((r) => r.manual))
-    );
+    setRows((prev) => assemble(s, pieces, prev.filter((r) => r.manual), removed));
 
   const togglePiece = (no: string) => {
     if (!seed) return;
@@ -169,8 +191,25 @@ export default function NewJangadForm() {
     });
   };
 
+  // Taking a line off. One added by hand simply goes; one the PD sheet asked
+  // for is remembered as removed, so a rebuild does not bring it back.
   const dropLine = (at: number) =>
-    setRows((list) => list.filter((_, i) => i !== at));
+    setRows((list) => {
+      const row = list[at];
+      if (row && !row.manual) {
+        setRemoved((prev) => new Set(prev).add(keyOf(row)));
+      }
+      return list.filter((_, i) => i !== at);
+    });
+
+  // Everything taken off, back again — for a wrong guess about which lines the
+  // design really needs.
+  const restoreLines = () => {
+    if (!seed) return;
+    const empty = new Set<string>();
+    setRemoved(empty);
+    setRows((prev) => assemble(seed, picked, prev.filter((r) => r.manual), empty));
+  };
 
   // The pieces that have rows, in the order the table shows them — what the
   // "add a line" buttons are offered for.
@@ -181,6 +220,7 @@ export default function NewJangadForm() {
   }, [rows]);
 
   const addedCount = rows.filter((r) => r.manual).length;
+
 
   // Date and Memo No. are the same for the whole issue, so they are set once
   // above and pushed into every row rather than typed twenty times.
@@ -220,6 +260,16 @@ export default function NewJangadForm() {
   // Whether the sheet names a piece against any of its sizes — worth saying,
   // because it is the difference between two entries and four.
   const perPiece = (seed?.lines || []).some((l) => (l.pieces || "").trim());
+  // Every size going into every piece, with more than one of each. That is a
+  // real design — a pair of earrings set with two sizes each — and it is also
+  // exactly what a PD sheet looks like when "Goes to" was left on All pieces
+  // and should not have been. The screen cannot tell the two apart, so it says
+  // what it is about to do and leaves the judgement to whoever has the packet.
+  // Once lines have been taken off, the point has been taken — the warning
+  // would only be restating a number that is no longer on the screen.
+  const crossed =
+    !!seed && !perPiece && seed.lines.length > 1 && picked.size > 1 &&
+    removed.size === 0;
 
   // Picking a piece the register already covers is allowed — a second bag for
   // the same piece is a real thing — but it is never silent.
@@ -353,6 +403,17 @@ export default function NewJangadForm() {
                   ? "This design has no diamond sizes on its PD sheet, so the sizes are yours to fill in."
                   : `${seed.lines.length} diamond ${seed.lines.length === 1 ? "size" : "sizes"} on this design${perPiece ? ", drawn one to a piece" : ""} — ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`}
               </p>
+              {crossed && (
+                <p className="hint warn">
+                  Every one of these {seed.lines.length} sizes is set to go into
+                  every piece, so {picked.size} pieces come to{" "}
+                  <b>{seed.lines.length * picked.size} entries</b>. If each piece
+                  really takes only one of these sizes, take the wrong lines off
+                  with the × beside the row number — and ask for <b>Goes to</b>{" "}
+                  to be set on the PD sheet, so the next issue against this
+                  design comes out right on its own.
+                </p>
+              )}
               {reissuing.length > 0 && (
                 <p className="hint warn">
                   {reissuing.length === 1
@@ -388,17 +449,17 @@ export default function NewJangadForm() {
                       >
                         <td className="jg-sr">
                           {i + 1}
-                          {r.manual && (
-                            <button
-                              type="button"
-                              className="jg-drop"
-                              title="Remove this added line"
-                              aria-label={`Remove added line ${i + 1}`}
-                              onClick={() => dropLine(i)}
-                            >
-                              ×
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="jg-drop"
+                            title={r.manual
+                              ? "Remove this added line"
+                              : "This piece does not take this size — leave it off"}
+                            aria-label={`Remove line ${i + 1}`}
+                            onClick={() => dropLine(i)}
+                          >
+                            ×
+                          </button>
                         </td>
                         {issueCols.map((c) => {
                           const span = isMergedColumn(c.key) ? spans.get(c.key)?.get(i) : 1;
@@ -449,6 +510,11 @@ export default function NewJangadForm() {
                     {piecesInTable.length === 1 ? "Add a line" : `Add a line to ${sub}`}
                   </button>
                 ))}
+                {removed.size > 0 && (
+                  <button type="button" className="linkbtn" onClick={restoreLines}>
+                    Put back the {removed.size} line{removed.size === 1 ? "" : "s"} taken off
+                  </button>
+                )}
               </div>
               <p className="pieces-hint">
                 An added line goes out on the same memo, to the same factory, as

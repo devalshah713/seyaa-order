@@ -58,6 +58,14 @@ export default function DiamondSizePicker({
     onChange(next.length ? next : [{ ...BLANK_DIA_LINE }]);
   };
 
+  // Sizes actually filled in — a blank starter row is not one of them.
+  const filled = lines.filter((l) => (l.shape || l.size || l.mm || l.pcs).trim());
+  // Several sizes, several pieces, and not one of them says which piece it is
+  // for. Sometimes right, often an oversight, and expensive either way.
+  const crossed =
+    run.length > 1 && filled.length > 1 &&
+    filled.every((l) => !(l.pieces || "").trim());
+
   // Changing shape clears the size fields — a marquise pointer is meaningless
   // once the row becomes round.
   const setShape = (i: number, shape: string) =>
@@ -172,6 +180,19 @@ export default function DiamondSizePicker({
         <p className="dia-note">
           Every size goes into every piece unless you say otherwise. Change it
           only when the run is drawn with a different size per piece.
+        </p>
+      )}
+      {/* What "All pieces" actually costs, in the number the diamond
+          department will be handed. Left unsaid, a run of two pieces with two
+          sizes quietly becomes four bags to issue instead of two, and the
+          first anyone hears of it is the accountant staring at four rows. */}
+      {crossed && (
+        <p className="dia-warn">
+          All {filled.length} sizes are set to go into all {run.length} pieces,
+          so issuing this design will ask for <b>{filled.length * run.length}{" "}
+          entries</b>, not {Math.max(filled.length, run.length)}. If each piece
+          takes one of these sizes, set <b>Goes to</b> on each — otherwise leave
+          it, and a piece set with all of them is right.
         </p>
       )}
     </div>
