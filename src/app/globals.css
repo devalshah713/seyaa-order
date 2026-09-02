@@ -1787,3 +1787,11 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
   text-transform: uppercase; color: var(--gold);
   border: 1px solid var(--gold-line); border-radius: 5px; padding: 2px 7px;
 }
+/* The PD sheet, openable from the issue screen to read while entering. */
+.jg-tag-link { text-decoration: none; cursor: pointer; }
+.jg-tag-link:hover { background: color-mix(in srgb, var(--gold) 18%, transparent); }
+.pd-readonly {
+  margin-left: auto; font-size: 12.5px; color: var(--panel-muted);
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+}
+.pd-readonly b { color: var(--gold); }

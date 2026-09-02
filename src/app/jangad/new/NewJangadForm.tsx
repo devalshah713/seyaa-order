@@ -390,7 +390,22 @@ export default function NewJangadForm() {
           <section className="jg-found">
             <div className="jg-found-head">
               <h2>{seed.designNo}</h2>
-              <span className="jg-tag">{seed.pdNo}</span>
+              {/* The sheet the diamonds are being issued against, to read while
+                  entering them. A new tab, because the entry being typed here
+                  is not saved yet and must not be lost to a back button. */}
+              {seed.pdId ? (
+                <a
+                  className="jg-tag jg-tag-link"
+                  href={`/jangad/pd/${encodeURIComponent(seed.pdId)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open this design's PD sheet to read"
+                >
+                  {seed.pdNo} ↗
+                </a>
+              ) : (
+                <span className="jg-tag">{seed.pdNo}</span>
+              )}
               {seed.demandNo && <span className="jg-tag">{seed.demandNo}</span>}
               {seed.product && <span className="jg-muted">{seed.product}</span>}
             </div>
