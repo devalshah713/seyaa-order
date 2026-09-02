@@ -1760,3 +1760,30 @@ table.jg-table tr.jg-added > td {
   border-left: 3px solid #b26a23; border-radius: 0 7px 7px 0; padding: 7px 10px;
 }
 .dia-warn b { color: #b26a23; }
+
+/* ---------- Issuing from the sheet, or topping a piece up ---------- */
+.jg-mode {
+  display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 12px;
+  background: var(--field-bg); border: 1px solid var(--field-line); border-radius: 10px;
+}
+.jg-mode button {
+  border: 0; background: none; cursor: pointer; font: inherit; font-size: 12.5px;
+  color: var(--panel-muted); padding: 7px 13px; border-radius: 7px;
+}
+.jg-mode button.on {
+  background: var(--panel); color: var(--gold); font-weight: 650;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+/* What a piece already holds, shown while writing an add-on against it. */
+.jg-piece .jg-has {
+  color: var(--gold); font-size: 10.5px; line-height: 1.4; max-width: 260px;
+  white-space: normal;
+}
+/* An add-on row in the register, so a replacement never reads as a first issue. */
+table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
+/* A slip for stones replacing ones already at the factory. */
+.jg-slip-addon {
+  margin-left: 10px; font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: var(--gold);
+  border: 1px solid var(--gold-line); border-radius: 5px; padding: 2px 7px;
+}

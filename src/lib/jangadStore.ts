@@ -216,7 +216,12 @@ export type JangadSeed = {
     suggested: boolean;
     // Set when this piece already has entries in the register, so the same
     // stones cannot be issued twice without it being obvious.
-    issued?: { date: string; memoNo: string; mfgName: string; rows: number };
+    issued?: {
+      date: string; memoNo: string; mfgName: string; rows: number;
+      // Every distinct stone size already out against this piece, as it reads
+      // on the register — "ROUND +15.5-16 45 pcs".
+      sizes: string[];
+    };
   }[];
   // One per diamond size on the design, ready to be crossed with the pieces.
   lines: {
@@ -269,13 +274,26 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
   // offers pieces whose diamonds went out weeks ago, and a second issue against
   // the same piece looks exactly like the first.
   const db = await readDB(requireToken());
-  const already = new Map<string, { date: string; memoNo: string; mfgName: string; rows: number }>();
+  const already = new Map<string, {
+    date: string; memoNo: string; mfgName: string; rows: number; sizes: string[];
+  }>();
   for (const r of db.rows) {
     const key = flatNo(joinDesignNo(r.designNo, r.subDesignNo, ""));
     if (!key) continue;
+    // What the piece already holds, so an add-on can be written against the
+    // size that actually broke rather than looked up in the old paperwork.
+    const label = [r.shape, r.size, r.pcs && `${r.pcs} pcs`]
+      .map((x) => (x || "").trim()).filter(Boolean).join(" ");
     const seen = already.get(key);
-    if (seen) { seen.rows += 1; continue; }
-    already.set(key, { date: r.date, memoNo: r.memoNo, mfgName: r.mfgName, rows: 1 });
+    if (seen) {
+      seen.rows += 1;
+      if (label && !seen.sizes.includes(label)) seen.sizes.push(label);
+      continue;
+    }
+    already.set(key, {
+      date: r.date, memoNo: r.memoNo, mfgName: r.mfgName, rows: 1,
+      sizes: label ? [label] : [],
+    });
   }
 
   const named = hit.kind === "piece" ? hit.piece : "";

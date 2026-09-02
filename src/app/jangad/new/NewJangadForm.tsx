@@ -54,7 +54,7 @@ export default function NewJangadForm() {
       const start = new Set(s.pieces.filter((p) => p.suggested).map((p) => p.no));
       setPicked(start);
       setRemoved(new Set());
-      setRows(build(s, start, date, memoNo, s.assignedTo));
+      setRows(build(s, start, date, memoNo, s.assignedTo, addOn));
     } catch (err) {
       setSeed(null);
       setRows([]);
@@ -72,7 +72,10 @@ export default function NewJangadForm() {
   // Issuing splits the run: only some of the five pieces get diamonds now, so
   // the design and the piece go in separate columns — "SN-BR-AMF-10CT" and
   // "63" — rather than repeating the whole run on every line.
-  function build(s: JangadSeed, pieces: Set<string>, d: string, memo: string, mfgName: string): Draft[] {
+  function build(
+    s: JangadSeed, pieces: Set<string>, d: string, memo: string, mfgName: string,
+    isAddOn: boolean
+  ): Draft[] {
     const out: Draft[] = [];
     const run = s.pieces.map((x) => splitPiece(x.no).sub).filter(Boolean);
     for (const p of s.pieces) {
@@ -88,7 +91,11 @@ export default function NewJangadForm() {
         mfgName,
         stockCode: p.stockNo,
         status: "Issued",
+        addOn: isAddOn ? "Add-on" : "",
       };
+      // An add-on is not what the PD sheet asked for — that already went out —
+      // so the piece starts with one empty line to write the replacement on.
+      if (isAddOn) { out.push(base); continue; }
       const mine = linesForPiece(s.lines, sub, run);
       for (const l of mine) {
         // Diamond Carats stays empty on purpose — the bag is weighed.
@@ -128,21 +135,49 @@ export default function NewJangadForm() {
   // corrected, they take the two lines off here.
   const [removed, setRemoved] = useState<Set<string>>(new Set());
 
+  // An add-on issue: stones going out against a piece that already has its
+  // diamonds, because one broke at the factory or came up short. It is not a
+  // second reading of the PD sheet — the sheet's sizes already went out — so
+  // the rows start empty and only what is actually going out is written.
+  //
+  // Deliberately a choice rather than something worked out from the piece
+  // already having been issued: a design whose stones arrive a few bags at a
+  // time is also a second issue, and that is not an add-on.
+  const [addOn, setAddOn] = useState(false);
+
   // What identifies a line within its piece. Not the row index: rows move as
   // pieces are ticked on and off.
   const keyOf = (r: Draft) => [r.subDesignNo, r.shape, r.size, r.pcs].join("|");
 
   const assemble = (
-    s: JangadSeed, pieces: Set<string>, manual: Draft[], off: Set<string>
+    s: JangadSeed, pieces: Set<string>, manual: Draft[], off: Set<string>,
+    isAddOn = addOn
   ) =>
     withManual(
-      build(s, pieces, date, memoNo, mfg).filter((r) => !off.has(keyOf(r))),
+      build(s, pieces, date, memoNo, mfg, isAddOn).filter((r) => !off.has(keyOf(r))),
       manual
     );
 
   // A piece that is no longer ticked takes its added lines with it.
-  const rebuild = (s: JangadSeed, pieces: Set<string>) =>
-    setRows((prev) => assemble(s, pieces, prev.filter((r) => r.manual), removed));
+  const rebuild = (s: JangadSeed, pieces: Set<string>, isAddOn = addOn) =>
+    setRows((prev) => assemble(s, pieces, prev.filter((r) => r.manual), removed, isAddOn));
+
+  // Switching in or out of add-on starts the rows over: what the PD sheet asks
+  // for and what a replacement needs have nothing in common, so carrying the
+  // old rows across would only leave the wrong ones to be deleted.
+  const setMode = (on: boolean) => {
+    setAddOn(on);
+    if (!seed) return;
+    setRemoved(new Set());
+    // An add-on belongs to a piece whose diamonds already went out, so the
+    // pieces that qualify are the opposite ones — nothing is pre-ticked either
+    // way, because only the person holding the packet knows which piece it is.
+    const start = on
+      ? new Set<string>()
+      : new Set(seed.pieces.filter((p) => p.suggested).map((p) => p.no));
+    setPicked(start);
+    setRows(build(seed, start, date, memoNo, mfg, on));
+  };
 
   const togglePiece = (no: string) => {
     if (!seed) return;
@@ -181,6 +216,7 @@ export default function NewJangadForm() {
         product: model?.product || seed?.product || "",
         stockCode: model?.stockCode || "",
         status: "Issued",
+        addOn: addOn ? "Add-on" : "",
         manual: true,
       };
       let at = list.length - 1;
@@ -268,8 +304,14 @@ export default function NewJangadForm() {
   // Once lines have been taken off, the point has been taken — the warning
   // would only be restating a number that is no longer on the screen.
   const crossed =
-    !!seed && !perPiece && seed.lines.length > 1 && picked.size > 1 &&
+    !!seed && !addOn && !perPiece && seed.lines.length > 1 && picked.size > 1 &&
     removed.size === 0;
+
+  // The opposite worry on an add-on: a piece with no diamonds out against it
+  // has nothing to top up.
+  const notIssued = (seed?.pieces || [])
+    .filter((p) => !p.issued && picked.has(p.no))
+    .map((p) => p.no);
 
   // Picking a piece the register already covers is allowed — a second bag for
   // the same piece is a real thing — but it is never silent.
@@ -345,6 +387,32 @@ export default function NewJangadForm() {
               {seed.product && <span className="jg-muted">{seed.product}</span>}
             </div>
 
+            <div className="jg-mode">
+              <button
+                type="button"
+                className={!addOn ? "on" : ""}
+                onClick={() => setMode(false)}
+              >
+                Issue from the PD sheet
+              </button>
+              <button
+                type="button"
+                className={addOn ? "on" : ""}
+                onClick={() => setMode(true)}
+              >
+                Add-on diamonds
+              </button>
+            </div>
+            {addOn && (
+              <p className="pieces-hint">
+                Stones going out against a piece that already has its diamonds —
+                a stone broken at the factory, or a bag that came up short. The
+                lines start empty because the PD sheet&rsquo;s sizes already
+                went out; write only what is actually going now, and put the
+                reason in <b>Comments</b>. It goes on its own memo.
+              </p>
+            )}
+
             <div className="two">
               <label className="field"><span>Date</span>
                 <input type="date" value={date} onChange={(e) => setDateAll(e.target.value)} /></label>
@@ -395,11 +463,18 @@ export default function NewJangadForm() {
                           }`
                         : p.stockNo ? `stock ${p.stockNo}` : p.status}
                     </small>
+                    {/* On an add-on the question is which stone broke, so what
+                        the piece already holds is worth having in front of you. */}
+                    {addOn && p.issued?.sizes.length ? (
+                      <small className="jg-has">{p.issued.sizes.join(" · ")}</small>
+                    ) : null}
                   </label>
                 ))}
               </div>
               <p className="pieces-hint">
-                {!seed.lines.length
+                {addOn
+                  ? `${rows.length} ${rows.length === 1 ? "line" : "lines"} to write — add one per stone going out.`
+                  : !seed.lines.length
                   ? "This design has no diamond sizes on its PD sheet, so the sizes are yours to fill in."
                   : `${seed.lines.length} diamond ${seed.lines.length === 1 ? "size" : "sizes"} on this design${perPiece ? ", drawn one to a piece" : ""} — ${rows.length} ${rows.length === 1 ? "entry" : "entries"} in all.`}
               </p>
@@ -414,7 +489,16 @@ export default function NewJangadForm() {
                   design comes out right on its own.
                 </p>
               )}
-              {reissuing.length > 0 && (
+              {addOn && notIssued.length > 0 && (
+                <p className="hint warn">
+                  {notIssued.length === 1
+                    ? `${notIssued[0]} has had no diamonds issued yet.`
+                    : `${notIssued.length} of these have had no diamonds issued yet.`}{" "}
+                  An add-on tops up a piece that already has its stones — for a
+                  piece that has none, issue from the PD sheet instead.
+                </p>
+              )}
+              {!addOn && reissuing.length > 0 && (
                 <p className="hint warn">
                   {reissuing.length === 1
                     ? `${reissuing[0]} has already had diamonds issued.`
@@ -524,7 +608,9 @@ export default function NewJangadForm() {
 
               <div className="pieces-actions">
                 <button className="btn btn-primary" onClick={save} disabled={saving}>
-                  {saving ? "Saving…" : `Save ${rows.length} ${rows.length === 1 ? "entry" : "entries"}`}
+                  {saving
+                    ? "Saving…"
+                    : `Save ${rows.length} ${addOn ? "add-on " : ""}${rows.length === 1 ? "entry" : "entries"}`}
                 </button>
                 {addedCount > 0 && (
                   <span className="jg-added-note">

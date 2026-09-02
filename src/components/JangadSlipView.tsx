@@ -60,6 +60,7 @@ function Slip({ group }: { group: Group }) {
 
   // Every row of one issue carries the same date, so the sheet takes the first.
   const date = rows[0]?.date || "";
+  const addOn = rows.length > 0 && rows.every((r) => r.addOn.trim());
 
   return (
     <div className="jg-slip">
@@ -78,6 +79,10 @@ function Slip({ group }: { group: Group }) {
       <p className="jg-slip-to">
         <span>Issued to</span>
         <b>{group.mfgName || "—"}</b>
+        {/* An add-on goes out on its own memo, so a slip is either all add-on
+            or none of it. Saying so on the paper means the factory signs for a
+            replacement knowing it is one. */}
+        {addOn && <span className="jg-slip-addon">Add-on</span>}
       </p>
 
       <table className="jg-slip-table">
