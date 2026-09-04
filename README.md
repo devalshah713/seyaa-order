@@ -60,16 +60,14 @@ jangad issue entry exists for that design number.
   re-checks the register immediately before every reminder, so a chase answered
   outside the app never gets one.
 
-The worker is `/api/receipt-chase/tick`. It holds no state, so it is safe to
-call as often as anything likes. Two things call it:
+The worker is `/api/receipt-chase/tick`, run by **Vercel's own scheduler every
+five minutes** (`vercel.json`). It holds no state and each run only does what
+has come due, so calling it often costs nothing and missing a run costs nothing
+either — the next one catches up.
 
-- the **Google Apps Script** on the backup sheet, every five minutes, using the
-  backup token it already has (`setUp()` schedules it);
-- **Vercel's scheduler**, once a day, as a floor under that.
-
-The five-minute job lives in Apps Script rather than `vercel.json` because
-Vercel's Hobby plan only allows a cron to run **once a day** — not often enough
-for a six-hour cadence. On Pro, a `*/5 * * * *` entry could replace it.
+An admin can also run it by hand from **Run the checks now** on the screen, and
+it accepts the backup token so a machine can poke it if that is ever needed.
+Nothing schedules it outside Vercel.
 
 Environment variables, all set in Vercel:
 
