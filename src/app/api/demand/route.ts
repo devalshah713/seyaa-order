@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDemand, listDemands, nextDemandNo, normalizeDemandInput } from "@/lib/demandStore";
+import { startReceiptChasesQuietly } from "@/lib/receiptChaseRun";
+import { currentSession } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,7 +36,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
   try {
-    return NextResponse.json({ demand: await createDemand(input) });
+    const demand = await createDemand(input);
+    // The diamonds are now the diamond team's to bag and issue, so the clock
+    // on them starts here. Quietly: the demand is saved either way.
+    const session = await currentSession();
+    await startReceiptChasesQuietly(demand, session?.username || "");
+    return NextResponse.json({ demand });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not save the demand." },

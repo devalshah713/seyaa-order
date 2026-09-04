@@ -4,6 +4,10 @@
     {
       "path": "/api/backup/sheets",
       "schedule": "30 18 * * *"
+    },
+    {
+      "path": "/api/receipt-chase/tick",
+      "schedule": "35 3 * * *"
     }
   ]
 }

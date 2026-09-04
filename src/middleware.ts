@@ -45,7 +45,10 @@ function backupReachablePath(pathname: string): boolean {
     /^\/api\/pd\/[^/]+\/pdf$/.test(pathname) ||
     /^\/api\/demand\/[^/]+\/pdf$/.test(pathname) ||
     // The nightly job saves a dated copy of the order board image.
-    pathname === "/api/orders/image"
+    pathname === "/api/orders/image" ||
+    // Whatever pokes the diamond-receipt chase every few minutes is a machine
+    // too. The route checks the token again for itself.
+    pathname === "/api/receipt-chase/tick"
   );
 }
 
@@ -62,7 +65,9 @@ export async function middleware(req: NextRequest) {
   if (isPublic(pathname)) return NextResponse.next();
 
   if (backupReachablePath(pathname) && backupTokenOk(req)) return NextResponse.next();
-  if (pathname === "/api/backup/sheets" && cronOk(req)) return NextResponse.next();
+  if ((pathname === "/api/backup/sheets" || pathname === "/api/receipt-chase/tick") && cronOk(req)) {
+    return NextResponse.next();
+  }
 
   const secret = process.env.AUTH_SECRET;
   if (secret) {

@@ -1,8 +1,12 @@
 /**
- * Seyaa Solitaire — nightly backup into this sheet.
+ * Seyaa Solitaire — nightly backup into this sheet, and the heartbeat behind
+ * the diamond-demand chase.
  *
  * Paste this into Extensions → Apps Script on the sheet you want the copy in,
- * then run setUp() once. From then on the sheet fills itself every night.
+ * then run setUp() once. From then on the sheet fills itself every night, and
+ * every five minutes this script pokes the portal so a diamond demand
+ * whose bags have not reached the jangad gets chased. Google runs both — nobody's laptop has
+ * to be switched on.
  *
  * Nothing else is needed: no Google Cloud project, no service account, no key
  * file. The script belongs to this sheet and runs as you, so it already has
@@ -35,6 +39,7 @@ function setUp() {
   PropertiesService.getScriptProperties().setProperty("SEYAA_TOKEN", token);
 
   scheduleNightly();
+  scheduleChase();
   backupNow();
 }
 
@@ -54,6 +59,50 @@ function scheduleNightly() {
     .everyDays(1)
     .inTimezone("Asia/Kolkata")
     .create();
+}
+
+/**
+ * Every five minutes, all day. Asks the portal to look at its receipt chase
+ * list and send whatever reminders have come due.
+ *
+ * The portal decides everything — which demands are still waiting on their
+ * diamonds, when the next reminder is due, and that reminders only go out
+ * between 8am and 7pm on a working day. This is only the knock on the door, so running it more often
+ * than needed costs nothing and skipping a few does no harm.
+ */
+function scheduleChase() {
+  var existing = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < existing.length; i++) {
+    if (existing[i].getHandlerFunction() === "chaseTick") {
+      ScriptApp.deleteTrigger(existing[i]);
+    }
+  }
+  ScriptApp.newTrigger("chaseTick").timeBased().everyMinutes(5).create();
+}
+
+function chaseTick() {
+  var token = PropertiesService.getScriptProperties().getProperty("SEYAA_TOKEN");
+  if (!token) throw new Error("No token saved yet. Run setUp() first.");
+
+  var res = UrlFetchApp.fetch(PORTAL + "/api/receipt-chase/tick", {
+    method: "post",
+    headers: { "x-backup-token": token },
+    muteHttpExceptions: true,
+  });
+  var code = res.getResponseCode();
+  if (code === 401) throw new Error("The portal did not accept that token. Run setUp() again.");
+  if (code !== 200) throw new Error("The portal answered " + code + ": " + res.getContentText().slice(0, 200));
+  return JSON.parse(res.getContentText());
+}
+
+/** Shows what the last check did, for anyone wondering whether it is running. */
+function chaseNow() {
+  var out = chaseTick();
+  SpreadsheetApp.getUi().alert(
+    "Chase checked at " + nowIst() + ".\n\n" +
+    out.open + " design(s) still waiting on diamonds.\n" +
+    out.due + " were due, " + out.reminded + " reminded, " + out.closed + " received."
+  );
 }
 
 /**
@@ -132,6 +181,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Seyaa")
     .addItem("Back up now", "backupNow")
+    .addItem("Check the diamond receipts now", "chaseNow")
     .addItem("Set up / change the token", "setUp")
     .addToUi();
 }

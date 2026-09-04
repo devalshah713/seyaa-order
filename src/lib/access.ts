@@ -46,7 +46,7 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
   { key: "stock", prefixes: ["/stock", "/api/stock", "/api/stock-sheet"] },
   // Photo upload/serving exists for the PD sheet's design image.
   // Diamond demands are raised straight off a PD sheet, so they travel with it.
-  { key: "pd", prefixes: ["/pd", "/api/pd", "/api/upload", "/demand", "/api/demand"] },
+  { key: "pd", prefixes: ["/pd", "/api/pd", "/api/upload", "/demand", "/api/demand", "/api/receipt-chase"] },
   // The register reads PD sheets and demands to fill itself in, but it is the
   // accounts team's screen — they get this without getting the design module.
   { key: "jangad", prefixes: ["/jangad", "/api/jangad"] },
