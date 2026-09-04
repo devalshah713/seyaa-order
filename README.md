@@ -60,14 +60,33 @@ jangad issue entry exists for that design number.
   re-checks the register immediately before every reminder, so a chase answered
   outside the app never gets one.
 
-The worker is `/api/receipt-chase/tick`, run by **Vercel's own scheduler every
-five minutes** (`vercel.json`). It holds no state and each run only does what
-has come due, so calling it often costs nothing and missing a run costs nothing
-either — the next one catches up.
+The worker is `/api/receipt-chase/tick`. It holds no state and each run only
+does what has come due, so calling it often costs nothing and missing a run
+costs nothing either — the next one catches up everything overdue.
 
-An admin can also run it by hand from **Run the checks now** on the screen, and
-it accepts the backup token so a machine can poke it if that is ever needed.
-Nothing schedules it outside Vercel.
+**How often it runs is the one thing this feature cannot decide for itself.**
+This project is on Vercel's Hobby plan, where a cron may only run **once a
+day**. Asking for anything finer does not fail loudly: the deployment is simply
+never created, with no error anywhere. Measured on this project — `*/5 * * * *`
+and `0 * * * *` both produced no deployment at all, while the same commit with
+a daily schedule deployed in two seconds.
+
+So `vercel.json` carries a daily run, and that is all Vercel will give. A daily
+check cannot honour a 24-hour-then-every-6-hours cadence: reminders go out once
+a day rather than every six hours.
+
+Two ways to get the real cadence:
+
+- **Vercel Pro.** Change the schedule to `*/5 * * * *` and it works, with
+  nothing else to set up. This is the only way to keep everything on Vercel.
+- **Stay on Hobby** and have something outside Vercel poke the worker every few
+  minutes. It accepts the backup token for exactly this, so a Google Apps
+  Script time-driven trigger on the backup sheet does the job for free and runs
+  on Google's machines. (Earlier versions of `apps-script/Seyaa.gs` did this;
+  `setUp()` now removes that trigger.)
+
+An admin can run it by hand at any time from **Run the checks now** on the
+screen.
 
 Environment variables, all set in Vercel:
 
