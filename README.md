@@ -75,6 +75,11 @@ So `vercel.json` carries a daily run, and that is all Vercel will give. A daily
 check cannot honour a 24-hour-then-every-6-hours cadence: reminders go out once
 a day rather than every six hours.
 
+That one run is scheduled at **03:35 UTC, which is 09:05 in India** — deliberately
+inside the 08:00–19:00 working window. Moved outside it, the single daily run
+would find every reminder deferred by quiet hours and nothing would ever be
+sent at all. If the schedule is ever changed, keep it inside the window.
+
 Two ways to get the real cadence:
 
 - **Vercel Pro.** Change the schedule to `*/5 * * * *` and it works, with
