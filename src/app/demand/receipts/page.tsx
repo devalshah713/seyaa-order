@@ -47,15 +47,11 @@ export default async function ReceiptChasePage() {
         <b>Diamond bagging group internal</b>. Nothing is sent to WhatsApp automatically.
       </p>
       {/* The cadence above is what the portal works to; how often anything
-          actually looks is a separate thing, set by the schedule in
-          vercel.json. On the plan this runs on that is once a day, so a
-          reminder can sit due for a while before it goes. Saying so here
-          saves the accounts desk wondering why one is late. */}
+          actually looks is set by the schedule in vercel.json — every five
+          minutes, so a reminder goes out within minutes of falling due. */}
       <p className="hint">
-        The portal checks once a day at the moment, so a reminder can go out later
-        than the times above — <b>Run the checks now</b> sends everything due
-        immediately. Raising the schedule in <code>vercel.json</code> needs a Vercel
-        plan that allows a cron more often than daily.
+        The portal checks every few minutes, so a reminder goes out close to when it
+        falls due. <b>Run the checks now</b> sends everything outstanding immediately.
       </p>
       {error ? (
         <div className="notice">{error}</div>

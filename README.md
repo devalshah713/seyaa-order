@@ -64,31 +64,19 @@ The worker is `/api/receipt-chase/tick`. It holds no state and each run only
 does what has come due, so calling it often costs nothing and missing a run
 costs nothing either — the next one catches up everything overdue.
 
-**How often it runs is the one thing this feature cannot decide for itself.**
-This project is on Vercel's Hobby plan, where a cron may only run **once a
-day**. Asking for anything finer does not fail loudly: the deployment is simply
-never created, with no error anywhere. Measured on this project — `*/5 * * * *`
-and `0 * * * *` both produced no deployment at all, while the same commit with
-a daily schedule deployed in two seconds.
+`vercel.json` runs it **every five minutes**, so a reminder goes out within
+minutes of falling due.
 
-So `vercel.json` carries a daily run, and that is all Vercel will give. A daily
-check cannot honour a 24-hour-then-every-6-hours cadence: reminders go out once
-a day rather than every six hours.
+That needs a plan allowing a sub-daily cron. **On Hobby a cron may only run once
+a day, and asking for more does not fail loudly — the deployment is simply never
+created, with no error anywhere.** Measured on this project while it was on
+Hobby: `*/5 * * * *` and `0 * * * *` each produced no deployment at all, while
+the same commit with a daily schedule deployed in two seconds. If deployments
+ever stop appearing for no visible reason, look here first.
 
-That one run is scheduled at **03:35 UTC, which is 09:05 in India** — deliberately
-inside the 08:00–19:00 working window. Moved outside it, the single daily run
-would find every reminder deferred by quiet hours and nothing would ever be
-sent at all. If the schedule is ever changed, keep it inside the window.
-
-Two ways to get the real cadence:
-
-- **Vercel Pro.** Change the schedule to `*/5 * * * *` and it works, with
-  nothing else to set up. This is the only way to keep everything on Vercel.
-- **Stay on Hobby** and have something outside Vercel poke the worker every few
-  minutes. It accepts the backup token for exactly this, so a Google Apps
-  Script time-driven trigger on the backup sheet does the job for free and runs
-  on Google's machines. (Earlier versions of `apps-script/Seyaa.gs` did this;
-  `setUp()` now removes that trigger.)
+Should this project ever drop back to Hobby, the schedule must go back to once a
+day — and that daily run has to sit **inside 08:00–19:00 India time**, or quiet
+hours would defer every reminder and nothing would be sent at all.
 
 An admin can run it by hand at any time from **Run the checks now** on the
 screen.
