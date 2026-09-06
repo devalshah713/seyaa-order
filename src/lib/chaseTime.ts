@@ -58,15 +58,16 @@ export function nextWorkingMoment(t: Date): Date {
 }
 
 // The first reminder waits a full working day — the diamond team is given a
-// day to bag and issue before anybody is chased at all. After that it is every
-// six hours.
+// day to bag and issue before anybody is chased at all. After that it is once
+// a day, which is what the schedule in vercel.json can actually deliver: the
+// worker runs each weekday morning, so a gap shorter than a day would only
+// make the screen promise a reminder that no run exists to send.
 //
 // Both are settable in Vercel, because how often it is reasonable to chase is
-// an office decision, not a code one — and because a plan that only allows a
-// daily cron cannot honour a six-hour gap, so dropping back to Hobby means
-// setting RECEIPT_CHASE_REPEAT_HOURS=24 rather than changing code.
+// an office decision, not a code one. Shortening the repeat is only worth
+// doing alongside a schedule that runs more than once a day.
 export const DEFAULT_FIRST_GAP_HOURS = 24;
-export const DEFAULT_REPEAT_GAP_HOURS = 6;
+export const DEFAULT_REPEAT_GAP_HOURS = 24;
 
 // Anything that is not a positive number is ignored rather than obeyed: a
 // typo in an environment variable must not silently stop the chasing.

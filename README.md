@@ -48,12 +48,12 @@ jangad issue entry exists for that design number.
 
 - One chase per design number on a demand — a demand covering four designs is
   four things to wait for, and three of them arriving is not all of them.
-- The first reminder is **24 hours** after the demand was issued, then every
-  **6 hours** until the diamonds appear. Both gaps are settable in Vercel
-  (`RECEIPT_CHASE_FIRST_HOURS`, `RECEIPT_CHASE_REPEAT_HOURS`) — a plan that only
-  allows a daily cron cannot honour a six-hour gap, so on Hobby set the repeat
-  to `24`. A value that is not a positive number is ignored rather than obeyed,
-  so a typo cannot silently stop the chasing.
+- Nothing is chased until it is **24 hours** old, and after that at most once a
+  day. Both gaps are settable in Vercel (`RECEIPT_CHASE_FIRST_HOURS`,
+  `RECEIPT_CHASE_REPEAT_HOURS`); a value that is not a positive number is
+  ignored rather than obeyed, so a typo cannot silently stop the chasing.
+  Shortening the repeat is only worth doing alongside a schedule that runs more
+  than once a day.
 - Reminders only go out **Monday to Friday, 08:00–19:00 IST**. One falling due
   outside that waits for the window to open and keeps its number.
 - Every reminder is posted to the Grok Bot with a `messageText` block written
@@ -68,19 +68,30 @@ The worker is `/api/receipt-chase/tick`. It holds no state and each run only
 does what has come due, so calling it often costs nothing and missing a run
 costs nothing either — the next one catches up everything overdue.
 
-`vercel.json` runs it **every five minutes**, so a reminder goes out within
-minutes of falling due.
+`vercel.json` runs it **once each weekday at 02:35 UTC, which is 08:05 in
+India** (`35 2 * * 1-5`). So: at most one reminder per design per working day,
+and nothing at the weekend.
 
-That needs a plan allowing a sub-daily cron. **On Hobby a cron may only run once
-a day, and asking for more does not fail loudly — the deployment is simply never
-created, with no error anywhere.** Measured on this project while it was on
-Hobby: `*/5 * * * *` and `0 * * * *` each produced no deployment at all, while
-the same commit with a daily schedule deployed in two seconds. If deployments
-ever stop appearing for no visible reason, look here first.
+Two things about that time are deliberate. It is **inside the 08:00–19:00
+window** — a run a minute either side of 08:00 would find every reminder
+deferred by quiet hours and send nothing at all, losing the whole day — and the
+five-minute margin absorbs the scheduler's drift, which is a few seconds in
+practice.
 
-Should this project ever drop back to Hobby, the schedule must go back to once a
-day — and that daily run has to sit **inside 08:00–19:00 India time**, or quiet
-hours would defer every reminder and nothing would be sent at all.
+The consequence to know: with one run a morning, a demand issued **after** 08:05
+is not chased the next morning but the one after, because at the next run it is
+still under 24 hours old. Monday 11am is first chased Wednesday morning. That
+errs late rather than early, which is the safe direction — it never breaks the
+"leave them a full day" rule. To have it chased the very next morning, lower
+`RECEIPT_CHASE_FIRST_HOURS` to about 12, or add a second cron run.
+
+**On Hobby a cron may only run once a day, and asking for more does not fail
+loudly — the deployment is simply never created, with no error anywhere.**
+Measured on this project while it was on Hobby: `*/5 * * * *` and `0 * * * *`
+each produced no deployment at all, while the same commit with a daily schedule
+deployed in two seconds. If deployments ever stop appearing for no visible
+reason, look here first. The current weekday schedule is one run a day, so it is
+within the Hobby limit.
 
 An admin can run it by hand at any time from **Run the checks now** on the
 screen.
@@ -96,7 +107,7 @@ Environment variables, all set in Vercel:
 | `GROK_DIAMOND_RECEIPT_WEBHOOK_URL` | where reminders are posted for Deval to see in Grok |
 | `GROK_DIAMOND_RECEIPT_WEBHOOK_AUTH` | the Authorization header value from the Grok routine panel, sent verbatim |
 | `RECEIPT_CHASE_FIRST_HOURS` | optional; hours before the first reminder, 24 by default |
-| `RECEIPT_CHASE_REPEAT_HOURS` | optional; hours between reminders after that, 6 by default (set to 24 on a plan with a daily-only cron) |
+| `RECEIPT_CHASE_REPEAT_HOURS` | optional; hours between reminders after that, 24 by default, matching the once-a-day schedule |
 | `GOOGLE_SHEET_ID` | the spreadsheet the copy is written into |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | share the sheet with this address as an Editor |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | that account's private key |

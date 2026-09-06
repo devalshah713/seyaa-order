@@ -42,16 +42,18 @@ export default async function ReceiptChasePage() {
         Every diamond demand is watched from the moment it goes to the diamond team
         until the bags appear on the jangad as an issue entry. The first reminder is{" "}
         {firstGapHours()} hours after it was issued, then every {repeatGapHours()} hours
-        — only between 8am and 7pm, Monday to Friday. Each one reaches Deval through the
+        while it stays outstanding. Each one reaches Deval through the
         Grok Bot with the text ready to forward to{" "}
         <b>Diamond bagging group internal</b>. Nothing is sent to WhatsApp automatically.
       </p>
       {/* The cadence above is what the portal works to; how often anything
-          actually looks is set by the schedule in vercel.json — every five
-          minutes, so a reminder goes out within minutes of falling due. */}
+          actually looks is set by the schedule in vercel.json — once each
+          weekday morning. Saying so stops the accounts desk waiting for a
+          reminder that no run exists to send. */}
       <p className="hint">
-        The portal checks every few minutes, so a reminder goes out close to when it
-        falls due. <b>Run the checks now</b> sends everything outstanding immediately.
+        The portal checks <b>once each weekday morning, at 8am India time</b> — so at
+        most one reminder per design per working day, and none at the weekend.
+        <b> Run the checks now</b> sends everything outstanding immediately, any time.
       </p>
       {error ? (
         <div className="notice">{error}</div>
