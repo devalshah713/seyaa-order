@@ -75,7 +75,10 @@ export default function TopBar({ user }: Props) {
           {can("pd") && (
             <>
               <Link href="/pd" className={on("/pd") ? "active" : ""}>PD Sheets</Link>
-              <Link href="/demand" className={on("/demand") ? "active" : ""}>Demands</Link>
+              <Link href="/demand"
+                className={on("/demand") && !on("/demand/receipts") ? "active" : ""}>Demands</Link>
+              <Link href="/demand/receipts"
+                className={on("/demand/receipts") ? "active" : ""}>Receipt Chase</Link>
             </>
           )}
           {can("jangad") && (

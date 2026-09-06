@@ -49,7 +49,11 @@ jangad issue entry exists for that design number.
 - One chase per design number on a demand — a demand covering four designs is
   four things to wait for, and three of them arriving is not all of them.
 - The first reminder is **24 hours** after the demand was issued, then every
-  **6 hours** until the diamonds appear.
+  **6 hours** until the diamonds appear. Both gaps are settable in Vercel
+  (`RECEIPT_CHASE_FIRST_HOURS`, `RECEIPT_CHASE_REPEAT_HOURS`) — a plan that only
+  allows a daily cron cannot honour a six-hour gap, so on Hobby set the repeat
+  to `24`. A value that is not a positive number is ignored rather than obeyed,
+  so a typo cannot silently stop the chasing.
 - Reminders only go out **Monday to Friday, 08:00–19:00 IST**. One falling due
   outside that waits for the window to open and keeps its number.
 - Every reminder is posted to the Grok Bot with a `messageText` block written
@@ -91,6 +95,8 @@ Environment variables, all set in Vercel:
 | `CRON_SECRET` | lets Vercel's scheduler call the nightly sheet copy and the receipt chase |
 | `GROK_DIAMOND_RECEIPT_WEBHOOK_URL` | where reminders are posted for Deval to see in Grok |
 | `GROK_DIAMOND_RECEIPT_WEBHOOK_AUTH` | the Authorization header value from the Grok routine panel, sent verbatim |
+| `RECEIPT_CHASE_FIRST_HOURS` | optional; hours before the first reminder, 24 by default |
+| `RECEIPT_CHASE_REPEAT_HOURS` | optional; hours between reminders after that, 6 by default (set to 24 on a plan with a daily-only cron) |
 | `GOOGLE_SHEET_ID` | the spreadsheet the copy is written into |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | share the sheet with this address as an Editor |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | that account's private key |

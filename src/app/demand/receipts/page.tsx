@@ -4,7 +4,7 @@ import {
   isReceiptChaseStorageConfigured, listReceiptChases, type ReceiptChase,
 } from "@/lib/receiptChaseStore";
 import { isReceiptWebhookConfigured } from "@/lib/receiptWebhook";
-import { FIRST_GAP_HOURS, REPEAT_GAP_HOURS } from "@/lib/chaseTime";
+import { firstGapHours, repeatGapHours } from "@/lib/chaseTime";
 import ReceiptChaseClient from "./ReceiptChaseClient";
 
 export const metadata = { title: "Diamond Receipts — Seyaa Solitaire" };
@@ -41,7 +41,7 @@ export default async function ReceiptChasePage() {
       <p className="hint" style={{ marginTop: 0 }}>
         Every diamond demand is watched from the moment it goes to the diamond team
         until the bags appear on the jangad as an issue entry. The first reminder is{" "}
-        {FIRST_GAP_HOURS} hours after it was issued, then every {REPEAT_GAP_HOURS} hours
+        {firstGapHours()} hours after it was issued, then every {repeatGapHours()} hours
         — only between 8am and 7pm, Monday to Friday. Each one reaches Deval through the
         Grok Bot with the text ready to forward to{" "}
         <b>Diamond bagging group internal</b>. Nothing is sent to WhatsApp automatically.

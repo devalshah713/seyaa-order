@@ -60,12 +60,32 @@ export function nextWorkingMoment(t: Date): Date {
 // The first reminder waits a full working day — the diamond team is given a
 // day to bag and issue before anybody is chased at all. After that it is every
 // six hours.
-export const FIRST_GAP_HOURS = 24;
-export const REPEAT_GAP_HOURS = 6;
+//
+// Both are settable in Vercel, because how often it is reasonable to chase is
+// an office decision, not a code one — and because a plan that only allows a
+// daily cron cannot honour a six-hour gap, so dropping back to Hobby means
+// setting RECEIPT_CHASE_REPEAT_HOURS=24 rather than changing code.
+export const DEFAULT_FIRST_GAP_HOURS = 24;
+export const DEFAULT_REPEAT_GAP_HOURS = 6;
+
+// Anything that is not a positive number is ignored rather than obeyed: a
+// typo in an environment variable must not silently stop the chasing.
+function hours(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export function firstGapHours(): number {
+  return hours(process.env.RECEIPT_CHASE_FIRST_HOURS, DEFAULT_FIRST_GAP_HOURS);
+}
+
+export function repeatGapHours(): number {
+  return hours(process.env.RECEIPT_CHASE_REPEAT_HOURS, DEFAULT_REPEAT_GAP_HOURS);
+}
 
 // The gap before reminder number `n`, in minutes. `n` counts from 1.
 export function gapMinutes(n: number): number {
-  return (n <= 1 ? FIRST_GAP_HOURS : REPEAT_GAP_HOURS) * 60;
+  return (n <= 1 ? firstGapHours() : repeatGapHours()) * 60;
 }
 
 // When reminder number `n` is due, measured from `from` — the moment the
