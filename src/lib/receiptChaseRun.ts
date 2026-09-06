@@ -7,6 +7,7 @@
 // due and the worker reaching it sends nothing.
 import "server-only";
 import { joinDesignNo, sameDesignOrPiece } from "./designNo";
+import { inWorkingHours } from "./chaseTime";
 import { stageStarted } from "./jangadConfig";
 import type { JangadRow } from "./jangadConfig";
 import { listJangad } from "./jangadStore";
@@ -134,6 +135,8 @@ export type TickReport = {
   due: number;
   reminded: number;
   closed: number;
+  // Overdue, but the office is shut: held back rather than sent.
+  deferred: number;
   outcomes: TickOutcome[];
 };
 
@@ -142,7 +145,18 @@ export type TickReport = {
 // Safe to run at any time and any number of times. Two overlapping runs can at
 // worst send the same reminder number twice, which the idempotency key on the
 // post lets the receiver drop.
-export async function runReceiptTick(now = new Date()): Promise<TickReport> {
+export async function runReceiptTick(
+  now = new Date(),
+  opts: { force?: boolean } = {}
+): Promise<TickReport> {
+  // Quiet hours are enforced here as well as when the next reminder is timed.
+  // Timing alone only holds while every run happens inside the window, and a
+  // schedule is one edit away from not doing that — the rule that nobody is
+  // pinged on a Sunday should not rest on the crontab being right.
+  //
+  // A person pressing "Run the checks now" is the deliberate exception: they
+  // are asking for it, and they can see what they are asking for.
+  const quiet = !opts.force && !inWorkingHours(now);
   const chases = (await listReceiptChases()).filter(isOpen);
   const due = chases.filter(
     (c) => c.status !== "paused" && Date.parse(c.nextReminderAt) <= now.getTime()
@@ -154,6 +168,7 @@ export async function runReceiptTick(now = new Date()): Promise<TickReport> {
     due: due.length,
     reminded: 0,
     closed: 0,
+    deferred: 0,
     outcomes: [],
   };
   if (!due.length) return report;
@@ -189,7 +204,15 @@ export async function runReceiptTick(now = new Date()): Promise<TickReport> {
       continue;
     }
 
-    // Still nothing. Send reminder number n.
+    // Still nothing — but the office is shut, so it waits for the next run
+    // rather than going out at midnight or on a Sunday. Nothing is recorded,
+    // so it is still due when the window opens and keeps its number.
+    if (quiet) {
+      report.deferred++;
+      continue;
+    }
+
+    // Send reminder number n.
     const n = chase.reminderNumber + 1;
     const post = buildPost(chase, "receipt.reminder", { reminderNumber: n, now });
     const sent = await postReceiptEvent(post);
@@ -209,5 +232,5 @@ export async function runReceiptTick(now = new Date()): Promise<TickReport> {
 export async function remindNow(id: string, by: string): Promise<TickReport | null> {
   const moved = await bringForward(id, by);
   if (!moved) return null;
-  return runReceiptTick(new Date());
+  return runReceiptTick(new Date(), { force: true });
 }

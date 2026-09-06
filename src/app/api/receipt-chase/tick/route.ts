@@ -27,19 +27,25 @@ function cronOk(req: NextRequest): boolean {
   return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
-async function allowed(req: NextRequest): Promise<boolean> {
-  if (cronOk(req)) return true;
-  if (isBackupConfigured() && tokenOk(req)) return true;
+// Who is asking decides whether quiet hours apply. A scheduler is held to
+// them; an admin pressing "Run the checks now" is not, because they are asking
+// for it on purpose and may well be clearing a backlog on a Sunday.
+async function caller(req: NextRequest): Promise<"scheduler" | "person" | null> {
+  if (cronOk(req)) return "scheduler";
+  if (isBackupConfigured() && tokenOk(req)) return "scheduler";
   const session = await currentSession();
-  return !!session && session.role === "admin";
+  return session && session.role === "admin" ? "person" : null;
 }
 
 async function run(req: NextRequest): Promise<NextResponse> {
-  if (!(await allowed(req))) {
+  const who = await caller(req);
+  if (!who) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   try {
-    return NextResponse.json(await runReceiptTick());
+    return NextResponse.json(
+      await runReceiptTick(new Date(), { force: who === "person" })
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not run the chase." },

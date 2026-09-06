@@ -7,7 +7,7 @@
     },
     {
       "path": "/api/receipt-chase/tick",
-      "schedule": "35 2 * * 1-5"
+      "schedule": "35 2 * * 1-6"
     }
   ]
 }

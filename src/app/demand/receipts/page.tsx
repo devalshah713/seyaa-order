@@ -48,11 +48,11 @@ export default async function ReceiptChasePage() {
       </p>
       {/* The cadence above is what the portal works to; how often anything
           actually looks is set by the schedule in vercel.json — once each
-          weekday morning. Saying so stops the accounts desk waiting for a
+          working morning. Saying so stops the accounts desk waiting for a
           reminder that no run exists to send. */}
       <p className="hint">
-        The portal checks <b>once each weekday morning, at 8am India time</b> — so at
-        most one reminder per design per working day, and none at the weekend.
+        The portal checks <b>once each morning at 8am India time, Monday to Saturday</b>
+        — so at most one reminder per design per working day, and none on Sunday.
         <b> Run the checks now</b> sends everything outstanding immediately, any time.
       </p>
       {error ? (

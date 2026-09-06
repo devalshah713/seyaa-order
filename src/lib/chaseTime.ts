@@ -5,10 +5,14 @@
 //
 //   * the cadence — a full day after the demand goes to the diamond team,
 //     then every six hours until the bags turn up on the jangad;
-//   * the working window — Monday to Friday, 08:00 to 19:00 in India. A
+//   * the working window — Monday to Saturday, 08:00 to 19:00 in India. A
 //     reminder that falls due outside it waits for the window to open rather
 //     than pinging somebody at two in the morning. It never loses its place:
 //     the reminder number is kept, only the moment moves.
+//
+// This has to match the cron schedule in vercel.json. A run on a day the
+// window excludes would find every reminder deferred and send nothing at all,
+// silently, for that whole day.
 //
 // India keeps a fixed +05:30 all year, so the offset is a constant and not a
 // timezone database. Deliberately free of Node APIs and of "server-only" — the
@@ -34,7 +38,7 @@ function atIstMinute(t: Date, minute: number): Date {
 
 export function inWorkingHours(t: Date): boolean {
   const { day, min } = istParts(t);
-  if (day === 0 || day === 6) return false; // Sunday, Saturday
+  if (day === 0) return false; // Sunday; the office works Saturdays
   return min >= WORK_FROM_MIN && min < WORK_TO_MIN;
 }
 
@@ -47,9 +51,9 @@ export function nextWorkingMoment(t: Date): Date {
   // the bound is only there so a bad input cannot spin.
   for (let i = 0; i < 14; i++) {
     const { day, min } = istParts(cursor);
-    const weekday = day !== 0 && day !== 6;
+    const working = day !== 0;
     // Before the window opens on a working day: it opens today.
-    if (weekday && min < WORK_FROM_MIN) return atIstMinute(cursor, WORK_FROM_MIN);
+    if (working && min < WORK_FROM_MIN) return atIstMinute(cursor, WORK_FROM_MIN);
     // Otherwise this IST day is done with (or never started) — try tomorrow.
     cursor = atIstMinute(new Date(cursor.getTime() + 24 * 60 * 60 * 1000), WORK_FROM_MIN);
     if (inWorkingHours(cursor)) return cursor;

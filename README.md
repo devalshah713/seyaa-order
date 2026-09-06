@@ -54,8 +54,11 @@ jangad issue entry exists for that design number.
   ignored rather than obeyed, so a typo cannot silently stop the chasing.
   Shortening the repeat is only worth doing alongside a schedule that runs more
   than once a day.
-- Reminders only go out **Monday to Friday, 08:00–19:00 IST**. One falling due
-  outside that waits for the window to open and keeps its number.
+- Reminders only go out **Monday to Saturday, 08:00–19:00 IST** — the office
+  works Saturdays, and only Sunday is off. One falling due outside that waits
+  for the window to open and keeps its number. The window is enforced twice:
+  when the next reminder is timed, and again before it is sent, so the rule
+  does not rest on the crontab being right.
 - Every reminder is posted to the Grok Bot with a `messageText` block written
   ready to forward to the WhatsApp group **Diamond bagging group internal**.
   Nothing is sent to WhatsApp automatically — Deval forwards it by hand, and
@@ -68,9 +71,14 @@ The worker is `/api/receipt-chase/tick`. It holds no state and each run only
 does what has come due, so calling it often costs nothing and missing a run
 costs nothing either — the next one catches up everything overdue.
 
-`vercel.json` runs it **once each weekday at 02:35 UTC, which is 08:05 in
-India** (`35 2 * * 1-5`). So: at most one reminder per design per working day,
-and nothing at the weekend.
+`vercel.json` runs it **once each morning at 02:35 UTC, which is 08:05 in
+India, Monday to Saturday** (`35 2 * * 1-6`). So: at most one reminder per
+design per working day, and nothing on Sunday.
+
+**The schedule and the working window must name the same days.** A run on a day
+the window excludes finds every reminder deferred and sends nothing at all,
+silently, for that whole day. Change one and change the other — `inWorkingHours`
+in `src/lib/chaseTime.ts`.
 
 Two things about that time are deliberate. It is **inside the 08:00–19:00
 window** — a run a minute either side of 08:00 would find every reminder
@@ -84,6 +92,10 @@ still under 24 hours old. Monday 11am is first chased Wednesday morning. That
 errs late rather than early, which is the safe direction — it never breaks the
 "leave them a full day" rule. To have it chased the very next morning, lower
 `RECEIPT_CHASE_FIRST_HOURS` to about 12, or add a second cron run.
+
+**Run the checks now** is the deliberate exception to quiet hours: an admin
+pressing it is obeyed whatever the day or hour, including a Sunday. A scheduler
+never is.
 
 **On Hobby a cron may only run once a day, and asking for more does not fail
 loudly — the deployment is simply never created, with no error anywhere.**
