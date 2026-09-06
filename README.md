@@ -31,12 +31,59 @@ workbooks (memos, jangad, stock book, QC) and every memo PDF into
 signed in.
 
 **A Google Sheet** — the readable one. Every module gets its own tab: design
-numbers, PD sheets, diamond demands, the jangad register, the stock book, QC
-and memos, plus a **Backup Log** tab saying when the copy last ran. Each tab is
+numbers, PD sheets, diamond demands, diamond receipts, the jangad register, the
+stock book, QC and memos, plus a **Backup Log** tab saying when the copy last
+ran. Each tab is
 replaced rather than appended to, so a sync that runs twice changes nothing.
 Vercel's scheduler calls `/api/backup/sheets` at 18:30 UTC (`vercel.json`),
 which is midnight in India; the office PC's own job calls it too, and an admin
 can run it by hand from **Backups** in the top bar.
+
+## Chasing diamond receipts
+
+A diamond demand is only half the job: the bags still have to come back from
+the diamond team and be written onto the jangad. **Diamond Receipts**
+(`/demand/receipts`) watches every demand from the moment it is issued until a
+jangad issue entry exists for that design number.
+
+- One chase per design number on a demand — a demand covering four designs is
+  four things to wait for, and three of them arriving is not all of them.
+- The first reminder is **24 hours** after the demand was issued, then every
+  **6 hours** until the diamonds appear. Both gaps are settable in Vercel
+  (`RECEIPT_CHASE_FIRST_HOURS`, `RECEIPT_CHASE_REPEAT_HOURS`) — a plan that only
+  allows a daily cron cannot honour a six-hour gap, so on Hobby set the repeat
+  to `24`. A value that is not a positive number is ignored rather than obeyed,
+  so a typo cannot silently stop the chasing.
+- Reminders only go out **Monday to Friday, 08:00–19:00 IST**. One falling due
+  outside that waits for the window to open and keeps its number.
+- Every reminder is posted to the Grok Bot with a `messageText` block written
+  ready to forward to the WhatsApp group **Diamond bagging group internal**.
+  Nothing is sent to WhatsApp automatically — Deval forwards it by hand, and
+  the same text is on the screen with a **Copy text** button.
+- Saving a jangad issue entry closes the chase there and then; the worker also
+  re-checks the register immediately before every reminder, so a chase answered
+  outside the app never gets one.
+
+The worker is `/api/receipt-chase/tick`. It holds no state and each run only
+does what has come due, so calling it often costs nothing and missing a run
+costs nothing either — the next one catches up everything overdue.
+
+`vercel.json` runs it **every five minutes**, so a reminder goes out within
+minutes of falling due.
+
+That needs a plan allowing a sub-daily cron. **On Hobby a cron may only run once
+a day, and asking for more does not fail loudly — the deployment is simply never
+created, with no error anywhere.** Measured on this project while it was on
+Hobby: `*/5 * * * *` and `0 * * * *` each produced no deployment at all, while
+the same commit with a daily schedule deployed in two seconds. If deployments
+ever stop appearing for no visible reason, look here first.
+
+Should this project ever drop back to Hobby, the schedule must go back to once a
+day — and that daily run has to sit **inside 08:00–19:00 India time**, or quiet
+hours would defer every reminder and nothing would be sent at all.
+
+An admin can run it by hand at any time from **Run the checks now** on the
+screen.
 
 Environment variables, all set in Vercel:
 
@@ -44,8 +91,12 @@ Environment variables, all set in Vercel:
 | --- | --- |
 | `BLOB_READ_WRITE_TOKEN` | the storage every module reads and writes |
 | `AUTH_SECRET` | signs the session cookie |
-| `BACKUP_TOKEN` | lets the office PC download without a login |
-| `CRON_SECRET` | lets Vercel's scheduler call the nightly sheet copy |
+| `BACKUP_TOKEN` | lets the office PC download without a login, and lets the Apps Script run the receipt chase |
+| `CRON_SECRET` | lets Vercel's scheduler call the nightly sheet copy and the receipt chase |
+| `GROK_DIAMOND_RECEIPT_WEBHOOK_URL` | where reminders are posted for Deval to see in Grok |
+| `GROK_DIAMOND_RECEIPT_WEBHOOK_AUTH` | the Authorization header value from the Grok routine panel, sent verbatim |
+| `RECEIPT_CHASE_FIRST_HOURS` | optional; hours before the first reminder, 24 by default |
+| `RECEIPT_CHASE_REPEAT_HOURS` | optional; hours between reminders after that, 6 by default (set to 24 on a plan with a daily-only cron) |
 | `GOOGLE_SHEET_ID` | the spreadsheet the copy is written into |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | share the sheet with this address as an Editor |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | that account's private key |

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listDemands, isDemandStorageConfigured, type Demand } from "@/lib/demandStore";
+import { openReceiptCount } from "@/lib/receiptChaseStore";
 import DemandHistoryTable from "./DemandHistoryTable";
 
 export const metadata = { title: "Diamond Demands — Seyaa Solitaire" };
@@ -26,10 +27,17 @@ export default async function DemandListPage() {
     error = err instanceof Error ? err.message : "Could not load demands.";
   }
 
+  // How many of these are still waiting on their diamonds. Quietly: the list
+  // of demands must show whether the chase list can be read or not.
+  const waiting = await openReceiptCount().catch(() => 0);
+
   return (
     <div className="wrap">
       <div className="page-head">
         <h1>Diamond Demands</h1>
+        <Link href="/demand/receipts" className={waiting ? "btn btn-chase" : "btn"}>
+          {waiting ? `Awaiting diamonds ${waiting}` : "Diamond receipts"}
+        </Link>
         <Link href="/demand/new" className="btn btn-primary">+ New Demand</Link>
       </div>
       {error ? (

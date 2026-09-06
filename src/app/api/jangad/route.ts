@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   addJangadRows, listJangad, normalizeJangadRow, seedFromDesign, updateJangadRows,
 } from "@/lib/jangadStore";
+import { finishReceiptChasesQuietly } from "@/lib/receiptChaseRun";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,10 +51,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       pdId: typeof body.pdId === "string" ? body.pdId : undefined,
       pdNo: typeof body.pdNo === "string" ? body.pdNo : undefined,
       demandNo: typeof body.demandNo === "string" ? body.demandNo : undefined,
+      // The issue screen sends the whole design run; the register splits a
+      // piece across two columns, so this is the only place the run survives.
+      runNo: typeof body.runNo === "string" ? body.runNo : undefined,
     });
     if (!added.length) {
       return NextResponse.json({ error: "Every row was blank." }, { status: 400 });
     }
+    // Diamonds on the jangad are what the receipt chase is waiting for.
+    // Closing it here stops the reminders within the second rather than at the
+    // next check.
+    await finishReceiptChasesQuietly(added);
     return NextResponse.json({ rows: added });
   } catch (err) {
     return NextResponse.json(

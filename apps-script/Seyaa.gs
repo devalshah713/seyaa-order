@@ -35,7 +35,21 @@ function setUp() {
   PropertiesService.getScriptProperties().setProperty("SEYAA_TOKEN", token);
 
   scheduleNightly();
+  // The diamond receipt chase used to be poked from here. It is Vercel's
+  // scheduler that runs it now, so an old copy of this script is cleaned up
+  // rather than left running a second, competing timer.
+  removeChaseTrigger();
   backupNow();
+}
+
+/** Clears the five-minute trigger earlier versions of this script installed. */
+function removeChaseTrigger() {
+  var existing = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < existing.length; i++) {
+    if (existing[i].getHandlerFunction() === "chaseTick") {
+      ScriptApp.deleteTrigger(existing[i]);
+    }
+  }
 }
 
 /** Midnight, India time, every night. */

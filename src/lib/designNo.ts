@@ -299,6 +299,26 @@ export function caratCode(raw: string): string {
   return `${parseFloat(n.toFixed(3))}CT`;
 }
 
+// Do these two design numbers name the same work?
+//
+// Used to decide whether a diamond demand has been raised against a PD sheet.
+// The two are rarely written identically: a sheet for "SN-BR-AMF-20CTS-10-13"
+// may be answered by a demand line for the whole run, or for one piece of it,
+// or the other way round when the sheet is a single piece and the demand
+// covers the run it belongs to. Both readings count.
+//
+// Deliberately stricter than matchDesign's search behaviour: a partial number
+// typed into a search box should narrow a list, but must never be taken as
+// "this design has already been demanded".
+export function sameDesignOrPiece(a: string, b: string): boolean {
+  if (!(a || "").trim() || !(b || "").trim()) return false;
+  if (flat(a) === flat(b)) return true;
+  const one = matchDesign(a, b);
+  if (one && one.kind === "piece") return true;
+  const other = matchDesign(b, a);
+  return !!other && other.kind === "piece";
+}
+
 export function buildDesignNo(parts: {
   category?: string;
   subCategory?: string;

@@ -2,6 +2,8 @@ import "server-only";
 import { registerRows } from "./designRegister";
 import { listPdSheets } from "./pdStore";
 import { listDemands } from "./demandStore";
+import { listReceiptChases } from "./receiptChaseStore";
+import { STATUS_LABEL } from "./receiptChase";
 import { listJangad } from "./jangadStore";
 import { listStockEntries } from "./stockBookStore";
 import { listMemos, listParties } from "./memoStore";
@@ -92,6 +94,34 @@ async function demandRows(): Promise<string[][]> {
   }
   rows.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
   return [DEMAND_HEADER, ...rows];
+}
+
+// --- Waiting on diamonds -----------------------------------------------------
+// Which demands were left waiting for their bags, how long for, and how many
+// times the diamond team had to be chased. The demand tab says what was asked
+// for; this says what it cost to get it.
+
+export const RECEIPT_HEADER = [
+  "Demand No.", "Design Number", "Demand Date", "Issued To", "PD No.",
+  "Issued At", "Status", "Reminders Sent", "Jangad Entry", "Closed By",
+  "Waited (hours)",
+];
+
+async function receiptRows(): Promise<string[][]> {
+  const chases = await listReceiptChases();
+  const rows = chases.map((c) => {
+    const end = c.completedAt ? Date.parse(c.completedAt) : Date.now();
+    const hours = (end - Date.parse(c.issuedAt)) / 3_600_000;
+    return [
+      c.demandNo, c.designNumber, c.demandDate, c.issuedTo, c.pdNo,
+      (c.issuedAt || "").slice(0, 16).replace("T", " "),
+      STATUS_LABEL[c.status] || c.status, String(c.reminderNumber),
+      c.jangadRef || "", c.closedBy || "",
+      Number.isFinite(hours) ? hours.toFixed(1) : "",
+    ];
+  });
+  rows.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  return [RECEIPT_HEADER, ...rows];
 }
 
 // --- Diamond Jangad ----------------------------------------------------------
@@ -240,6 +270,7 @@ function tabs(): { tab: string; build: () => Promise<string[][]> }[] {
     { tab: sheetTab(), build: registerRows },
     { tab: "PD Sheets", build: pdRows },
     { tab: "Diamond Demand", build: demandRows },
+    { tab: "Diamond Receipts", build: receiptRows },
     { tab: "Diamond Jangad", build: jangadRows },
     { tab: "Stock Book", build: stockRows },
     { tab: "QC", build: qcRows },
