@@ -42,14 +42,17 @@ working untouched.
 
 ### Moving the old ones across
 
-`POST /api/pd/migrate-photos`, admin only, moves photos still in Blob over to
-Cloudinary and repoints their sheets. It works in batches of 25 and reports what
-is left, so call it until `remaining` is 0. Safe to repeat: it only touches
-sheets whose photo is not already a URL.
+**Backups → Move old photos to Cloudinary** does it: one button, which keeps
+asking until there is nothing left and says what moved. Behind it is
+`POST /api/pd/migrate-photos`, admin only, which works in batches of 25 and
+reports `remaining`. Safe to repeat — it only touches sheets whose photo is not
+already a URL — and safe to interrupt, since a sheet is either moved or not and
+both display.
 
-**It is temporary.** Once `remaining` is 0, delete
-`src/app/api/pd/migrate-photos/route.ts`, and `src/app/api/upload/route.ts` and
-`src/app/api/photo/route.ts` with it — nothing uploads through the portal any
+**It is temporary.** Once it reports nothing left, delete
+`src/app/api/pd/migrate-photos/route.ts`, the card in
+`src/app/admin/backup/BackupClient.tsx`, and `src/app/api/upload/route.ts` and
+`src/app/api/photo/route.ts` with them — nothing uploads through the portal any
 more, and with no Blob-era photos left nothing reads through it either. The
 databases (`pd/db.json` and the rest) stay on Blob and are unaffected.
 
