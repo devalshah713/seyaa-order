@@ -16,11 +16,15 @@ import {
   parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, splitPiece,
   MAX_PIECES,
 } from "@/lib/designNo";
+import { photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 
 export type PdInitial = {
   id: string;
   pdNo: string;
   photoPath: string;
+  // Cloudinary's own handle for the image, kept so the file can be found and
+  // managed there later. Nothing on the sheet reads it.
+  photoPublicId: string;
   sku: string;
   product: string; category: string; subCategory: string;
   subSubCategory: string; type: string; tdw: string;
@@ -33,7 +37,7 @@ export type PdInitial = {
 };
 
 const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
-  photoPath: "", sku: "",
+  photoPath: "", photoPublicId: "", sku: "",
   product: "", category: "", subCategory: "", subSubCategory: "", type: "", tdw: "",
   diaQuality: DEFAULT_DIA_QUALITY, goldWeight: "", locks: "", orderType: "Stock", assignedDate: "",
   assignedTo: "", size: "", diaShape: "", zone: "USA",
@@ -171,13 +175,13 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
     setError("");
     setUploading(true);
     try {
+      // Compressed here as before — a phone photo is several megabytes and
+      // nobody needs that on a PD sheet. What changed is where it goes next:
+      // straight from this browser to Cloudinary, so the image never passes
+      // through the portal at all.
       const small = await compress(file);
-      const fd = new FormData();
-      fd.append("file", small, file.name);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed.");
-      set("photoPath", data.path);
+      const shot = await uploadToCloudinary(small, file.name);
+      setF((cur) => ({ ...cur, photoPath: shot.secure_url, photoPublicId: shot.public_id }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -222,7 +226,7 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   // is empty to everything downstream.
   const legacyDia =
     !!f.diaWeightPointers.trim() && !formatDiaLines(diaLines).trim();
-  const photoUrl = f.photoPath ? `/api/photo?p=${encodeURIComponent(f.photoPath)}` : "";
+  const photoUrl = photoSrc(f.photoPath);
 
   return (
     <div className="app">
@@ -235,7 +239,10 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
               <img src={photoUrl} alt="Design" />
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn" onClick={() => fileRef.current?.click()}>Replace</button>
-                <button className="btn" onClick={() => set("photoPath", "")}>Remove</button>
+                <button className="btn"
+                  onClick={() => setF((cur) => ({ ...cur, photoPath: "", photoPublicId: "" }))}>
+                  Remove
+                </button>
               </div>
             </div>
           ) : (
