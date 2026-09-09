@@ -20,6 +20,39 @@ Memos persist in **Vercel Blob** (a single JSON database). Set the
 `BLOB_READ_WRITE_TOKEN` environment variable in Vercel (already configured for
 this project). Without it, the app runs but cannot save.
 
+## Design photos
+
+Photos on a PD sheet go **straight from the designer's browser to Cloudinary**
+and are served from there. They no longer touch the portal: it was the photos,
+not the data, that ate a month of Vercel Blob allowance in six weeks. The
+in-browser compression is unchanged — a phone photo is still shrunk before it
+goes anywhere.
+
+Cloud name and upload preset live in `src/lib/cloudinary.ts`. Neither is a
+secret: an unsigned preset has to be readable in the page for a browser to post
+with it. The trade is that anyone reading the page source could upload to this
+Cloudinary account; disable the preset in Cloudinary if that is ever abused.
+**Photos are public at unguessable URLs** — accepted by the owner, and no worse
+than the Blob store they came from, which was itself a public store.
+
+Everything reads a photo through one rule, `photoSrc()`, because two kinds of
+value are stored: a Cloudinary URL (used as-is) and, on sheets written before
+the switch, a Blob pathname (served through `/api/photo`). Old sheets keep
+working untouched.
+
+### Moving the old ones across
+
+`POST /api/pd/migrate-photos`, admin only, moves photos still in Blob over to
+Cloudinary and repoints their sheets. It works in batches of 25 and reports what
+is left, so call it until `remaining` is 0. Safe to repeat: it only touches
+sheets whose photo is not already a URL.
+
+**It is temporary.** Once `remaining` is 0, delete
+`src/app/api/pd/migrate-photos/route.ts`, and `src/app/api/upload/route.ts` and
+`src/app/api/photo/route.ts` with it — nothing uploads through the portal any
+more, and with no Blob-era photos left nothing reads through it either. The
+databases (`pd/db.json` and the rest) stay on Blob and are unaffected.
+
 ## Backups
 
 Two copies of everything, both nightly at midnight IST.

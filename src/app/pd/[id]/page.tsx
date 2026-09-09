@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import { getPdSheet } from "@/lib/pdStore";
+import { photoSrc } from "@/lib/cloudinary";
 import PdActions from "./PdActions";
 import PiecesPanel from "./PiecesPanel";
 
@@ -19,9 +20,7 @@ export default async function PdViewPage({
 
   // ?pdf=1 is the render target for the PDF generator — no action bar.
   const forPdf = searchParams.pdf === "1";
-  const photoUrl = sheet.photoPath
-    ? `/api/photo?p=${encodeURIComponent(sheet.photoPath)}`
-    : "";
+  const photoUrl = photoSrc(sheet.photoPath);
 
   return (
     <>

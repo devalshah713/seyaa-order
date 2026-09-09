@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import PdSheetView from "@/components/PdSheetView";
 import { getPdSheet } from "@/lib/pdStore";
+import { photoSrc } from "@/lib/cloudinary";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "PD Sheet — Seyaa Solitaire" };
@@ -19,9 +20,7 @@ export default async function JangadPdView({ params }: { params: { id: string } 
   const sheet = await getPdSheet(params.id).catch(() => null);
   if (!sheet) notFound();
 
-  const photoUrl = sheet.photoPath
-    ? `/api/photo?p=${encodeURIComponent(sheet.photoPath)}`
-    : "";
+  const photoUrl = photoSrc(sheet.photoPath);
 
   return (
     <>

@@ -17,7 +17,13 @@ export type PdSheet = {
   fy: string;
   seq: number;
 
-  photoPath: string; // private blob pathname, served via /api/photo
+  // Where the design photo is. Two shapes, both valid — see photoSrc():
+  // a Cloudinary URL on anything saved since the switch, and a private Blob
+  // pathname on older sheets until the migration has moved them.
+  photoPath: string;
+  // Cloudinary's own handle for the image. Optional because Blob-era sheets
+  // never had one and inventing one would be worse than leaving it blank.
+  photoPublicId?: string;
   sku: string; // design number, entered by the team
 
   // Left column
@@ -99,7 +105,7 @@ export function isPdStorageConfigured(): boolean {
 export function normalizePdInput(body: Record<string, unknown>): NewPdSheet {
   const s = (k: string) => (typeof body[k] === "string" ? (body[k] as string).trim() : "");
   return {
-    photoPath: s("photoPath"), sku: s("sku"),
+    photoPath: s("photoPath"), photoPublicId: s("photoPublicId"), sku: s("sku"),
     // The category is the product: one value, two names, so nothing downstream
     // has to learn a new one.
     product: s("category") || s("product"),
@@ -346,6 +352,30 @@ export async function nextPdNo(dateInput: string): Promise<string> {
   const db = await readDB(token);
   const fy = fyFromInput(dateInput || todayInput());
   return `PD/${fy}/${pad((db.counters[fy] || 0) + 1)}`;
+}
+
+// Point one sheet's photo somewhere else, and nothing else.
+//
+// Deliberately narrower than updatePdSheet, which takes a whole sheet: the
+// one-off migration walks every record in turn and must not be able to disturb
+// anything it is not moving.
+export async function setPdPhoto(
+  id: string,
+  photoPath: string,
+  photoPublicId: string
+): Promise<PdSheet | null> {
+  const token = requireToken();
+  const db = await readDB(token);
+  const idx = db.sheets.findIndex((x) => x.id === id);
+  if (idx === -1) return null;
+  db.sheets[idx] = {
+    ...db.sheets[idx],
+    photoPath,
+    photoPublicId,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeDB(db, token);
+  return db.sheets[idx];
 }
 
 // For the nightly backup.
