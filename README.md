@@ -23,10 +23,10 @@ this project). Without it, the app runs but cannot save.
 ## Design photos
 
 Photos on a PD sheet go **straight from the designer's browser to Cloudinary**
-and are served from there. They no longer touch the portal: it was the photos,
-not the data, that ate a month of Vercel Blob allowance in six weeks. The
-in-browser compression is unchanged — a phone photo is still shrunk before it
-goes anywhere.
+and are served from there. They never touch the portal: it was the photos, not
+the data, that ate a month of Vercel Blob allowance in six weeks. The photo is
+still compressed in the browser first — a phone photo is several megabytes and
+nothing on a PD sheet needs that.
 
 Cloud name and upload preset live in `src/lib/cloudinary.ts`. Neither is a
 secret: an unsigned preset has to be readable in the page for a browser to post
@@ -35,26 +35,15 @@ Cloudinary account; disable the preset in Cloudinary if that is ever abused.
 **Photos are public at unguessable URLs** — accepted by the owner, and no worse
 than the Blob store they came from, which was itself a public store.
 
-Everything reads a photo through one rule, `photoSrc()`, because two kinds of
-value are stored: a Cloudinary URL (used as-is) and, on sheets written before
-the switch, a Blob pathname (served through `/api/photo`). Old sheets keep
-working untouched.
+Everything shows a photo through `photoSrc()`, which is now barely a rule at
+all: a URL is used, anything else is treated as no photo. It is kept so that
+every screen still goes through one place if photos ever move again.
 
-### Moving the old ones across
-
-**Backups → Move old photos to Cloudinary** does it: one button, which keeps
-asking until there is nothing left and says what moved. Behind it is
-`POST /api/pd/migrate-photos`, admin only, which works in batches of 25 and
-reports `remaining`. Safe to repeat — it only touches sheets whose photo is not
-already a URL — and safe to interrupt, since a sheet is either moved or not and
-both display.
-
-**It is temporary.** Once it reports nothing left, delete
-`src/app/api/pd/migrate-photos/route.ts`, the card in
-`src/app/admin/backup/BackupClient.tsx`, and `src/app/api/upload/route.ts` and
-`src/app/api/photo/route.ts` with them — nothing uploads through the portal any
-more, and with no Blob-era photos left nothing reads through it either. The
-databases (`pd/db.json` and the rest) stay on Blob and are unaffected.
+The photos that predated this lived in Vercel Blob, were uploaded through
+`/api/upload` and served back through `/api/photo`. All of them were moved
+across in one pass and those two routes, and the one-off migration behind them,
+have been deleted. The databases (`pd/db.json` and the rest) stay on Blob and
+were never part of this.
 
 ## Backups
 

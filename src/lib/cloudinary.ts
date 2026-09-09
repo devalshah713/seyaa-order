@@ -1,10 +1,10 @@
 // Where design photos live.
 //
-// They used to go through /api/upload into the private Vercel Blob store and
-// come back out through /api/photo. They now go straight from the designer's
-// browser to Cloudinary, which keeps the image off the portal's own bandwidth
-// entirely — it was the photos, not the data, that ate a month of Blob
-// allowance in six weeks.
+// They go straight from the designer's browser to Cloudinary, which keeps the
+// image off the portal's own bandwidth entirely — it was the photos, not the
+// data, that ate a month of Vercel Blob allowance in six weeks. They used to be
+// uploaded through the portal and served back out of it; both of those routes
+// are gone, and every old photo has been moved across.
 //
 // Neither of these is a secret. The upload preset is unsigned by design: it
 // has to be readable in the page for a browser to post with it. The trade is
@@ -24,19 +24,17 @@ export type CloudinaryUpload = { secure_url: string; public_id: string };
 
 // Turn a stored photoPath into something an <img> can load.
 //
-// One rule, used everywhere a photo is shown, because there are two kinds of
-// stored value and will be until the migration has run over every old sheet:
+// Every photo is now a URL. Anything else is a leftover Blob pathname from
+// before the move, and there is no longer a route that could serve it — so it
+// is treated as no photo at all. That shows the sheet's empty photo box rather
+// than a broken image, which is the more honest of the two: the file genuinely
+// is not reachable any more.
 //
-//   "https://res.cloudinary.com/…"  a Cloudinary URL — load it directly
-//   "pd-photos/1725…-a1b2c3.jpg"    a Blob pathname — serve it through the app
-//
-// Sheets written before the switch keep working untouched, and a sheet edited
-// after it quietly moves across when its photo is replaced.
+// Kept as a function rather than reading photoPath directly so that every
+// screen still goes through one place if photos ever move again.
 export function photoSrc(photoPath: string | null | undefined): string {
   const p = (photoPath || "").trim();
-  if (!p) return "";
-  if (p.startsWith("http")) return p;
-  return `/api/photo?p=${encodeURIComponent(p)}`;
+  return p.startsWith("http") ? p : "";
 }
 
 // Send one image to Cloudinary and hand back what to store. Used by the
