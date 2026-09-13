@@ -9,11 +9,10 @@ export const metadata = { title: "New Diamond Demand — Seyaa Solitaire" };
 
 // ?pd=<id> seeds the demand from that PD sheet: its design number and one row
 // per diamond size already entered there.
-export default async function NewDemandPage({
-  searchParams,
-}: {
-  searchParams: { pd?: string };
+export default async function NewDemandPage(props: {
+  searchParams: Promise<{ pd?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const pdId = searchParams.pd;
   const sheet = pdId ? await getPdSheet(pdId).catch(() => null) : null;
   if (!sheet) return <DemandForm />;

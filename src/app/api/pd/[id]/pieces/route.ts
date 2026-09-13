@@ -8,8 +8,9 @@ export const runtime = "nodejs";
 // production floor can update a piece without reopening the whole PD sheet.
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   let body: Record<string, unknown>;
   try {
     body = await req.json();

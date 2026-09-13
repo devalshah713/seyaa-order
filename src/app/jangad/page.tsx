@@ -5,11 +5,10 @@ import JangadClient from "./JangadClient";
 export const metadata = { title: "Diamond Jangad — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
-export default async function JangadPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
+export default async function JangadPage(props: {
+  searchParams: Promise<{ q?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   if (!isJangadStorageConfigured()) {
     return (
       <div className="wrap">

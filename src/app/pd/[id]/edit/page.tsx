@@ -5,7 +5,8 @@ import PdForm from "../../new/PdForm";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Edit PD Sheet — Seyaa Solitaire" };
 
-export default async function EditPdPage({ params }: { params: { id: string } }) {
+export default async function EditPdPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const s = await getPdSheet(params.id).catch(() => null);
   if (!s) notFound();
 

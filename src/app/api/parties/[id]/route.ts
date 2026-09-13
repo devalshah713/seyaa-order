@@ -7,8 +7,9 @@ export const runtime = "nodejs";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "Only an admin can change a party." }, { status: 403 });
   }
@@ -29,8 +30,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   if (!(await requireAdmin())) {
     return NextResponse.json({ error: "Only an admin can remove a party." }, { status: 403 });
   }

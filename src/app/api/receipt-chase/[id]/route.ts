@@ -16,8 +16,9 @@ type Action = (typeof ACTIONS)[number];
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   let body: Record<string, unknown> = {};
   try {
     body = await req.json();

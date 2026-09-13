@@ -7,11 +7,10 @@ import StockEntryForm from "../StockEntryForm";
 export const metadata = { title: "Stock Entry — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
-export default async function EditStockPage({
-  params,
-}: {
-  params: { id: string };
+export default async function EditStockPage(props: {
+  params: Promise<{ id: string }>;
 }) {
+  const params = await props.params;
   if (!isStockBookConfigured()) {
     return (
       <div className="wrap">

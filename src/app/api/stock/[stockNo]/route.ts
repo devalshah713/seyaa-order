@@ -8,8 +8,9 @@ export const runtime = "nodejs";
 // what became of it each time.
 export async function GET(
   _req: Request,
-  { params }: { params: { stockNo: string } }
+  ctx: { params: Promise<{ stockNo: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   try {
     return NextResponse.json({ history: await stockHistory(params.stockNo) });
   } catch (err) {

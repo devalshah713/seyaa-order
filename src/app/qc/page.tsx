@@ -5,11 +5,10 @@ import QcClient from "./QcClient";
 export const metadata = { title: "QC — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
-export default async function QcPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
+export default async function QcPage(props: {
+  searchParams: Promise<{ q?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   if (!isQcStorageConfigured()) {
     return (
       <div className="wrap">

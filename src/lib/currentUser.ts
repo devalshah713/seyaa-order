@@ -9,7 +9,7 @@ import { SESSION_COOKIE, verifySession, type Session } from "./session";
 export async function currentSession(): Promise<Session | null> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return null;
-  return verifySession(cookies().get(SESSION_COOKIE)?.value, secret);
+  return verifySession((await cookies()).get(SESSION_COOKIE)?.value, secret);
 }
 
 export async function requireAdmin(): Promise<Session | null> {

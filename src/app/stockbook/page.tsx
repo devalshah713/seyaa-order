@@ -8,11 +8,10 @@ import StockBookClient from "./StockBookClient";
 export const metadata = { title: "Stock Book — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
-export default async function StockBookPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
+export default async function StockBookPage(props: {
+  searchParams: Promise<{ q?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   if (!isStockBookConfigured()) {
     return (
       <div className="wrap">
