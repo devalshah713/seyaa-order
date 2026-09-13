@@ -20,7 +20,7 @@ import { isSheetConfigured, sheetTab, writeTab } from "./googleSheets";
 // A readable copy of the whole portal in the office's own Google Sheet, one tab
 // per module, rewritten from scratch every night.
 //
-// This is a copy, not a second system of record. The portal's blob storage is
+// This is a copy, not a second system of record. The portal's own storage is
 // the record and the nightly file on the office PC is the restorable backup;
 // the sheet exists so anyone can open a browser and look, and so a year of work
 // is legible without the portal being up at all.

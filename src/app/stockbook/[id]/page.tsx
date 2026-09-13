@@ -7,18 +7,17 @@ import StockEntryForm from "../StockEntryForm";
 export const metadata = { title: "Stock Entry — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
-export default async function EditStockPage({
-  params,
-}: {
-  params: { id: string };
+export default async function EditStockPage(props: {
+  params: Promise<{ id: string }>;
 }) {
+  const params = await props.params;
   if (!isStockBookConfigured()) {
     return (
       <div className="wrap">
         <div className="page-head"><h1>Stock Entry</h1></div>
         <div className="notice">
-          Storage isn&rsquo;t configured yet. Add the <code>BLOB_READ_WRITE_TOKEN</code>{" "}
-          environment variable in Vercel and redeploy.
+          Storage isn&rsquo;t configured yet. Set the four <code>R2_*</code>{" "}
+          environment variables and redeploy.
         </div>
       </div>
     );

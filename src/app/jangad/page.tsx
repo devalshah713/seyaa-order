@@ -5,18 +5,17 @@ import JangadClient from "./JangadClient";
 export const metadata = { title: "Diamond Jangad — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
-export default async function JangadPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
+export default async function JangadPage(props: {
+  searchParams: Promise<{ q?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   if (!isJangadStorageConfigured()) {
     return (
       <div className="wrap">
         <div className="page-head"><h1>Diamond Jangad</h1></div>
         <div className="notice">
-          Storage isn&rsquo;t configured yet. Add the <code>BLOB_READ_WRITE_TOKEN</code>{" "}
-          environment variable in Vercel and redeploy.
+          Storage isn&rsquo;t configured yet. Set the four <code>R2_*</code>{" "}
+          environment variables and redeploy.
         </div>
       </div>
     );

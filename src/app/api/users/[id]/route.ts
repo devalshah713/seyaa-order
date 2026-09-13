@@ -9,8 +9,9 @@ export const runtime = "nodejs";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await ctx.params;
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Admins only." }, { status: 403 });
 
@@ -40,8 +41,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await ctx.params;
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Admins only." }, { status: 403 });
 

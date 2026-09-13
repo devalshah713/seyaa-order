@@ -11,9 +11,9 @@ export default async function HistoryPage() {
       <div className="wrap">
         <div className="page-head"><h1>Memo History</h1></div>
         <div className="notice">
-          Memo storage isn&rsquo;t configured yet. Add the{" "}
-          <code>BLOB_READ_WRITE_TOKEN</code> environment variable in Vercel and redeploy,
-          then saved memos will appear here.
+          Memo storage isn&rsquo;t configured yet. Set the four{" "}
+          <code>R2_*</code> environment variables and redeploy, then saved memos
+          will appear here.
         </div>
       </div>
     );

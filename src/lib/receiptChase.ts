@@ -2,7 +2,7 @@
 //
 // The shape lives here rather than in the store because the chase screen runs
 // in the browser and the store is "server-only" — a client component that
-// imported the store to learn which statuses count as open would drag the Blob
+// imported the store to learn which statuses count as open would drag the
 // client in with it. Nothing here touches storage or Node.
 
 // "watching"  — the demand has gone to the diamond team; the first day is

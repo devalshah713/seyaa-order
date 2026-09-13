@@ -9,13 +9,12 @@ import StockPanel from "./StockPanel";
 
 export const dynamic = "force-dynamic";
 
-export default async function MemoViewPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { pdf?: string };
+export default async function MemoViewPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pdf?: string }>;
 }) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const found = await getMemoWithEvents(params.id).catch(() => null);
   if (!found) notFound();
   const { memo, events } = found;

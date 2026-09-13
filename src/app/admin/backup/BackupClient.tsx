@@ -7,14 +7,12 @@ import { useEffect, useState } from "react";
 
 type TabResult = { tab: string; rows: number; error?: string };
 
-type MigrateBatch = {
-  sheets: number;
-  stillOnBlobBefore: number;
-  attempted: number;
-  moved: number;
-  failed: number;
-  remaining: number;
-  detail: { pdNo: string; sku: string; error?: string }[];
+type DocResult = {
+  path: string;
+  label: string;
+  did: "copied" | "already there" | "nothing to copy" | "failed";
+  bytes: number;
+  note: string;
 };
 
 export default function BackupClient({
@@ -23,17 +21,26 @@ export default function BackupClient({
   sheetUrl,
   registerTab,
   pcConfigured,
+  r2Configured,
+  blobStillSet,
+  migrationHint,
 }: {
   sheetConfigured: boolean;
   sheetHint: string;
   sheetUrl: string;
   registerTab: string;
   pcConfigured: boolean;
+  r2Configured: boolean;
+  blobStillSet: boolean;
+  migrationHint: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [tabs, setTabs] = useState<TabResult[] | null>(null);
   const [at, setAt] = useState("");
   const [error, setError] = useState("");
+  const [docs, setDocs] = useState<DocResult[] | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [moveError, setMoveError] = useState("");
   // Filled in after the page loads, so the address shown is the one this
   // portal is actually being used on.
   const [origin, setOrigin] = useState("");
@@ -55,50 +62,30 @@ export default function BackupClient({
     }
   }
 
-  // --- Moving the old design photos to Cloudinary --------------------------
-  // A one-off, and the only reason it is a button rather than something that
-  // just happens is that it rewrites every PD sheet's photo and somebody
-  // should be watching when it does.
-  //
-  // The route works in batches so it cannot outlast a request timeout, which
-  // means somebody has to keep asking until it says there is nothing left.
-  // Doing that here rather than in a console is the whole point of this card.
-  const [moving, setMoving] = useState(false);
-  const [moved, setMoved] = useState(0);
-  const [left, setLeft] = useState<number | null>(null);
-  const [totalToMove, setTotalToMove] = useState<number | null>(null);
-  const [badPhotos, setBadPhotos] = useState<{ pdNo: string; sku: string; error?: string }[]>([]);
-  const [moveError, setMoveError] = useState("");
-  const [moveDone, setMoveDone] = useState(false);
-
-  async function movePhotos() {
-    setMoving(true);
-    setMoveError(""); setMoveDone(false);
-    setMoved(0); setLeft(null); setTotalToMove(null); setBadPhotos([]);
-    let done = 0;
+  // Look, but touch nothing — what each store holds right now.
+  async function checkStores() {
+    setMoving(true); setMoveError(""); setDocs(null);
     try {
-      // Bounded rather than "while there is more": a route that always
-      // reported work left would otherwise spin here for ever.
-      for (let round = 0; round < 200; round++) {
-        const res = await fetch("/api/pd/migrate-photos", { method: "POST" });
-        const b = (await res.json().catch(() => ({}))) as Partial<MigrateBatch> & { error?: string };
-        if (!res.ok) throw new Error(b.error || "The move was refused.");
-
-        if (round === 0) setTotalToMove(b.stillOnBlobBefore ?? 0);
-        done += b.moved ?? 0;
-        setMoved(done);
-        setLeft(b.remaining ?? 0);
-        if (b.detail?.length) {
-          setBadPhotos((cur) => [...cur, ...b.detail!.filter((d) => d.error)]);
-        }
-        if (!b.remaining) break;
-        // A batch that moved nothing but still reports work left would loop
-        // without end — stop and say so rather than hammering the store.
-        if (!b.moved) throw new Error("Nothing moved on that pass; the rest need looking at by hand.");
-      }
-      setMoveDone(true);
+      const res = await fetch("/api/admin/migrate-storage");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setDocs(d.documents || []);
     } catch (err) {
-      setMoveError(err instanceof Error ? err.message : "The move did not finish.");
+      setMoveError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  async function copyToR2() {
+    setMoving(true); setMoveError(""); setDocs(null);
+    try {
+      const res = await fetch("/api/admin/migrate-storage", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setDocs(d.documents || []);
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : "The copy failed.");
     } finally {
       setMoving(false);
     }
@@ -106,51 +93,6 @@ export default function BackupClient({
 
   return (
     <>
-      <div className="bk-card">
-        <h2>Design photos</h2>
-        <p className="bk-lede">
-          New photos go straight from the browser to Cloudinary and never touch
-          this portal. Photos taken before that change are still in the
-          portal&rsquo;s own storage — they display perfectly well, but they are
-          what used the storage allowance up, so they are worth moving across.
-        </p>
-        <p className="bk-lede">
-          This is a <b>one-off</b>. It is safe to press twice: it only touches
-          photos that have not moved yet, and a sheet is either moved or not —
-          both display either way. Nothing else on a sheet is altered.
-        </p>
-        <button className="btn btn-primary" onClick={movePhotos} disabled={moving}>
-          {moving ? "Moving…" : "Move old photos to Cloudinary"}
-        </button>
-
-        {(moving || moveDone || moveError) && (
-          <p className="bk-lede" style={{ marginTop: 12 }}>
-            {totalToMove === 0
-              ? "Nothing to move — every photo is already on Cloudinary."
-              : <>Moved <b>{moved}</b>{totalToMove ? ` of ${totalToMove}` : ""}
-                  {left !== null && left > 0 ? `, ${left} to go…` : ""}</>}
-          </p>
-        )}
-        {moveDone && totalToMove !== 0 && (
-          <p className="bk-lede"><b>Finished.</b> Open a PD sheet and check its photo still shows.</p>
-        )}
-        {badPhotos.length > 0 && (
-          <>
-            <p className="party-warn">
-              {badPhotos.length} photo{badPhotos.length === 1 ? "" : "s"} could not be moved.
-              Those sheets still show their photo from the old storage, so nothing is lost —
-              but they need looking at:
-            </p>
-            <ul className="bk-list">
-              {badPhotos.map((b, i) => (
-                <li key={i}><b>{b.pdNo}</b> {b.sku} — {b.error}</li>
-              ))}
-            </ul>
-          </>
-        )}
-        {moveError && <p className="save-error">{moveError}</p>}
-      </div>
-
       <div className="bk-card">
         <h2>The Google Sheet</h2>
         <p className="bk-lede">
@@ -242,8 +184,8 @@ export default function BackupClient({
       <div className="bk-card">
         <h2>Where the data itself lives</h2>
         <p className="bk-lede">
-          Private storage attached to this Vercel project — reachable only with
-          the project&rsquo;s own key, never public. One file per module:
+          A private Cloudflare R2 bucket — reachable only with this
+          portal&rsquo;s own key, never public. One file per module:
         </p>
         <ul className="bk-list">
           <li><b>pd/db.json</b> — PD sheets</li>
@@ -253,11 +195,65 @@ export default function BackupClient({
           <li><b>qc/db.json</b> — QC records</li>
           <li><b>memos/db.json</b> — memos, orders and every controlled list</li>
           <li><b>prices/db.json</b> — the gold and diamond rates stock is valued at</li>
+          <li><b>users/users.json</b> — who can sign in, and to what</li>
+          <li><b>receipt-chase/db.json</b> — diamond demands still being chased</li>
         </ul>
         <p className="bk-lede">
           Each file carries its own running number, which is what keeps
           PD/26-27/007, QC-00001 and the stock numbers counting on correctly.
         </p>
+        <p className="bk-lede">
+          It is deliberately not the same company that hosts the site. A billing
+          problem at one of them now costs a deployment rather than the records.
+        </p>
+      </div>
+
+      <div className="bk-card">
+        <h2>Moving to Cloudflare</h2>
+        {migrationHint ? (
+          <p className={r2Configured ? "bk-lede" : "party-warn"}>{migrationHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The records are being moved out of the old Vercel store into R2.
+            Until <b>BLOB_READ_WRITE_TOKEN</b> is removed, the old store is kept
+            current too — every save goes to both — so the move can be abandoned
+            at any point by unsetting the four <b>R2_*</b> variables.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> reads both stores and says what is where, without changing
+          anything. <b>Copy everything across</b> copies each document that R2
+          has not got yet. Neither one deletes anything, and both are safe to run
+          more than once.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkStores} disabled={moving}>
+            {moving ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyToR2}
+            disabled={moving || !r2Configured || !blobStillSet}
+          >
+            Copy everything across
+          </button>
+        </div>
+        {moveError && <p className="party-warn">{moveError}</p>}
+        {docs && (
+          <table className="bk-table">
+            <thead>
+              <tr><th>Document</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+              {docs.map((d) => (
+                <tr key={d.path}>
+                  <td>{d.label}<br /><small>{d.path}</small></td>
+                  <td className={d.did === "failed" ? "bk-bad" : "bk-ok"}>{d.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   );

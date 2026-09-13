@@ -9,7 +9,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) {
     return NextResponse.json(
-      { error: "Sign-in is not configured. Set AUTH_SECRET in Vercel." },
+      { error: "Sign-in is not configured. Set AUTH_SECRET." },
       { status: 501 }
     );
   }

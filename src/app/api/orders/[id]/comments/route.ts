@@ -9,8 +9,9 @@ export const runtime = "nodejs";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   const session = await currentSession();
   if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 

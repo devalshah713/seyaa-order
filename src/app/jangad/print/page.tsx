@@ -8,11 +8,10 @@ export const metadata = { title: "Diamond Issue Slip — Seyaa Solitaire" };
 export const dynamic = "force-dynamic";
 
 // ?ids=JG-00001,JG-00002 — the entries picked in the register.
-export default async function JangadPrintPage({
-  searchParams,
-}: {
-  searchParams: { ids?: string; pdf?: string };
+export default async function JangadPrintPage(props: {
+  searchParams: Promise<{ ids?: string; pdf?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const ids = (searchParams.ids || "").split(",").map((s) => s.trim()).filter(Boolean);
   let rows: JangadRow[] = [];
   let error = "";

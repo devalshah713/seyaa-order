@@ -1,6 +1,6 @@
 // QC records, in their own JSON document like every other module.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { listStockEntries } from "./stockBookStore";
 import { listPartyNames } from "./memoStore";
 import { priceOf, type StockEntry } from "./stockBookConfig";
@@ -13,39 +13,16 @@ const DB_PATH = "qc/db.json";
 export type QcDB = { records: QcRecord[]; seq: number };
 
 export function isQcStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<QcDB> {
+  const db = await readDoc<Partial<QcDB>>(DB_PATH, {});
+  return { records: db.records || [], seq: db.seq || 0 };
 }
 
-async function readDB(token: string): Promise<QcDB> {
-  try {
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return { records: [], seq: 0 };
-    const db = (await new Response(result.stream).json()) as Partial<QcDB>;
-    return { records: db.records || [], seq: db.seq || 0 };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return { records: [], seq: 0 };
-    throw err;
-  }
-}
-
-async function writeDB(db: QcDB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: QcDB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -83,22 +60,19 @@ export function normalizeQcInput(body: Record<string, unknown>): NewQcRecord {
 }
 
 export async function listQcRecords(): Promise<QcRecord[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.records.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function getQcRecord(id: string): Promise<QcRecord | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.records.find((r) => r.id === id) || null;
 }
 
 export const qcNoFor = (seq: number) => `QC-${String(seq).padStart(5, "0")}`;
 
 export async function createQcRecord(input: NewQcRecord): Promise<QcRecord> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   db.seq += 1;
   const now = new Date().toISOString();
   const rec: QcRecord = {
@@ -109,7 +83,7 @@ export async function createQcRecord(input: NewQcRecord): Promise<QcRecord> {
     updatedAt: now,
   };
   db.records.push(rec);
-  await writeDB(db, token);
+  await writeDB(db);
   return rec;
 }
 
@@ -117,8 +91,7 @@ export async function updateQcRecord(
   id: string,
   patch: NewQcRecord
 ): Promise<QcRecord | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.records.findIndex((r) => r.id === id);
   if (idx === -1) return null;
   db.records[idx] = {
@@ -127,22 +100,21 @@ export async function updateQcRecord(
     stockId: patch.stockId ?? db.records[idx].stockId,
     updatedAt: new Date().toISOString(),
   };
-  await writeDB(db, token);
+  await writeDB(db);
   return db.records[idx];
 }
 
 export async function deleteQcRecord(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.records.length;
   db.records = db.records.filter((r) => r.id !== id);
   if (db.records.length === before) return false;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 export async function exportQcDb(): Promise<QcDB> {
-  return readDB(requireToken());
+  return readDB();
 }
 
 // --- Starting a QC from a stock number ---------------------------------------

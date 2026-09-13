@@ -2,10 +2,61 @@ import "server-only";
 import { SESSION_COOKIE, signSession } from "./session";
 
 // Shared headless-Chromium rendering. Navigates to the page's own URL so the
-// output uses the exact same print CSS as the browser.
-async function launchBrowser() {
-  const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+// output uses the exact same print CSS as the browser — a memo PDF and a memo
+// on screen are the same page, never two descriptions of one.
+//
+// There are three places this runs and each gets Chrome a different way:
+//
+//   * Cloudflare Workers — Cloudflare's own Browser Rendering, reached through
+//     the BROWSER binding. There is no filesystem on a Worker and nothing to
+//     launch, so a browser Cloudflare keeps is the only way; it is also the one
+//     that costs money, which is why the Workers Paid plan is not optional for
+//     this portal.
+//   * Vercel — @sparticuz/chromium, a build of Chrome small enough to unpack
+//     inside a serverless function. Kept while the portal still runs there.
+//   * A developer's machine — whatever Chrome is already installed.
+//
+// Everything below the launch is identical in all three: same pages, same
+// cookie, same waiting rule, same output.
+
+type Browser = {
+  newPage: () => Promise<Page>;
+  close: () => Promise<void>;
+};
+
+type Page = {
+  setCookie: (cookie: { name: string; value: string; url: string }) => Promise<void>;
+  setViewport: (v: { width: number; height: number; deviceScaleFactor: number }) => Promise<void>;
+  goto: (url: string, opts: { waitUntil: string; timeout: number }) => Promise<unknown>;
+  pdf: (opts: Record<string, unknown>) => Promise<Uint8Array>;
+  screenshot: (opts: Record<string, unknown>) => Promise<Uint8Array>;
+  $: (selector: string) => Promise<{ screenshot: (o: Record<string, unknown>) => Promise<Uint8Array> } | null>;
+};
+
+// Cloudflare's browser, when running on a Worker. Null anywhere else.
+//
+// The binding is looked up rather than imported at the top of the file so that
+// a build for Vercel never pulls the Workers packages in, and a Worker never
+// pulls in a 50MB Chrome it cannot use.
+async function cloudflareBrowser(): Promise<Browser | null> {
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    const binding = (getCloudflareContext().env as Record<string, unknown>).BROWSER;
+    if (!binding) return null;
+    const puppeteer = await import("@cloudflare/puppeteer");
+    return (await puppeteer.launch(binding as never)) as unknown as Browser;
+  } catch {
+    // Not on a Worker, or Browser Rendering is not enabled on the account.
+    return null;
+  }
+}
+
+async function launchBrowser(): Promise<Browser> {
+  const cloudflare = await cloudflareBrowser();
+  if (cloudflare) return cloudflare;
+
   const puppeteer = await import("puppeteer-core");
+  const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
   if (isServerless) {
     const chromium = (await import("@sparticuz/chromium")).default;
@@ -13,7 +64,7 @@ async function launchBrowser() {
       args: chromium.args,
       executablePath: await chromium.executablePath(),
       headless: true,
-    });
+    }) as unknown as Promise<Browser>;
   }
 
   const executablePath =
@@ -23,7 +74,7 @@ async function launchBrowser() {
     executablePath,
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  }) as unknown as Promise<Browser>;
 }
 
 // The pages sit behind the login gate, and this browser has no user sitting at
@@ -42,7 +93,7 @@ async function rendererCookie(origin: string) {
 
 // Renders any in-app page to an A4 PDF using its own print CSS.
 export async function renderPagePdf(origin: string, path: string): Promise<Buffer> {
-  let browser;
+  let browser: Browser | undefined;
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();
@@ -82,7 +133,7 @@ export function renderDemandPdf(origin: string, id: string): Promise<Buffer> {
 // Sized for a phone screen and rendered at 2x so the text stays sharp after
 // WhatsApp re-compresses it.
 export async function renderOrderBoardPng(origin: string, part = 1): Promise<Buffer> {
-  let browser;
+  let browser: Browser | undefined;
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();

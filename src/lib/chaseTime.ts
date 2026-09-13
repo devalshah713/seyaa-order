@@ -67,8 +67,8 @@ export function nextWorkingMoment(t: Date): Date {
 // worker runs each weekday morning, so a gap shorter than a day would only
 // make the screen promise a reminder that no run exists to send.
 //
-// Both are settable in Vercel, because how often it is reasonable to chase is
-// an office decision, not a code one. Shortening the repeat is only worth
+// Both are settable in the environment, because how often it is reasonable to
+// chase is an office decision, not a code one. Shortening the repeat is only worth
 // doing alongside a schedule that runs more than once a day.
 export const DEFAULT_FIRST_GAP_HOURS = 24;
 export const DEFAULT_REPEAT_GAP_HOURS = 24;

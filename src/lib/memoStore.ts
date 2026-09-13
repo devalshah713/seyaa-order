@@ -1,13 +1,14 @@
-// Persistent memo store backed by Vercel Blob. The whole database (a running
-// counter per fiscal year + every memo) lives in one JSON blob at a stable
-// path. Reads bypass the CDN cache so a freshly saved memo is visible at once.
+// Persistent memo store. The whole database (a running counter per fiscal year
+// + every memo) lives in one JSON document at a stable path, read whole and
+// written whole, with nothing cached in between — so a memo saved a second ago
+// is visible to the next person who looks.
 //
 // Numbering is authoritative here on the server: createMemo() reads the DB,
 // takes the next serial for the memo's fiscal year, and writes it back. For a
 // single-office workflow this read-modify-write is safe; if two memos are ever
 // saved in the very same instant the second simply retries onto a fresh read.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { randomUUID } from "node:crypto";
 import {
   counterKey,
@@ -114,50 +115,22 @@ export type DB = {
 };
 
 export function isStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Memo storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<DB> {
+  const db = await readDoc<Partial<DB>>(DB_PATH, {});
+  return {
+    counters: db.counters || {},
+    memos: (db.memos || []).map(normalize),
+    events: db.events || [],
+    orders: db.orders || [],
+    parties: db.parties || [],
+  };
 }
 
-async function readDB(token: string): Promise<DB> {
-  try {
-    // Private store: read the content via the SDK (a plain public fetch is
-    // rejected). useCache:false so a just-saved memo is visible immediately.
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) {
-      return { counters: {}, memos: [], events: [], orders: [], parties: [] };
-    }
-    const db = (await new Response(result.stream).json()) as Partial<DB>;
-    return {
-      counters: db.counters || {},
-      memos: (db.memos || []).map(normalize),
-      events: db.events || [],
-      orders: db.orders || [],
-      parties: db.parties || [],
-    };
-  } catch (err) {
-    // First run: the DB blob doesn't exist yet.
-    if (err instanceof BlobNotFoundError) return { counters: {}, memos: [], events: [], orders: [], parties: [] };
-    throw err;
-  }
-}
-
-async function writeDB(db: DB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: DB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 function totalOf(items: MemoItem[]): number {
@@ -184,8 +157,7 @@ function normalize(m: Memo): Memo {
 }
 
 export async function createMemo(input: NewMemo): Promise<Memo> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
 
   const date = input.date || todayInput();
   const fy = fyFromInput(date);
@@ -219,22 +191,20 @@ export async function createMemo(input: NewMemo): Promise<Memo> {
     updatedAt: new Date().toISOString(),
   };
   db.memos.push(memo);
-  await writeDB(db, token);
+  await writeDB(db);
   return memo;
 }
 
 // Next serial for a given date's fiscal year — for the live form preview only.
 export async function peekNextMemoNo(dateInput: string, kind: MemoKind = "jewellery"): Promise<string> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const fy = fyFromInput(dateInput || todayInput());
   return memoNoForKind(kind, fy, (db.counters[counterKey(kind, fy)] || 0) + 1);
 }
 
 // Issue memos a Receipt can be booked against, newest first.
 export async function listOpenIssues(): Promise<{ memoNo: string; to: string; date: string }[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.memos
     .filter((m) => m.kind === "gold" && m.purpose === "Issue to Factory")
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
@@ -242,15 +212,13 @@ export async function listOpenIssues(): Promise<{ memoNo: string; to: string; da
 }
 
 export async function listMemos(): Promise<Memo[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   // Newest first.
   return db.memos.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function getMemo(id: string): Promise<Memo | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.memos.find((m) => m.id === id) || null;
 }
 
@@ -259,9 +227,8 @@ export async function getMemo(id: string): Promise<Memo | null> {
 // ---------------------------------------------------------------------------
 
 export async function listParties(kind: PartyKind = "party"): Promise<Party[]> {
-  const token = requireToken();
-  let db = await readDB(token);
-  if (await seedList(db, kind, token)) db = await readDB(token);
+  let db = await readDB();
+  if (await seedList(db, kind)) db = await readDB();
   return db.parties
     .filter((p) => partyKindOf(p) === kind)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -274,11 +241,10 @@ export type ListEntry = { name: string; parent: string; code: string };
 export async function listPartyNames(
   kinds: PartyKind[]
 ): Promise<Record<string, ListEntry[]>> {
-  const token = requireToken();
-  let db = await readDB(token);
+  let db = await readDB();
   let wrote = false;
-  for (const kind of kinds) wrote = (await seedList(db, kind, token)) || wrote;
-  if (wrote) db = await readDB(token);
+  for (const kind of kinds) wrote = (await seedList(db, kind)) || wrote;
+  if (wrote) db = await readDB();
 
   // The parent goes out by name, not id: a form holds what was chosen, not the
   // row it came from, so the name is what it can filter on.
@@ -298,7 +264,7 @@ export async function listPartyNames(
 }
 
 // Writes a list's built-in names in, once. Returns whether it wrote.
-async function seedList(db: DB, kind: PartyKind, token: string): Promise<boolean> {
+async function seedList(db: DB, kind: PartyKind): Promise<boolean> {
   const seed = SEED_LISTS[kind];
   if (!seed) return false;
   // mfgSeeded is the flag the first version of this used.
@@ -316,15 +282,14 @@ async function seedList(db: DB, kind: PartyKind, token: string): Promise<boolean
   }
   db.seeded = { ...db.seeded, [kind]: true };
   if (kind === "mfg") db.mfgSeeded = true;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 // Empties a list. Also marks it seeded, so a list whose built-in names were
 // just cleared out does not have them written back on the next read.
 export async function clearParties(kind: PartyKind): Promise<number> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.parties.length;
   const gone = new Set(
     db.parties.filter((p) => partyKindOf(p) === kind).map((p) => p.id)
@@ -336,7 +301,7 @@ export async function clearParties(kind: PartyKind): Promise<number> {
   );
   db.seeded = { ...db.seeded, [kind]: true };
   if (kind === "mfg") db.mfgSeeded = true;
-  await writeDB(db, token);
+  await writeDB(db);
   return before - db.parties.length;
 }
 
@@ -350,8 +315,7 @@ export async function createParty(
   const clean = name.trim().replace(/\s+/g, " ");
   if (clean.length < 2) return { ok: false, error: "Give the party a name." };
 
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   // A list that hangs off another needs to know what it hangs off, or nothing
   // can ever offer it.
   const needsParent = !!parentKindOf(kind);
@@ -384,7 +348,7 @@ export async function createParty(
     createdBy: by,
   };
   db.parties.push(party);
-  await writeDB(db, token);
+  await writeDB(db);
   return { ok: true, party };
 }
 
@@ -396,8 +360,7 @@ export async function renameParty(
   const clean = name.trim().replace(/\s+/g, " ");
   if (clean.length < 2) return { ok: false, error: "Give the party a name." };
 
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const party = db.parties.find((p) => p.id === id);
   if (!party) return { ok: false, error: "Party not found." };
 
@@ -415,15 +378,14 @@ export async function renameParty(
   // Only the coded lists carry one, and an emptied box falls back to the
   // suggestion rather than leaving a design number a piece short.
   if (hasCode(kind)) party.code = normalizeCode(code || "") || suggestCode(clean);
-  await writeDB(db, token);
+  await writeDB(db);
   return { ok: true };
 }
 
 export async function deleteParty(
   id: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const party = db.parties.find((p) => p.id === id);
   if (!party) return { ok: false, error: "Party not found." };
 
@@ -449,7 +411,7 @@ export async function deleteParty(
     }
   }
   db.parties = db.parties.filter((p) => !doomed.has(p.id));
-  await writeDB(db, token);
+  await writeDB(db);
   return { ok: true };
 }
 
@@ -459,8 +421,7 @@ export async function deleteParty(
 export async function resolveParty(
   name: string
 ): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
 
   // An empty list means the feature has not been set up yet; refusing every
   // memo until an admin adds a party would stop the business dead.
@@ -489,8 +450,7 @@ export type UnlistedName = {
 };
 
 export async function unlistedPartyNames(): Promise<UnlistedName[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const parties = db.parties.filter((p) => partyKindOf(p) === "party");
   const known = new Set(parties.map((p) => partyKey(p.name)));
   const listed = parties.map((p) => p.name);
@@ -521,8 +481,7 @@ export async function replacePartyOnMemos(
   const fromKey = partyKey(from);
   if (!fromKey) return { ok: false, error: "Nothing to replace." };
 
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const target = db.parties.find(
     (p) => partyKindOf(p) === "party" && partyKey(p.name) === partyKey(to)
   );
@@ -539,7 +498,7 @@ export async function replacePartyOnMemos(
     changed++;
   }
   if (!changed) return { ok: false, error: `No memos are under "${from}".` };
-  await writeDB(db, token);
+  await writeDB(db);
   return { ok: true, memos: changed };
 }
 
@@ -548,8 +507,7 @@ export async function replacePartyOnMemos(
 // ---------------------------------------------------------------------------
 
 export async function listOrders(): Promise<Order[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.orders
     .map((o) => ({ ...o, comments: o.comments || [] })) // orders saved before comments existed
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -562,15 +520,14 @@ export async function addOrderComment(
   text: string,
   by: string
 ): Promise<Order | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const i = db.orders.findIndex((o) => o.id === id);
   if (i === -1) return null;
 
   const comments = db.orders[i].comments || [];
   comments.push({ id: randomUUID(), text, at: new Date().toISOString(), by });
   db.orders[i] = { ...db.orders[i], comments };
-  await writeDB(db, token);
+  await writeDB(db);
   return db.orders[i];
 }
 
@@ -581,8 +538,7 @@ export async function createOrder(
   input: NewOrder,
   firstNote?: { text: string; by: string }
 ): Promise<Order> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
 
   const fy = fyFromInput(todayInput());
   const key = `O:${fy}`;
@@ -609,7 +565,7 @@ export async function createOrder(
     updatedAt: now,
   };
   db.orders.push(order);
-  await writeDB(db, token);
+  await writeDB(db);
   return order;
 }
 
@@ -617,8 +573,7 @@ export async function updateOrder(
   id: string,
   patch: Partial<NewOrder>
 ): Promise<Order | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const i = db.orders.findIndex((o) => o.id === id);
   if (i === -1) return null;
   db.orders[i] = {
@@ -629,30 +584,27 @@ export async function updateOrder(
     comments: db.orders[i].comments || [],
     updatedAt: new Date().toISOString(),
   };
-  await writeDB(db, token);
+  await writeDB(db);
   return db.orders[i];
 }
 
 export async function deleteOrder(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.orders.length;
   db.orders = db.orders.filter((o) => o.id !== id);
   if (db.orders.length === before) return false;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 export async function listEvents(): Promise<StockEvent[]> {
-  const token = requireToken();
-  return (await readDB(token)).events;
+  return (await readDB()).events;
 }
 
 export async function getMemoWithEvents(
   id: string
 ): Promise<{ memo: Memo; events: StockEvent[] } | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const memo = db.memos.find((m) => m.id === id);
   if (!memo) return null;
   return { memo, events: db.events.filter((e) => e.memoId === id) };
@@ -673,8 +625,7 @@ export async function recordStockEvents(
   entries: NewStockEvent[],
   by: string
 ): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const memo = db.memos.find((m) => m.id === memoId);
   if (!memo) return { ok: false, error: "Memo not found." };
 
@@ -702,7 +653,7 @@ export async function recordStockEvents(
     });
   }
 
-  await writeDB(db, token);
+  await writeDB(db);
   return { ok: true, added: entries.length };
 }
 
@@ -720,8 +671,7 @@ export type LedgerEntry = {
 // Everywhere a stock number has been: every memo it went out on, newest first,
 // with what became of it each time.
 export async function stockHistory(stockNo: string): Promise<LedgerEntry[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const wanted = stockNo.trim().toUpperCase();
   const out: LedgerEntry[] = [];
 
@@ -746,8 +696,7 @@ export async function stockHistory(stockNo: string): Promise<LedgerEntry[]> {
 export async function stockIndex(): Promise<
   { stockNo: string; type: string; memos: number; current: StockOutcome | null; lastMemoNo: string; lastDate: string }[]
 > {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const byStock = new Map<string, { type: string; memos: number; current: StockOutcome | null; lastMemoNo: string; lastDate: string }>();
 
   const chronological = [...db.memos].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -771,8 +720,7 @@ export async function stockIndex(): Promise<
 // Update an existing memo's details. The identity fields (id, memoNo, seq, fy,
 // createdAt) are preserved — a memo keeps its number even if the date changes.
 export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.memos.findIndex((m) => m.id === id);
   if (idx === -1) return null;
   const existing = db.memos[idx];
@@ -799,40 +747,36 @@ export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | nul
     driveLink: undefined,
   };
   db.memos[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
 // Record the Drive link after a successful upload.
 export async function setDriveLink(id: string, link: string): Promise<void> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const memo = db.memos.find((m) => m.id === id);
   if (!memo) return;
   memo.driveLink = link;
-  await writeDB(db, token);
+  await writeDB(db);
 }
 
 export async function deleteMemo(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.memos.length;
   db.memos = db.memos.filter((m) => m.id !== id);
   if (db.memos.length === before) return false;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 // Full database (counters + memos) for backup. Counters are included so a
 // restore preserves the serial-number sequence.
 export async function exportDb(): Promise<DB> {
-  const token = requireToken();
-  return readDB(token);
+  return readDB();
 }
 
 // Overwrite the entire database from a previously exported backup.
 export async function importDb(db: DB): Promise<void> {
-  const token = requireToken();
   const safe: DB = {
     counters: db && typeof db.counters === "object" && db.counters ? db.counters : {},
     memos: Array.isArray(db?.memos) ? db.memos : [],
@@ -844,5 +788,5 @@ export async function importDb(db: DB): Promise<void> {
     orders: Array.isArray(db?.orders) ? db.orders : [],
     parties: Array.isArray(db?.parties) ? db.parties : [],
   };
-  await writeDB(safe, token);
+  await writeDB(safe);
 }

@@ -44,9 +44,8 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
   { key: "memos", prefixes: ["/memo", "/api/memos"] },
   { key: "orders", prefixes: ["/orders", "/api/orders"] },
   { key: "stock", prefixes: ["/stock", "/api/stock", "/api/stock-sheet"] },
-  // Photo upload/serving exists for the PD sheet's design image.
   // Diamond demands are raised straight off a PD sheet, so they travel with it.
-  { key: "pd", prefixes: ["/pd", "/api/pd", "/api/upload", "/demand", "/api/demand", "/api/receipt-chase"] },
+  { key: "pd", prefixes: ["/pd", "/api/pd", "/demand", "/api/demand", "/api/receipt-chase"] },
   // The register reads PD sheets and demands to fill itself in, but it is the
   // accounts team's screen — they get this without getting the design module.
   { key: "jangad", prefixes: ["/jangad", "/api/jangad"] },
@@ -62,10 +61,6 @@ const PATH_RULES: { key: ModuleKey; prefixes: string[] }[] = [
 // read it, so it belongs to neither. Its own route requires a session, and
 // admin for anything that writes.
 //
-// /api/photo is out for the same reason. It only ever serves a design photo,
-// and the accounts desk reads the PD sheet of the design it is issuing against
-// (/jangad/pd/[id]) without having the design module. Uploading a photo is
-// still /api/upload, which stays with PD.
 //
 // The module a path belongs to, or null for shared things (the home page, auth,
 // admin screens) that aren't gated per feature.

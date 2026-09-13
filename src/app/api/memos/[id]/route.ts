@@ -12,8 +12,9 @@ function message(err: unknown): string {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -47,8 +48,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   try {
     const ok = await deleteMemo(params.id);
     if (!ok) return NextResponse.json({ error: "Memo not found." }, { status: 404 });

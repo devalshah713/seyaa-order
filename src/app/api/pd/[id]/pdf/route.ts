@@ -10,8 +10,9 @@ export const maxDuration = 60;
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await ctx.params;
   const sheet = await getPdSheet(params.id).catch(() => null);
   if (!sheet) return new Response("PD sheet not found", { status: 404 });
 

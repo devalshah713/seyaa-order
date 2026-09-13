@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // No "dom": the Worker is not a browser, and mixing the two libraries is
+    // exactly what made this a separate config.
+    "lib": ["esnext"],
+    "types": ["../worker-configuration"],
+    "noEmit": true
+  },
+  "include": ["./**/*.ts", "../worker-configuration.d.ts"],
+  "exclude": []
+}

@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!isBackupConfigured()) {
     return NextResponse.json(
-      { error: "Backup is not configured. Set BACKUP_TOKEN in Vercel." },
+      { error: "Backup is not configured. Set BACKUP_TOKEN." },
       { status: 501 }
     );
   }

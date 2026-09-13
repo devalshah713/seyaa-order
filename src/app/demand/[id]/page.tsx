@@ -6,13 +6,12 @@ import DemandActions from "./DemandActions";
 
 export const dynamic = "force-dynamic";
 
-export default async function DemandViewPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { pdf?: string };
+export default async function DemandViewPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pdf?: string }>;
 }) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const demand = await getDemand(params.id).catch(() => null);
   if (!demand) notFound();
 

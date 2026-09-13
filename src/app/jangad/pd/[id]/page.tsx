@@ -16,7 +16,8 @@ export const metadata = { title: "PD Sheet — Seyaa Solitaire" };
 // hands them the reading of it without handing them the module: there is no
 // Edit, no Delete, no pieces panel, and no way in but from the design they are
 // working on.
-export default async function JangadPdView({ params }: { params: { id: string } }) {
+export default async function JangadPdView(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const sheet = await getPdSheet(params.id).catch(() => null);
   if (!sheet) notFound();
 

@@ -141,7 +141,7 @@ export default function ReceiptChaseClient({
       {!webhookOn && (
         <p className="hint">
           The Grok Bot webhook isn&rsquo;t set up, so reminders are only shown here.
-          Set <code>GROK_DIAMOND_RECEIPT_WEBHOOK_URL</code> in Vercel to have them
+          Set <code>GROK_DIAMOND_RECEIPT_WEBHOOK_URL</code> to have them
           pushed to Grok as well.
         </p>
       )}

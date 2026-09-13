@@ -5,7 +5,8 @@ import MemoForm from "../../new/MemoForm";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Edit Memo — Seyaa Solitaire" };
 
-export default async function EditMemoPage({ params }: { params: { id: string } }) {
+export default async function EditMemoPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const memo = await getMemo(params.id).catch(() => null);
   if (!memo) notFound();
 

@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function GET(): Promise<Response> {
   if (!process.env.AUTH_SECRET) {
     return NextResponse.json(
-      { configured: false, needsSetup: false, error: "Set AUTH_SECRET in Vercel." },
+      { configured: false, needsSetup: false, error: "Set AUTH_SECRET." },
       { status: 501 }
     );
   }

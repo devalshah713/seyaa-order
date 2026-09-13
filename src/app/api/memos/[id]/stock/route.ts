@@ -13,8 +13,9 @@ const VALID = new Set<string>(STOCK_OUTCOMES.map((o) => o.value));
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   // Who recorded this is part of the trail, so a session is required — the
   // backup token is deliberately not accepted here.
   const session = await currentSession();

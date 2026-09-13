@@ -19,5 +19,9 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // The Workers runtime types redefine enough of the web platform — fetch,
+  // Response.json() and the rest — to contradict the browser types every page
+  // in this app is written against. They are kept to the Worker that needs
+  // them, which has its own tsconfig alongside it.
+  "exclude": ["node_modules", "cloudflare", "worker-configuration.d.ts"]
 }

@@ -12,11 +12,12 @@ export const maxDuration = 60;
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
+  const params = await ctx.params;
   if (!isDriveConfigured()) {
     return NextResponse.json(
-      { error: "Google Drive is not connected. Add the Google credentials in Vercel." },
+      { error: "Google Drive is not connected. Add the Google credentials." },
       { status: 501 }
     );
   }

@@ -10,8 +10,9 @@ export const maxDuration = 60;
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
+  const params = await ctx.params;
   const memo = await getMemo(params.id).catch(() => null);
   if (!memo) return new Response("Memo not found", { status: 404 });
 

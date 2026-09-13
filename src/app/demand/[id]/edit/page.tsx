@@ -5,7 +5,8 @@ import DemandForm from "../../new/DemandForm";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Edit Diamond Demand — Seyaa Solitaire" };
 
-export default async function EditDemandPage({ params }: { params: { id: string } }) {
+export default async function EditDemandPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const d = await getDemand(params.id).catch(() => null);
   if (!d) notFound();
 

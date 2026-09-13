@@ -20,11 +20,10 @@ import Logo from "@/components/Logo";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Order Board — Seyaa Solitaire" };
 
-export default async function BoardPage({
-  searchParams,
-}: {
-  searchParams: { part?: string };
+export default async function BoardPage(props: {
+  searchParams: Promise<{ part?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const all = await listOrders().catch(() => []);
   const everyOpen = all.filter((o) => OPEN_STATUSES.includes(o.status));
 

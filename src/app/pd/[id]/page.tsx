@@ -8,13 +8,12 @@ import PiecesPanel from "./PiecesPanel";
 
 export const dynamic = "force-dynamic";
 
-export default async function PdViewPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { pdf?: string };
+export default async function PdViewPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ pdf?: string }>;
 }) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const sheet = await getPdSheet(params.id).catch(() => null);
   if (!sheet) notFound();
 

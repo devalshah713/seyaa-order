@@ -31,7 +31,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     return page(
       "Google Drive connected",
       `<h2>✅ Almost done</h2>
-       <p>Copy this value and add it in Vercel as the environment variable
+       <p>Copy this value and add it as the environment variable
        <b>GOOGLE_REFRESH_TOKEN</b>, then redeploy:</p>
        <textarea readonly rows="4" style="width:100%;font-family:monospace;font-size:13px;padding:10px;border:1px solid #d9d3c5;border-radius:8px" onclick="this.select()">${refreshToken}</textarea>
        <p style="color:#6e6a5f;font-size:14px">Keep this secret. After adding it and redeploying, memos will auto-save to your Google Drive.</p>`

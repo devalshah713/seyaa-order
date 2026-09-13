@@ -1,7 +1,7 @@
-// Product Development (PD) sheet store — same private Vercel Blob pattern as
+// Product Development (PD) sheet store — same shared-storage pattern as
 // memoStore, in its own JSON document so the two modules stay independent.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
 import type { DiaLine } from "./pdConfig";
 import {
@@ -97,7 +97,7 @@ export type NewPdSheet = Omit<
 export type PdDB = { counters: Record<string, number>; sheets: PdSheet[] };
 
 export function isPdStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
 // Every PD field is free text by design (the form's combos accept new values),
@@ -141,43 +141,17 @@ function normalizeDiaLines(input: unknown): DiaLine[] {
     .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs);
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<PdDB> {
+  const db = await readDoc<Partial<PdDB>>(DB_PATH, {});
+  return { counters: db.counters || {}, sheets: db.sheets || [] };
 }
 
-async function readDB(token: string): Promise<PdDB> {
-  try {
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) {
-      return { counters: {}, sheets: [] };
-    }
-    const db = (await new Response(result.stream).json()) as Partial<PdDB>;
-    return { counters: db.counters || {}, sheets: db.sheets || [] };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return { counters: {}, sheets: [] };
-    throw err;
-  }
-}
-
-async function writeDB(db: PdDB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: PdDB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 export async function createPdSheet(input: NewPdSheet, by = ""): Promise<PdSheet> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
 
   const date = input.assignedDate || todayInput();
   const fy = fyFromInput(date);
@@ -198,7 +172,7 @@ export async function createPdSheet(input: NewPdSheet, by = ""): Promise<PdSheet
     updatedAt: now,
   };
   db.sheets.push(sheet);
-  await writeDB(db, token);
+  await writeDB(db);
   return sheet;
 }
 
@@ -210,8 +184,7 @@ function hydrate(sheet: PdSheet): PdSheet {
 }
 
 export async function listPdSheets(): Promise<PdSheet[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.sheets
     .slice()
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
@@ -219,8 +192,7 @@ export async function listPdSheets(): Promise<PdSheet[]> {
 }
 
 export async function getPdSheet(id: string): Promise<PdSheet | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const sheet = db.sheets.find((s) => s.id === id);
   return sheet ? hydrate(sheet) : null;
 }
@@ -229,8 +201,7 @@ export async function getPdSheet(id: string): Promise<PdSheet | null> {
 export async function updatePdSheet(
   id: string, patch: NewPdSheet, by = ""
 ): Promise<PdSheet | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return null;
   const updated: PdSheet = {
@@ -244,7 +215,7 @@ export async function updatePdSheet(
     updatedAt: new Date().toISOString(),
   };
   db.sheets[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
@@ -252,8 +223,7 @@ export async function updatePdSheet(
 // sheet. What comes in is treated as values to overlay, not as the list itself:
 // the list is still derived from the design number.
 export async function setPdPieces(id: string, incoming: PdPiece[]): Promise<PdSheet | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return null;
 
@@ -263,7 +233,7 @@ export async function setPdPieces(id: string, incoming: PdPiece[]): Promise<PdSh
     updatedAt: new Date().toISOString(),
   };
   db.sheets[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
@@ -276,8 +246,7 @@ export async function markPiecesInProduction(
   pieceNos: string[]
 ): Promise<PdSheet | null> {
   if (!pieceNos.length) return null;
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return null;
 
@@ -299,7 +268,7 @@ export async function markPiecesInProduction(
     updatedAt: new Date().toISOString(),
   };
   db.sheets[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
@@ -338,18 +307,16 @@ export async function findByDesignNo(query: string): Promise<DesignLookup[]> {
 }
 
 export async function deletePdSheet(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.sheets.length;
   db.sheets = db.sheets.filter((s) => s.id !== id);
   if (db.sheets.length === before) return false;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 export async function nextPdNo(dateInput: string): Promise<string> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const fy = fyFromInput(dateInput || todayInput());
   return `PD/${fy}/${pad((db.counters[fy] || 0) + 1)}`;
 }
@@ -364,8 +331,7 @@ export async function setPdPhoto(
   photoPath: string,
   photoPublicId: string
 ): Promise<PdSheet | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.sheets.findIndex((x) => x.id === id);
   if (idx === -1) return null;
   db.sheets[idx] = {
@@ -374,12 +340,11 @@ export async function setPdPhoto(
     photoPublicId,
     updatedAt: new Date().toISOString(),
   };
-  await writeDB(db, token);
+  await writeDB(db);
   return db.sheets[idx];
 }
 
 // For the nightly backup.
 export async function exportPdDb(): Promise<PdDB> {
-  const token = requireToken();
-  return readDB(token);
+  return readDB();
 }
