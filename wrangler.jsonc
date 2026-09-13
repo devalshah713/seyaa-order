@@ -1,0 +1,40 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "seyaa-order",
+	// cloudflare/worker.ts rather than the generated .open-next/worker.js: it
+	// wraps that one to add the scheduled handler the crons need.
+	"main": "cloudflare/worker.ts",
+	"compatibility_date": "2026-09-01",
+	// nodejs_compat is what makes node:crypto work, and the portal needs two
+	// things from it that nothing else can provide: scrypt, which every stored
+	// password was hashed with, and createSign, which signs the Google Sheets
+	// service-account token.
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	},
+	// Real Chrome, for the memo PDFs, the PD and demand sheets, the jangad issue
+	// slip and the order board image. Needs the Workers Paid plan.
+	"browser": {
+		"binding": "BROWSER"
+	},
+	// Cloudflare calls the Worker, not a URL, so these land in the scheduled
+	// handler in cloudflare/worker.ts — which maps each expression to its route.
+	// Keep the two in step: a schedule with no mapping runs nothing.
+	//
+	// Both are UTC. 30 18 is midnight IST; 35 2 is 08:05 IST, five past the hour
+	// deliberately — a run landing a minute before 08:00 would find every
+	// reminder held back by quiet hours and send nothing for the whole day.
+	// 1-6 is Monday to Saturday, because the office works Saturdays.
+	"triggers": {
+		"crons": ["30 18 * * *", "35 2 * * 1-6"]
+	}
+	// Nothing is configured here beyond the above. Every setting the portal
+	// reads — the four R2 keys, AUTH_SECRET, CRON_SECRET, BACKUP_TOKEN, the
+	// Google and Grok credentials — is a secret, set with `wrangler secret put`
+	// or in the dashboard, never in this file: it is in the repository.
+}

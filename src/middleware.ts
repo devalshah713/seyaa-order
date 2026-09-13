@@ -52,7 +52,7 @@ function backupReachablePath(pathname: string): boolean {
   );
 }
 
-// Vercel's scheduler runs the nightly Google Sheet copy. It has no session
+// The scheduler runs the nightly Google Sheet copy. It has no session
 // either; it proves itself with the CRON_SECRET the project is given, which
 // Vercel sends as a bearer token on the scheduled request.
 function cronOk(req: NextRequest): boolean {

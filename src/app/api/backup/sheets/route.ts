@@ -7,7 +7,7 @@ import { istStamp, syncEverythingToSheet } from "@/lib/sheetBackup";
 // Rewrites the whole Google Sheet — every module on its own tab.
 //
 // Three callers, all of them ending in the same work:
-//   * Vercel's scheduler, nightly, with the CRON_SECRET it is given;
+//   * the host's scheduler, nightly, with the CRON_SECRET it is given;
 //   * the office PC's midnight job, with the backup token it already uses;
 //   * an admin pressing Sync, with their session.
 //

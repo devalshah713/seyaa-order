@@ -11,7 +11,7 @@ import { runReceiptTick } from "@/lib/receiptChaseRun";
 //   * whatever pokes it on a schedule — the Google Apps Script attached to the
 //     backup sheet runs every five minutes, with the backup token it already
 //     has;
-//   * Vercel's own scheduler, once a day, as a floor under that;
+//   * the host's own scheduler, on its timetable, as a floor under that;
 //   * an admin pressing "Run the checks now" on the chase screen.
 //
 // It is deliberately reachable with the backup token: a scheduler has no

@@ -17,7 +17,7 @@ export async function POST(
   const params = await ctx.params;
   if (!isDriveConfigured()) {
     return NextResponse.json(
-      { error: "Google Drive is not connected. Add the Google credentials in Vercel." },
+      { error: "Google Drive is not connected. Add the Google credentials." },
       { status: 501 }
     );
   }

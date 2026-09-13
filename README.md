@@ -16,9 +16,30 @@ the office. Every memo is auto-numbered, saved, and searchable.
 
 ## Storage
 
-Memos persist in **Vercel Blob** (a single JSON database). Set the
-`BLOB_READ_WRITE_TOKEN` environment variable in Vercel (already configured for
-this project). Without it, the app runs but cannot save.
+Every module keeps one JSON document, all of them in a private **Cloudflare R2**
+bucket. Reading and writing goes through `src/lib/db.ts` and nowhere else.
+
+R2 rather than Vercel Blob because the website and the records used to be the
+same account: when a payment failed at Vercel the office lost not just the site
+but every PD sheet, demand, jangad entry and stock record, and the ability to
+sign in at all. They are now two companies.
+
+Four variables: `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`. R2 speaks the S3 protocol, so reaching it is a signed
+HTTPS request — the same code works on Vercel and on Workers.
+
+**During the move both stores are configured at once.** R2 is the record;
+anything R2 has not got yet is read from Blob; every save is written to both. So
+the order does not matter — deploying before the copy has run, or copying before
+the variables are set, both work. Removing `BLOB_READ_WRITE_TOKEN` is what ends
+it. **Backups → Moving to Cloudflare** says what is in which store and copies
+the rest across.
+
+One rule holds the whole thing up: **"not there" is an answer and anything else
+is not.** Every screen does read, change, write, so a store that cannot be
+reached must never read as an empty module — it would put a blank document back
+over a full one the moment somebody saved. Only a clean "no such document" reads
+as empty; unreachable, refusing or suspended is an error the page shows.
 
 ## Design photos
 
@@ -42,8 +63,7 @@ every screen still goes through one place if photos ever move again.
 The photos that predated this lived in Vercel Blob, were uploaded through
 `/api/upload` and served back through `/api/photo`. All of them were moved
 across in one pass and those two routes, and the one-off migration behind them,
-have been deleted. The databases (`pd/db.json` and the rest) stay on Blob and
-were never part of this.
+have been deleted. The databases moved separately and later — see **Storage**.
 
 ## Backups
 
@@ -122,25 +142,33 @@ errs late rather than early, which is the safe direction — it never breaks the
 pressing it is obeyed whatever the day or hour, including a Sunday. A scheduler
 never is.
 
-**On Hobby a cron may only run once a day, and asking for more does not fail
-loudly — the deployment is simply never created, with no error anywhere.**
-Measured on this project while it was on Hobby: `*/5 * * * *` and `0 * * * *`
-each produced no deployment at all, while the same commit with a daily schedule
-deployed in two seconds. If deployments ever stop appearing for no visible
-reason, look here first. The current weekday schedule is one run a day, so it is
-within the Hobby limit.
+**Cloudflare has no daily cron limit**, so the once-a-day cadence is now an
+office decision rather than a plan limit. Running more often means changing two
+things together: the schedule in `wrangler.jsonc` *and* its entry in the
+`SCHEDULE` map in `cloudflare/worker.ts` — a schedule with no mapping runs
+nothing and says so in the log. `RECEIPT_CHASE_REPEAT_HOURS` then wants
+lowering to match, or the screen promises a reminder no run exists to send.
+
+Worth keeping for the record, from when this was on Vercel: **on Hobby a cron
+may only run once a day, and asking for more does not fail loudly — the
+deployment is simply never created, with no error anywhere.** Measured on this
+project: `*/5 * * * *` and `0 * * * *` each produced no deployment at all, while
+the same commit with a daily schedule deployed in two seconds.
 
 An admin can run it by hand at any time from **Run the checks now** on the
 screen.
 
-Environment variables, all set in Vercel:
+Environment variables — on Cloudflare these are Worker **secrets**
+(`wrangler secret put NAME`), never entries in `wrangler.jsonc`, which is in the
+repository:
 
 | Variable | What it is for |
 | --- | --- |
-| `BLOB_READ_WRITE_TOKEN` | the storage every module reads and writes |
+| `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | the storage every module reads and writes |
+| `BLOB_READ_WRITE_TOKEN` | the old Vercel store; set only while the move is in progress, then removed |
 | `AUTH_SECRET` | signs the session cookie |
 | `BACKUP_TOKEN` | lets the office PC download without a login, and lets the Apps Script run the receipt chase |
-| `CRON_SECRET` | lets Vercel's scheduler call the nightly sheet copy and the receipt chase |
+| `CRON_SECRET` | lets the scheduler call the nightly sheet copy and the receipt chase |
 | `GROK_DIAMOND_RECEIPT_WEBHOOK_URL` | where reminders are posted for Deval to see in Grok |
 | `GROK_DIAMOND_RECEIPT_WEBHOOK_AUTH` | the Authorization header value from the Grok routine panel, sent verbatim |
 | `RECEIPT_CHASE_FIRST_HOURS` | optional; hours before the first reminder, 24 by default |
@@ -158,3 +186,49 @@ npm run dev
 ```
 
 Open http://localhost:3000.
+
+## Running on Cloudflare
+
+The app is a Next.js app deployed to **Cloudflare Workers** through
+`@opennextjs/cloudflare`. Three things are worth knowing before touching it.
+
+**Next.js 15 or newer is not optional.** The adapter requires `>=15.5.24`; it
+dropped 14 support, which is why the framework was upgraded before any of this
+could start.
+
+**`nodejs_compat` is load-bearing.** Two things depend on it and nothing else
+can provide them: `scrypt`, which every stored password was hashed with, and
+`createSign`, which signs the Google Sheets service-account token. Remove the
+flag and nobody can log in.
+
+**PDFs need the Workers Paid plan.** Memo PDFs, PD sheets, demand sheets, the
+jangad issue slip and the order-board PNG all render real Chrome against the
+app's own pages. On a Worker there is no filesystem and nothing to launch, so
+they go through Cloudflare's Browser Rendering and the `BROWSER` binding —
+included on the $5/month plan, unavailable on the free one. `src/lib/memoPdf.ts`
+picks the browser at run time and still works on Vercel and on a developer's
+machine.
+
+```bash
+npm run cf:types     # regenerate worker-configuration.d.ts after editing wrangler.jsonc
+npm run cf:preview   # build and run the Worker locally
+npm run cf:deploy    # build and put it live
+```
+
+Cloudflare calls the Worker on a schedule, not a URL, so the crons land in the
+`scheduled` handler in `cloudflare/worker.ts`, which maps each cron expression
+to the route it presses and authenticates with `CRON_SECRET` exactly as an
+outside caller would. There is no second way in. To try one locally:
+
+```bash
+curl "http://localhost:8787/cdn-cgi/local/scheduled?cron=35+2+*+*+1-6"
+```
+
+The Workers runtime types contradict the browser types every page is written
+against, so they are kept to `cloudflare/`, which has its own `tsconfig.json`.
+Typecheck both:
+
+```bash
+npx tsc --noEmit
+npx tsc --noEmit -p cloudflare/tsconfig.json
+```

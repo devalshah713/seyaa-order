@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return NextResponse.json(
-      { error: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first." },
+      { error: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first." },
       { status: 501 }
     );
   }
