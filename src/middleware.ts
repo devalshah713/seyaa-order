@@ -5,7 +5,7 @@
 //   * /login and its APIs — otherwise there is no way to sign in.
 //   * a correct x-backup-token — the nightly Windows backup is a machine with
 //     no browser and no session, so it authenticates with the backup secret
-//     instead. That covers /api/backup and the per-memo PDF downloads.
+//     instead. That covers /api/backup.
 import { NextRequest, NextResponse } from "next/server";
 import {
   SESSION_COOKIE,
@@ -41,13 +41,8 @@ function backupTokenOk(req: NextRequest): boolean {
 function backupReachablePath(pathname: string): boolean {
   return (
     pathname.startsWith("/api/backup") ||
-    /^\/api\/memos\/[^/]+\/pdf$/.test(pathname) ||
-    /^\/api\/pd\/[^/]+\/pdf$/.test(pathname) ||
-    /^\/api\/demand\/[^/]+\/pdf$/.test(pathname) ||
-    // The nightly job saves a dated copy of the order board image.
-    pathname === "/api/orders/image" ||
-    // Whatever pokes the diamond-receipt chase every few minutes is a machine
-    // too. The route checks the token again for itself.
+    // Whatever pokes the diamond-receipt chase is a machine too. The route
+    // checks the token again for itself.
     pathname === "/api/receipt-chase/tick"
   );
 }

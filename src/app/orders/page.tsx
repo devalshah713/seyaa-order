@@ -22,11 +22,22 @@ export default async function OrdersPage() {
       <div className="page-head">
         <h1>Orders</h1>
         <p>{open} open · {orders.length} total</p>
-        {/* One button per image. A long board is split so each part stays
-            legible once WhatsApp scales it down. */}
+        {/* The portal used to photograph the board with a browser on the
+            server and hand back a PNG to forward. That browser is a paid
+            add-on on Cloudflare and this was the only thing using it, so the
+            board is now just a page: open it and screenshot it.
+
+            Still one link per part, because a long board is split so each part
+            stays legible once WhatsApp scales it down. */}
         {Array.from({ length: parts }, (_, i) => (
-          <a key={i} href={`/api/orders/image?part=${i + 1}`} className="btn btn-primary">
-            {parts === 1 ? "Download status image" : `Image ${i + 1} of ${parts}`}
+          <a
+            key={i}
+            href={`/orders/board?part=${i + 1}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+          >
+            {parts === 1 ? "Status board" : `Board ${i + 1} of ${parts}`}
           </a>
         ))}
       </div>

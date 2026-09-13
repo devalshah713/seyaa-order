@@ -2,6 +2,7 @@ import Link from "next/link";
 import JangadSlipView from "@/components/JangadSlipView";
 import { getJangadRows } from "@/lib/jangadStore";
 import type { JangadRow } from "@/lib/jangadConfig";
+import AutoPrint from "@/app/AutoPrint";
 import PrintActions from "./PrintActions";
 
 export const metadata = { title: "Diamond Issue Slip — Seyaa Solitaire" };
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 // ?ids=JG-00001,JG-00002 — the entries picked in the register.
 export default async function JangadPrintPage(props: {
-  searchParams: Promise<{ ids?: string; pdf?: string }>;
+  searchParams: Promise<{ ids?: string; pdf?: string; print?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const ids = (searchParams.ids || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -23,8 +24,10 @@ export default async function JangadPrintPage(props: {
     }
   }
 
-  // ?pdf=1 is the render target for the PDF generator — no action bar.
+  // ?pdf=1 hides the action bar, so what is printed is the slip and nothing
+  // else. ?print=1 opens the print dialog on arrival.
   const forPdf = searchParams.pdf === "1";
+  const autoPrint = searchParams.print === "1";
 
   if (error || !rows.length) {
     return (
@@ -42,11 +45,12 @@ export default async function JangadPrintPage(props: {
 
   return (
     <>
+      {autoPrint && <AutoPrint />}
       {!forPdf && (
         <div className="wrap no-print" style={{ paddingBottom: 0 }}>
           <div className="page-head">
             <Link href="/jangad" className="btn">← Register</Link>
-            <PrintActions ids={ids.join(",")} />
+            <PrintActions />
           </div>
         </div>
       )}

@@ -70,7 +70,6 @@ export type Memo = {
   totalFineWt: number;
   createdAt: string; // ISO
   updatedAt?: string; // ISO — set on create and every edit; drives incremental backup
-  driveLink?: string; // Google Drive webViewLink, once uploaded
 };
 
 export type NewMemo = Omit<
@@ -743,21 +742,10 @@ export async function updateMemo(id: string, patch: NewMemo): Promise<Memo | nul
     totalGrossWt: sumBy(goldItems, (r) => r.grossWt),
     totalFineWt: sumBy(goldItems, (r) => r.fineWt),
     updatedAt: new Date().toISOString(),
-    // Content changed — drop the stale Drive link so the memo re-uploads fresh.
-    driveLink: undefined,
   };
   db.memos[idx] = updated;
   await writeDB(db);
   return updated;
-}
-
-// Record the Drive link after a successful upload.
-export async function setDriveLink(id: string, link: string): Promise<void> {
-  const db = await readDB();
-  const memo = db.memos.find((m) => m.id === id);
-  if (!memo) return;
-  memo.driveLink = link;
-  await writeDB(db);
 }
 
 export async function deleteMemo(id: string): Promise<boolean> {

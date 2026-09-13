@@ -17,8 +17,8 @@ $Root = "C:\SeyaaBackups"
 $ErrorActionPreference = "Stop"
 $today   = Get-Date -Format "yyyy-MM-dd"
 $dataDir = Join-Path $Root "data\$today"
-$pdfDir  = Join-Path $Root "PDFs"
-$orderDir = Join-Path $Root "OrderBoards"
+# The PDFs and OrderBoards folders are no longer written to (see step 3), but
+# whatever they already hold is left exactly where it is.
 $logFile = Join-Path $Root "backup.log"
 $headers = @{ "x-backup-token" = $Token }
 
@@ -29,7 +29,7 @@ function Log($msg) {
 }
 
 try {
-  New-Item -ItemType Directory -Force -Path $Root, $dataDir, $pdfDir, $orderDir | Out-Null
+  New-Item -ItemType Directory -Force -Path $Root, $dataDir | Out-Null
 
   # 1) Restorable data file
   Invoke-WebRequest -Uri "$BaseUrl/api/backup?format=json" -Headers $headers `
@@ -69,45 +69,21 @@ try {
     Log ("Google Sheet skipped: " + $_.Exception.Message)
   }
 
-  # 3) PDFs — only new or edited memos (incremental)
-  $data = Get-Content (Join-Path $dataDir "data.json") -Raw | ConvertFrom-Json
-  $new = 0; $skip = 0
-  foreach ($m in $data.memos) {
-    $safe = ($m.memoNo -replace '[\\/:*?"<>|]', '_') + ".pdf"
-    $file = Join-Path $pdfDir $safe
-    $need = -not (Test-Path $file)
-    if (-not $need -and $m.updatedAt) {
-      # Both sides in local (IST) time. [datetime] on a "...Z" string already
-      # returns local, so the file side must be LastWriteTime -- not
-      # LastWriteTimeUtc, which drifts by +5:30 and re-fetches unchanged PDFs.
-      if ([datetime]$m.updatedAt -gt (Get-Item $file).LastWriteTime) { $need = $true }
-    }
-    if ($need) {
-      # The PDF route sits behind the login gate too, so send the same token.
-      Invoke-WebRequest -Uri "$BaseUrl/api/memos/$($m.id)/pdf" -Headers $headers `
-        -OutFile $file -UseBasicParsing
-      $new++
-    } else { $skip++ }
-  }
-  Log ("PDFs: {0} downloaded, {1} up-to-date." -f $new, $skip)
-
-  # 4) Order status board as dated PNGs, ready to share on WhatsApp. A long
-  #    board is split into parts; the first response reports how many there
-  #    are, so fetch that then collect the rest.
-  #    Non-fatal: a failure here must not lose the data backup above.
-  try {
-    $first = Invoke-WebRequest -Uri "$BaseUrl/api/orders/image?part=1" -Headers $headers `
-      -OutFile (Join-Path $orderDir "orders-$today-1.png") -UseBasicParsing -PassThru
-    $parts = 1
-    if ($first.Headers['x-total-parts']) { $parts = [int]$first.Headers['x-total-parts'] }
-    for ($p = 2; $p -le $parts; $p++) {
-      Invoke-WebRequest -Uri "$BaseUrl/api/orders/image?part=$p" -Headers $headers `
-        -OutFile (Join-Path $orderDir "orders-$today-$p.png") -UseBasicParsing
-    }
-    Log ("Saved order board: {0} image(s)." -f $parts)
-  } catch {
-    Log ("Order image skipped: " + $_.Exception.Message)
-  }
+  # 3) PDFs and the order board image — PAUSED.
+  #
+  #    Both were produced by a browser running on the server, which is a paid
+  #    add-on on the portal's new host and was the only thing needing one. The
+  #    memo PDF and the order board are now printed and screenshotted from a
+  #    real browser instead, so there is nothing here to download.
+  #
+  #    What is NOT affected: data.json above, which is the restorable backup and
+  #    contains every memo in full. A PDF can be reprinted from the portal at
+  #    any time; the records are what could not be recreated.
+  #
+  #    To bring the PDF archive back, the portal needs a way to render one
+  #    without a browser on the server. Deleted rather than left half-running so
+  #    that this file never reports a backup it did not take.
+  Log "PDF archive and order board image: paused (see the note in this script)."
 
   Log "Backup complete."
 }

@@ -140,7 +140,13 @@ export default function PdHistoryTable({ sheets }: { sheets: PdSheet[] }) {
                   )}
                 </td>
                 <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                  <a href={`/api/pd/${s.id}/pdf`} className="rowbtn" title="Download PDF">PDF</a>
+                  <a
+                    href={`/pd/${s.id}?pdf=1&print=1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rowbtn"
+                    title="Open the sheet and print it"
+                  >Print</a>
                   <Link href={`/pd/${s.id}/edit`} className="rowbtn">Edit</Link>
                   <button className="rowbtn danger" onClick={() => del(s)} disabled={busyId === s.id}>
                     {busyId === s.id ? "Deleting…" : "Delete"}
