@@ -27,9 +27,23 @@
 	// 1-6 is Monday to Saturday, because the office works Saturdays.
 	"triggers": {
 		"crons": ["30 18 * * *", "35 2 * * 1-6"]
+	},
+	// These two have to live here rather than in the dashboard.
+	//
+	// A deploy REMOVES any plain-text variable that this file does not declare —
+	// secrets survive, plain variables do not, because the config is the source
+	// of truth for them. Added in the dashboard, they disappeared on the next
+	// build from GitHub, and the portal reported storage unconfigured with all
+	// four settings visibly present a moment earlier.
+	//
+	// Neither is a secret: the account id is in every dashboard URL, and a
+	// bucket name opens nothing without the key. The two that do matter —
+	// R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY — are secrets, set in the
+	// dashboard or with `wrangler secret put`, and never in this file, which is
+	// in the repository. Same for AUTH_SECRET, CRON_SECRET, BACKUP_TOKEN and the
+	// Grok credentials.
+	"vars": {
+		"R2_ACCOUNT_ID": "e1743308256647a78cb93c3accd6032e",
+		"R2_BUCKET": "seyaa-data"
 	}
-	// Nothing is configured here beyond the above. Every setting the portal
-	// reads — the four R2 keys, AUTH_SECRET, CRON_SECRET, BACKUP_TOKEN, the
-	// Google and Grok credentials — is a secret, set with `wrangler secret put`
-	// or in the dashboard, never in this file: it is in the repository.
 }
