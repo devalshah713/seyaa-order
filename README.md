@@ -237,6 +237,14 @@ flag and nobody can log in.
 **Nothing here needs a paid plan.** The portal runs inside the Workers free
 tier, including the cron triggers.
 
+**A deploy removes plain-text variables the config does not declare.** Secrets
+survive a deploy; plain variables are wiped, because `wrangler.jsonc` is the
+source of truth for them. So `R2_ACCOUNT_ID` and `R2_BUCKET` live in that file,
+not in the dashboard — added in the dashboard they vanish on the next build,
+and the portal reports storage unconfigured with all four settings visibly
+present a moment earlier. Anything genuinely secret stays a secret and stays
+out of the file.
+
 ```bash
 npm run cf:types     # regenerate worker-configuration.d.ts after editing wrangler.jsonc
 npm run cf:preview   # build and run the Worker locally
