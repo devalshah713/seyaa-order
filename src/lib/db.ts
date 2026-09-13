@@ -54,11 +54,30 @@ export function isDbConfigured(): boolean {
   return hasR2() || hasBlob();
 }
 
-// What is missing, said plainly, so a half-finished setup is diagnosable from
-// the screen rather than from a stack trace.
+// Which settings are missing, by name, so a half-finished setup is diagnosable
+// from the screen rather than by elimination.
+//
+// Naming only the ones actually absent matters more than it looks: the usual
+// failure is one misspelled name out of four, and a message that lists all four
+// every time sends you round the loop re-checking the three that were right.
 export function dbSetupHint(): string {
   if (isDbConfigured()) return "";
-  return "Storage is not configured. Set R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY, then redeploy.";
+
+  const missing = ([
+    ["R2_ACCOUNT_ID", accountId()],
+    ["R2_BUCKET", bucket()],
+    ["R2_ACCESS_KEY_ID", accessKeyId()],
+    ["R2_SECRET_ACCESS_KEY", secretAccessKey()],
+  ] as const).filter(([, value]) => !value).map(([name]) => name);
+
+  const list =
+    missing.length > 1
+      ? `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`
+      : missing[0];
+
+  return missing.length === 4
+    ? `Storage is not configured. Set ${list}, then redeploy.`
+    : `Storage is not configured: ${list} ${missing.length > 1 ? "are" : "is"} missing. Check the spelling against the list in the README — a misspelled name reads as absent. Then redeploy.`;
 }
 
 // --- The R2 connection --------------------------------------------------------
