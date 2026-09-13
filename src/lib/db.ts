@@ -101,6 +101,28 @@ function objectUrl(path: string): string {
   return `https://${accountId()}.r2.cloudflarestorage.com/${bucket()}/${path}`;
 }
 
+// How a document is handed to R2 for writing.
+//
+// R2 will not accept a PUT that does not say how long it is: a request sent
+// with chunked encoding comes back 411 "Length Required". Most runtimes work
+// that out from a string body, but not all of them do, and the ones that get it
+// wrong only do so on the larger documents — so the small modules save and the
+// busy ones fail, which reads like anything but a missing header.
+//
+// Encoding to bytes and stating the length leaves nothing to work out.
+export function putBody(body: string): { body: BodyInit; headers: Record<string, string> } {
+  const bytes = new TextEncoder().encode(body);
+  return {
+    // A Uint8Array is a perfectly good request body; the cast is only to settle
+    // a disagreement between TypeScript's DOM types about its buffer type.
+    body: bytes as unknown as BodyInit,
+    headers: {
+      "content-type": "application/json",
+      "content-length": String(bytes.byteLength),
+    },
+  };
+}
+
 // --- Reading and writing ------------------------------------------------------
 
 // Read one document.
@@ -139,11 +161,7 @@ export async function writeDoc(path: string, value: unknown): Promise<void> {
   const body = JSON.stringify(value);
 
   if (hasR2()) {
-    const res = await aws().fetch(objectUrl(path), {
-      method: "PUT",
-      body,
-      headers: { "content-type": "application/json" },
-    });
+    const res = await aws().fetch(objectUrl(path), { method: "PUT", ...putBody(body) });
     if (!res.ok) throw new Error(`Could not save ${path} to storage (${res.status}).`);
     // R2 holds the record now, so a failed mirror costs the rollback copy its
     // last change — worth strictly less than refusing the save.

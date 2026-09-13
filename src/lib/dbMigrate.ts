@@ -15,7 +15,7 @@
 import "server-only";
 import { get, BlobNotFoundError } from "@vercel/blob";
 import { AwsClient } from "aws4fetch";
-import { docExists, hasBlob, hasR2 } from "./db";
+import { docExists, hasBlob, hasR2, putBody } from "./db";
 
 // Every document the portal keeps, in the order a person would check them.
 export const DOCUMENTS = [
@@ -135,12 +135,14 @@ export async function migrateToR2(overwrite = false): Promise<MigrationReport> {
         continue;
       }
 
-      const res = await client.fetch(objectUrl(doc.path), {
-        method: "PUT",
-        body: text,
-        headers: { "content-type": "application/json" },
-      });
-      if (!res.ok) throw new Error(`R2 refused the write (${res.status}).`);
+      const res = await client.fetch(objectUrl(doc.path), { method: "PUT", ...putBody(text) });
+      if (!res.ok) {
+        throw new Error(
+          res.status === 411
+            ? "R2 refused the write (411) — the request did not state its length."
+            : `R2 refused the write (${res.status}).`
+        );
+      }
 
       result.did = "copied";
       result.bytes = new TextEncoder().encode(text).length;
