@@ -1,6 +1,6 @@
-// Stock book store — same private Vercel Blob pattern as the other modules.
+// Stock book store — same shared-storage pattern as the other modules.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import {
   BLANK_LINE, hasContent, suggestCode,
   type NewStockEntry, type StockEntry, type StockLine,
@@ -16,39 +16,16 @@ const DB_PATH = "stockbook/db.json";
 export type StockBookDB = { entries: StockEntry[]; seq: number };
 
 export function isStockBookConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<StockBookDB> {
+  const db = await readDoc<Partial<StockBookDB>>(DB_PATH, {});
+  return { entries: db.entries || [], seq: db.seq || 0 };
 }
 
-async function readDB(token: string): Promise<StockBookDB> {
-  try {
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return { entries: [], seq: 0 };
-    const db = (await new Response(result.stream).json()) as Partial<StockBookDB>;
-    return { entries: db.entries || [], seq: db.seq || 0 };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return { entries: [], seq: 0 };
-    throw err;
-  }
-}
-
-async function writeDB(db: StockBookDB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: StockBookDB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -97,8 +74,7 @@ const strList = (v: unknown): string[] | undefined =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined;
 
 export async function listStockEntries(): Promise<StockEntry[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.entries.slice().sort((a, b) =>
     a.createdAt === b.createdAt
       ? a.stockNo.localeCompare(b.stockNo, undefined, { numeric: true })
@@ -107,8 +83,7 @@ export async function listStockEntries(): Promise<StockEntry[]> {
 }
 
 export async function getStockEntry(id: string): Promise<StockEntry | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.entries.find((e) => e.id === id) || null;
 }
 
@@ -119,15 +94,15 @@ export function stockNoFor(seq: number): string {
 }
 
 export async function nextStockNo(): Promise<string> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return stockNoFor(1);
-  const db = await readDB(token);
+  // The new-entry form asks for this before anything is saved, so an
+  // unconfigured portal shows S0001 rather than an error on a blank form.
+  if (!isDbConfigured()) return stockNoFor(1);
+  const db = await readDB();
   return stockNoFor(db.seq + 1);
 }
 
 export async function createStockEntry(input: NewStockEntry): Promise<StockEntry> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   db.seq += 1;
   const now = new Date().toISOString();
   const entry: StockEntry = {
@@ -140,7 +115,7 @@ export async function createStockEntry(input: NewStockEntry): Promise<StockEntry
     updatedAt: now,
   };
   db.entries.push(entry);
-  await writeDB(db, token);
+  await writeDB(db);
 
   // The jangad register asks for a Stock Code on every line of the piece; this
   // is where that code comes from, so it is written back rather than copied
@@ -155,8 +130,7 @@ export async function updateStockEntry(
   id: string,
   patch: NewStockEntry
 ): Promise<StockEntry | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.entries.findIndex((e) => e.id === id);
   if (idx === -1) return null;
   const before = db.entries[idx];
@@ -176,17 +150,16 @@ export async function updateStockEntry(
     updatedAt: new Date().toISOString(),
   };
   db.entries[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
 export async function deleteStockEntry(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const gone = db.entries.find((e) => e.id === id);
   if (!gone) return false;
   db.entries = db.entries.filter((e) => e.id !== id);
-  await writeDB(db, token);
+  await writeDB(db);
 
   // The Stock Code stamped on the jangad lines is what keeps the piece from
   // being offered again, so removing the entry has to take the stamp off with
@@ -198,8 +171,7 @@ export async function deleteStockEntry(id: string): Promise<boolean> {
 }
 
 export async function exportStockBookDb(): Promise<StockBookDB> {
-  const token = requireToken();
-  return readDB(token);
+  return readDB();
 }
 
 // --- Taking a piece in from the jangad register ------------------------------

@@ -7,23 +7,40 @@ import { useEffect, useState } from "react";
 
 type TabResult = { tab: string; rows: number; error?: string };
 
+type DocResult = {
+  path: string;
+  label: string;
+  did: "copied" | "already there" | "nothing to copy" | "failed";
+  bytes: number;
+  note: string;
+};
+
 export default function BackupClient({
   sheetConfigured,
   sheetHint,
   sheetUrl,
   registerTab,
   pcConfigured,
+  r2Configured,
+  blobStillSet,
+  migrationHint,
 }: {
   sheetConfigured: boolean;
   sheetHint: string;
   sheetUrl: string;
   registerTab: string;
   pcConfigured: boolean;
+  r2Configured: boolean;
+  blobStillSet: boolean;
+  migrationHint: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [tabs, setTabs] = useState<TabResult[] | null>(null);
   const [at, setAt] = useState("");
   const [error, setError] = useState("");
+  const [docs, setDocs] = useState<DocResult[] | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [moveError, setMoveError] = useState("");
   // Filled in after the page loads, so the address shown is the one this
   // portal is actually being used on.
   const [origin, setOrigin] = useState("");
@@ -42,6 +59,35 @@ export default function BackupClient({
       setError(err instanceof Error ? err.message : "Could not write the sheet.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Look, but touch nothing — what each store holds right now.
+  async function checkStores() {
+    setMoving(true); setMoveError(""); setDocs(null);
+    try {
+      const res = await fetch("/api/admin/migrate-storage");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setDocs(d.documents || []);
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  async function copyToR2() {
+    setMoving(true); setMoveError(""); setDocs(null);
+    try {
+      const res = await fetch("/api/admin/migrate-storage", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setDocs(d.documents || []);
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : "The copy failed.");
+    } finally {
+      setMoving(false);
     }
   }
 
@@ -138,8 +184,8 @@ export default function BackupClient({
       <div className="bk-card">
         <h2>Where the data itself lives</h2>
         <p className="bk-lede">
-          Private storage attached to this Vercel project — reachable only with
-          the project&rsquo;s own key, never public. One file per module:
+          A private Cloudflare R2 bucket — reachable only with this
+          portal&rsquo;s own key, never public. One file per module:
         </p>
         <ul className="bk-list">
           <li><b>pd/db.json</b> — PD sheets</li>
@@ -149,11 +195,65 @@ export default function BackupClient({
           <li><b>qc/db.json</b> — QC records</li>
           <li><b>memos/db.json</b> — memos, orders and every controlled list</li>
           <li><b>prices/db.json</b> — the gold and diamond rates stock is valued at</li>
+          <li><b>users/users.json</b> — who can sign in, and to what</li>
+          <li><b>receipt-chase/db.json</b> — diamond demands still being chased</li>
         </ul>
         <p className="bk-lede">
           Each file carries its own running number, which is what keeps
           PD/26-27/007, QC-00001 and the stock numbers counting on correctly.
         </p>
+        <p className="bk-lede">
+          It is deliberately not the same company that hosts the site. A billing
+          problem at one of them now costs a deployment rather than the records.
+        </p>
+      </div>
+
+      <div className="bk-card">
+        <h2>Moving to Cloudflare</h2>
+        {migrationHint ? (
+          <p className={r2Configured ? "bk-lede" : "party-warn"}>{migrationHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The records are being moved out of the old Vercel store into R2.
+            Until <b>BLOB_READ_WRITE_TOKEN</b> is removed, the old store is kept
+            current too — every save goes to both — so the move can be abandoned
+            at any point by unsetting the four <b>R2_*</b> variables.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> reads both stores and says what is where, without changing
+          anything. <b>Copy everything across</b> copies each document that R2
+          has not got yet. Neither one deletes anything, and both are safe to run
+          more than once.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkStores} disabled={moving}>
+            {moving ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyToR2}
+            disabled={moving || !r2Configured || !blobStillSet}
+          >
+            Copy everything across
+          </button>
+        </div>
+        {moveError && <p className="party-warn">{moveError}</p>}
+        {docs && (
+          <table className="bk-table">
+            <thead>
+              <tr><th>Document</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+              {docs.map((d) => (
+                <tr key={d.path}>
+                  <td>{d.label}<br /><small>{d.path}</small></td>
+                  <td className={d.did === "failed" ? "bk-bad" : "bk-ok"}>{d.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   );

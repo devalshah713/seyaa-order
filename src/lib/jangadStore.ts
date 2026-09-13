@@ -1,4 +1,4 @@
-// Diamond jangad register store — same private Vercel Blob pattern as the
+// Diamond jangad register store — same shared-storage pattern as the
 // other modules, in its own JSON document.
 //
 // Unlike memos or PD sheets this is not a document with a number: it is a
@@ -6,7 +6,7 @@
 // workbook. Rows are added in batches when diamonds are issued, then filled in
 // over the following weeks as jewellery and stones come back.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import {
   BLANK_JANGAD, JANGAD_FIELDS, suggestedPieces,
   type JangadField, type JangadRow,
@@ -23,39 +23,16 @@ const DB_PATH = "jangad/db.json";
 export type JangadDB = { rows: JangadRow[]; seq: number };
 
 export function isJangadStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<JangadDB> {
+  const db = await readDoc<Partial<JangadDB>>(DB_PATH, {});
+  return { rows: db.rows || [], seq: db.seq || 0 };
 }
 
-async function readDB(token: string): Promise<JangadDB> {
-  try {
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return { rows: [], seq: 0 };
-    const db = (await new Response(result.stream).json()) as Partial<JangadDB>;
-    return { rows: db.rows || [], seq: db.seq || 0 };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return { rows: [], seq: 0 };
-    throw err;
-  }
-}
-
-async function writeDB(db: JangadDB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: JangadDB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 // Every column is free text — the workbook's own columns are — so normalising
@@ -75,8 +52,7 @@ function isEmptyRow(r: Record<JangadField, string>): boolean {
 }
 
 export async function listJangad(): Promise<JangadRow[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   // Newest batch first, but a batch keeps the order it was entered in so the
   // pieces of one design stay together and in number order.
   return db.rows.slice().sort((a, b) => (a.createdAt === b.createdAt
@@ -87,15 +63,13 @@ export async function listJangad(): Promise<JangadRow[]> {
 // The rows behind a print, in the order they were asked for — the slip should
 // read in the order the register showed, not in storage order.
 export async function getJangadRows(ids: string[]): Promise<JangadRow[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const byId = new Map(db.rows.map((r) => [r.id, r]));
   return ids.map((id) => byId.get(id)).filter((r): r is JangadRow => !!r);
 }
 
 export async function getJangadRow(id: string): Promise<JangadRow | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.rows.find((r) => r.id === id) || null;
 }
 
@@ -113,8 +87,7 @@ export async function addJangadRows(
   rows: Record<JangadField, string>[],
   link: JangadLink = {}
 ): Promise<JangadRow[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const now = new Date().toISOString();
 
   const added: JangadRow[] = [];
@@ -135,7 +108,7 @@ export async function addJangadRows(
   if (!added.length) return [];
 
   db.rows.push(...added);
-  await writeDB(db, token);
+  await writeDB(db);
 
   // Diamonds with the factory means the piece is being made, so the PD sheet
   // says so rather than still reading "pending" the next time it is opened.
@@ -154,13 +127,12 @@ export async function updateJangadRow(
   id: string,
   patch: Record<JangadField, string>
 ): Promise<JangadRow | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.rows.findIndex((r) => r.id === id);
   if (idx === -1) return null;
   const updated: JangadRow = { ...db.rows[idx], ...patch, updatedAt: new Date().toISOString() };
   db.rows[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
@@ -169,8 +141,7 @@ export async function updateJangadRow(
 export async function updateJangadRows(
   patches: { id: string; row: Record<JangadField, string> }[]
 ): Promise<JangadRow[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const now = new Date().toISOString();
   const touched: JangadRow[] = [];
   for (const p of patches) {
@@ -180,23 +151,21 @@ export async function updateJangadRows(
     touched.push(db.rows[idx]);
   }
   if (!touched.length) return [];
-  await writeDB(db, token);
+  await writeDB(db);
   return touched;
 }
 
 export async function deleteJangadRow(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.rows.length;
   db.rows = db.rows.filter((r) => r.id !== id);
   if (db.rows.length === before) return false;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 export async function exportJangadDb(): Promise<JangadDB> {
-  const token = requireToken();
-  return readDB(token);
+  return readDB();
 }
 
 // --- Auto-fetch from a design number -----------------------------------------
@@ -273,7 +242,7 @@ export async function seedFromDesign(query: string): Promise<JangadSeed | null> 
   // What the register already holds for this design. Without this the picker
   // offers pieces whose diamonds went out weeks ago, and a second issue against
   // the same piece looks exactly like the first.
-  const db = await readDB(requireToken());
+  const db = await readDB();
   const already = new Map<string, {
     date: string; memoNo: string; mfgName: string; rows: number; sizes: string[];
   }>();

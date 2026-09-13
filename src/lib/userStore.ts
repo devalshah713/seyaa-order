@@ -1,12 +1,12 @@
-// Accounts for the app, stored beside the memo DB in the same private Blob
-// store (users/users.json). Mirrors memoStore's read-modify-write approach —
+// Accounts for the app, stored beside the memo DB in the same private store
+// (users/users.json). Mirrors memoStore's read-modify-write approach —
 // fine for a single-office user list that changes rarely.
 //
 // Passwords are never stored readable: each is scrypt-hashed with its own
 // random salt, and only the hash is written. There is no way back from the
 // stored value to the password, including for us.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import type { Role } from "./session";
@@ -41,36 +41,13 @@ export function publicOf(u: User): PublicUser {
   return rest;
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "User storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readUsers(): Promise<User[]> {
+  const doc = await readDoc<{ users?: User[] }>(USERS_PATH, {});
+  return doc.users || []; // empty on the first run, before anyone is set up
 }
 
-async function readUsers(token: string): Promise<User[]> {
-  try {
-    const result = await get(USERS_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return [];
-    const parsed = (await new Response(result.stream).json()) as { users?: User[] };
-    return parsed.users || [];
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return []; // first run
-    throw err;
-  }
-}
-
-async function writeUsers(users: User[], token: string): Promise<void> {
-  await put(USERS_PATH, JSON.stringify({ users }), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeUsers(users: User[]): Promise<void> {
+  await writeDoc(USERS_PATH, { users });
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -88,16 +65,16 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 export async function countUsers(): Promise<number> {
-  return (await readUsers(requireToken())).length;
+  return (await readUsers()).length;
 }
 
 export async function listUsers(): Promise<PublicUser[]> {
-  const users = await readUsers(requireToken());
+  const users = await readUsers();
   return users.map(publicOf);
 }
 
 export async function findByUsername(username: string): Promise<User | null> {
-  const users = await readUsers(requireToken());
+  const users = await readUsers();
   const wanted = username.trim().toLowerCase();
   return users.find((u) => u.username.toLowerCase() === wanted) || null;
 }
@@ -119,8 +96,7 @@ export async function createUser(
   }
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
 
-  const token = requireToken();
-  const users = await readUsers(token);
+  const users = await readUsers();
   if (users.some((u) => u.username.toLowerCase() === name.toLowerCase())) {
     return { ok: false, error: "That username is already taken." };
   }
@@ -135,7 +111,7 @@ export async function createUser(
     createdAt: new Date().toISOString(),
   };
   users.push(user);
-  await writeUsers(users, token);
+  await writeUsers(users);
   return { ok: true, user: publicOf(user) };
 }
 
@@ -146,8 +122,7 @@ export async function updateUserAccess(
   role: Role,
   modules: unknown
 ): Promise<{ ok: boolean; error?: string }> {
-  const token = requireToken();
-  const users = await readUsers(token);
+  const users = await readUsers();
   const target = users.find((u) => u.id === id);
   if (!target) return { ok: false, error: "User not found." };
 
@@ -163,13 +138,12 @@ export async function updateUserAccess(
 
   target.role = role;
   target.modules = role === "admin" ? undefined : sanitizeModules(modules);
-  await writeUsers(users, token);
+  await writeUsers(users);
   return { ok: true };
 }
 
 export async function deleteUser(id: string): Promise<{ ok: boolean; error?: string }> {
-  const token = requireToken();
-  const users = await readUsers(token);
+  const users = await readUsers();
   const target = users.find((u) => u.id === id);
   if (!target) return { ok: false, error: "User not found." };
 
@@ -179,6 +153,6 @@ export async function deleteUser(id: string): Promise<{ ok: boolean; error?: str
     return { ok: false, error: "This is the only admin. Create another admin before deleting this one." };
   }
 
-  await writeUsers(users.filter((u) => u.id !== id), token);
+  await writeUsers(users.filter((u) => u.id !== id));
   return { ok: true };
 }

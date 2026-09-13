@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { currentSession } from "@/lib/currentUser";
 import { isSheetConfigured, sheetSetupHint, sheetTab, sheetUrl } from "@/lib/googleSheets";
 import { isBackupConfigured } from "@/lib/backup";
+import { hasBlob, hasR2 } from "@/lib/db";
+import { migrationHint } from "@/lib/dbMigrate";
 import BackupClient from "./BackupClient";
 
 export const metadata = { title: "Backups — Seyaa Solitaire" };
@@ -24,6 +26,9 @@ export default async function BackupPage() {
         sheetUrl={sheetUrl()}
         registerTab={sheetTab()}
         pcConfigured={isBackupConfigured()}
+        r2Configured={hasR2()}
+        blobStillSet={hasBlob()}
+        migrationHint={migrationHint()}
       />
     </div>
   );

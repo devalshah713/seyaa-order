@@ -1,7 +1,7 @@
 // The receipt chase list: one row per design number on a diamond demand that
 // has gone to the diamond team and not yet come back as a jangad issue entry.
 //
-// Same private Vercel Blob pattern as demandStore and jangadStore, in its own
+// Same shared-storage pattern as demandStore and jangadStore, in its own
 // JSON document. The rows are durable on purpose — a reminder due in six hours
 // cannot be a setTimeout, because nothing on a serverless host is still
 // running six hours from now. The row says when the next reminder is due, and
@@ -9,7 +9,7 @@
 // whatever has come due since it last looked. That makes the chase survive
 // deploys, restarts, and a portal nobody has opened all day.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { dueAt, MAX_REMINDERS } from "./chaseTime";
 import {
   chaseId, isOpen,
@@ -32,39 +32,16 @@ export type ReceiptChaseDB = { chases: ReceiptChase[] };
 const MAX_EVENTS = 60;
 
 export function isReceiptChaseStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<ReceiptChaseDB> {
+  const db = await readDoc<Partial<ReceiptChaseDB>>(DB_PATH, {});
+  return { chases: db.chases || [] };
 }
 
-async function readDB(token: string): Promise<ReceiptChaseDB> {
-  try {
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return { chases: [] };
-    const db = (await new Response(result.stream).json()) as Partial<ReceiptChaseDB>;
-    return { chases: db.chases || [] };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return { chases: [] };
-    throw err;
-  }
-}
-
-async function writeDB(db: ReceiptChaseDB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: ReceiptChaseDB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 function note(c: ReceiptChase, event: ReceiptChaseEvent): void {
@@ -76,7 +53,7 @@ function note(c: ReceiptChase, event: ReceiptChaseEvent): void {
 // --- Reading -----------------------------------------------------------------
 
 export async function listReceiptChases(): Promise<ReceiptChase[]> {
-  const db = await readDB(requireToken());
+  const db = await readDB();
   // Open ones first, then the most recently touched.
   return db.chases.slice().sort((a, b) => {
     const openness = Number(isOpen(b)) - Number(isOpen(a));
@@ -86,13 +63,13 @@ export async function listReceiptChases(): Promise<ReceiptChase[]> {
 }
 
 export async function getReceiptChase(id: string): Promise<ReceiptChase | null> {
-  const db = await readDB(requireToken());
+  const db = await readDB();
   return db.chases.find((c) => c.id === id) || null;
 }
 
 // Issued and still not received, for the badge on the Demands screen.
 export async function openReceiptCount(): Promise<number> {
-  const db = await readDB(requireToken());
+  const db = await readDB();
   return db.chases.filter(isOpen).length;
 }
 
@@ -101,10 +78,9 @@ export async function openReceiptCount(): Promise<number> {
 // Read, change, write. Every write goes through here so the document is only
 // ever rewritten whole and a caller cannot forget to stamp updatedAt.
 async function mutate<T>(fn: (db: ReceiptChaseDB) => T): Promise<T> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const out = fn(db);
-  await writeDB(db, token);
+  await writeDB(db);
   return out;
 }
 
@@ -238,5 +214,5 @@ export async function bringForward(id: string, by: string): Promise<ReceiptChase
 
 // For the nightly backup.
 export async function exportReceiptChaseDb(): Promise<ReceiptChaseDB> {
-  return readDB(requireToken());
+  return readDB();
 }

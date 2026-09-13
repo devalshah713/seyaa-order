@@ -1,7 +1,7 @@
-// Diamond demand store — same private Vercel Blob pattern as memoStore and
+// Diamond demand store — same shared-storage pattern as memoStore and
 // pdStore, in its own JSON document.
 import "server-only";
-import { get, put, BlobNotFoundError } from "@vercel/blob";
+import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
 import type { DemandRow } from "./demandConfig";
 
@@ -30,7 +30,7 @@ export type NewDemand = Omit<Demand, "id" | "demandNo" | "fy" | "seq" | "created
 export type DemandDB = { counters: Record<string, number>; demands: Demand[] };
 
 export function isDemandStorageConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN;
+  return isDbConfigured();
 }
 
 export function normalizeDemandInput(body: Record<string, unknown>): NewDemand {
@@ -58,43 +58,17 @@ export function normalizeDemandInput(body: Record<string, unknown>): NewDemand {
   };
 }
 
-function requireToken(): string {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Storage is not configured. Add the BLOB_READ_WRITE_TOKEN environment variable in Vercel and redeploy."
-    );
-  }
-  return token;
+async function readDB(): Promise<DemandDB> {
+  const db = await readDoc<Partial<DemandDB>>(DB_PATH, {});
+  return { counters: db.counters || {}, demands: db.demands || [] };
 }
 
-async function readDB(token: string): Promise<DemandDB> {
-  try {
-    const result = await get(DB_PATH, { access: "private", token, useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) {
-      return { counters: {}, demands: [] };
-    }
-    const db = (await new Response(result.stream).json()) as Partial<DemandDB>;
-    return { counters: db.counters || {}, demands: db.demands || [] };
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) return { counters: {}, demands: [] };
-    throw err;
-  }
-}
-
-async function writeDB(db: DemandDB, token: string): Promise<void> {
-  await put(DB_PATH, JSON.stringify(db), {
-    access: "private",
-    token,
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-  });
+async function writeDB(db: DemandDB): Promise<void> {
+  await writeDoc(DB_PATH, db);
 }
 
 export async function createDemand(input: NewDemand): Promise<Demand> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
 
   const date = input.date || todayInput();
   const fy = fyFromInput(date);
@@ -113,25 +87,22 @@ export async function createDemand(input: NewDemand): Promise<Demand> {
     updatedAt: now,
   };
   db.demands.push(demand);
-  await writeDB(db, token);
+  await writeDB(db);
   return demand;
 }
 
 export async function listDemands(): Promise<Demand[]> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.demands.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function getDemand(id: string): Promise<Demand | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   return db.demands.find((d) => d.id === id) || null;
 }
 
 export async function updateDemand(id: string, patch: NewDemand): Promise<Demand | null> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const idx = db.demands.findIndex((d) => d.id === id);
   if (idx === -1) return null;
   const updated: Demand = {
@@ -141,29 +112,26 @@ export async function updateDemand(id: string, patch: NewDemand): Promise<Demand
     updatedAt: new Date().toISOString(),
   };
   db.demands[idx] = updated;
-  await writeDB(db, token);
+  await writeDB(db);
   return updated;
 }
 
 export async function deleteDemand(id: string): Promise<boolean> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const before = db.demands.length;
   db.demands = db.demands.filter((d) => d.id !== id);
   if (db.demands.length === before) return false;
-  await writeDB(db, token);
+  await writeDB(db);
   return true;
 }
 
 export async function nextDemandNo(dateInput: string): Promise<string> {
-  const token = requireToken();
-  const db = await readDB(token);
+  const db = await readDB();
   const fy = fyFromInput(dateInput || todayInput());
   return `DD/${fy}/${pad((db.counters[fy] || 0) + 1)}`;
 }
 
 // For the nightly backup.
 export async function exportDemandDb(): Promise<DemandDB> {
-  const token = requireToken();
-  return readDB(token);
+  return readDB();
 }
