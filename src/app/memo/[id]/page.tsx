@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import MemoSheet from "@/components/MemoSheet";
 import { getMemoWithEvents } from "@/lib/memoStore";
 import { linesFor } from "@/lib/memoFormat";
-import { isDriveConfigured } from "@/lib/googleDrive";
+import AutoPrint from "@/app/AutoPrint";
 import MemoActions from "./MemoActions";
 import StockPanel from "./StockPanel";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function MemoViewPage(props: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ pdf?: string }>;
+  searchParams: Promise<{ pdf?: string; print?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const params = await props.params;
@@ -22,17 +22,20 @@ export default async function MemoViewPage(props: {
   // to jewellery memos.
   const lines = memo.kind === "gold" ? [] : linesFor(memo.id, memo.items, events);
 
-  // ?pdf=1 is the render target used by the PDF generator — no action bar, so
-  // it never re-triggers the Drive auto-upload.
+  // ?pdf=1 hides the action bar, so what is printed is the sheet and nothing
+  // else. ?print=1 opens the print dialog on arrival — that is what the PDF
+  // links in the history list do.
   const forPdf = searchParams.pdf === "1";
+  const autoPrint = searchParams.print === "1";
 
   return (
     <>
+      {autoPrint && <AutoPrint />}
       {!forPdf && (
         <div className="wrap no-print" style={{ paddingBottom: 0 }}>
           <div className="page-head">
             <Link href="/memo" className="btn">← History</Link>
-            <MemoActions id={params.id} driveEnabled={isDriveConfigured()} driveLink={memo.driveLink} />
+            <MemoActions id={params.id} />
           </div>
         </div>
       )}

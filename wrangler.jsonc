@@ -17,11 +17,6 @@
 	"observability": {
 		"enabled": true
 	},
-	// Real Chrome, for the memo PDFs, the PD and demand sheets, the jangad issue
-	// slip and the order board image. Needs the Workers Paid plan.
-	"browser": {
-		"binding": "BROWSER"
-	},
 	// Cloudflare calls the Worker, not a URL, so these land in the scheduled
 	// handler in cloudflare/worker.ts — which maps each expression to its route.
 	// Keep the two in step: a schedule with no mapping runs nothing.

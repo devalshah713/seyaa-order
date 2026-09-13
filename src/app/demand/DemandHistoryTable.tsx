@@ -63,7 +63,13 @@ export default function DemandHistoryTable({ demands }: { demands: Demand[] }) {
                 </td>
                 <td className="num">{totalPcs(d.rows) || "—"}</td>
                 <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                  <a href={`/api/demand/${d.id}/pdf`} className="rowbtn" title="Download PDF">PDF</a>
+                  <a
+                    href={`/demand/${d.id}?pdf=1&print=1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rowbtn"
+                    title="Open the demand and print it"
+                  >Print</a>
                   <Link href={`/demand/${d.id}/edit`} className="rowbtn">Edit</Link>
                   <button className="rowbtn danger" onClick={() => del(d)} disabled={busyId === d.id}>
                     {busyId === d.id ? "Deleting…" : "Delete"}

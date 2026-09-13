@@ -65,24 +65,56 @@ The photos that predated this lived in Vercel Blob, were uploaded through
 across in one pass and those two routes, and the one-off migration behind them,
 have been deleted. The databases moved separately and later — see **Storage**.
 
+## Printing
+
+Every sheet is printed by the browser in front of you, not rendered on the
+server. **Print** on a memo, PD sheet, demand or jangad slip opens your own
+print dialog, and "Save as PDF" in that dialog produces the file the portal
+used to hand back. The **Print** buttons in the history lists open the sheet in
+a new tab with `?pdf=1&print=1`, which hides the action bar and opens the
+dialog on arrival (`src/app/AutoPrint.tsx`).
+
+This replaced a headless Chrome the server drove against its own pages. It
+worked, but it was the one thing in the portal that needed a browser on the
+server, and on Cloudflare that is a paid add-on — so it cost $5/month to keep a
+feature the browser already provides. Three things went with it, each by the
+owner's decision:
+
+- **the order-board image for WhatsApp** — `/orders/board` is still a page, so
+  it is opened and screenshotted instead;
+- **memos uploading themselves to Google Drive** — removed outright, along with
+  `/api/drive/*` and the Drive OAuth flow;
+- **the nightly memo PDF archive** on the office PC — paused, see **Backups**.
+
+One knock-on: `googleSheets.ts` can still authenticate with
+`GOOGLE_REFRESH_TOKEN` as an alternative to the service account, but the routes
+that minted that token were part of the Drive flow and are gone. If the sheet is
+ever switched to OAuth, the token has to be obtained outside the portal. The
+service account path is unaffected and is the one in use.
+
 ## Backups
 
 Two copies of everything, both nightly at midnight IST.
 
 **The office PC** — the restorable one. `windows-backup\backup.ps1` runs as a
-scheduled task and pulls the whole database as one JSON file, the Excel
-workbooks (memos, jangad, stock book, QC) and every memo PDF into
-`C:\SeyaaBackups`. It authenticates with `BACKUP_TOKEN`, so nobody has to be
-signed in.
+scheduled task and pulls the whole database as one JSON file and the Excel
+workbooks (memos, jangad, stock book, QC) into `C:\SeyaaBackups`. It
+authenticates with `BACKUP_TOKEN`, so nobody has to be signed in.
+
+It used to archive every memo PDF and a dated order-board image as well. Both
+needed a browser running on the server; that is now gone (see **Printing**), so
+both are paused. The `PDFs` and `OrderBoards` folders keep whatever they already
+held. Nothing about the records is affected — `data.json` still contains every
+memo in full, and a memo can be reprinted from the portal at any time.
 
 **A Google Sheet** — the readable one. Every module gets its own tab: design
 numbers, PD sheets, diamond demands, diamond receipts, the jangad register, the
 stock book, QC and memos, plus a **Backup Log** tab saying when the copy last
 ran. Each tab is
 replaced rather than appended to, so a sync that runs twice changes nothing.
-Vercel's scheduler calls `/api/backup/sheets` at 18:30 UTC (`vercel.json`),
-which is midnight in India; the office PC's own job calls it too, and an admin
-can run it by hand from **Backups** in the top bar.
+The scheduler calls `/api/backup/sheets` at 18:30 UTC, which is midnight in
+India; the office PC's own job calls it too, and an admin can run it by hand
+from **Backups** in the top bar.
 
 ## Chasing diamond receipts
 
@@ -94,7 +126,7 @@ jangad issue entry exists for that design number.
 - One chase per design number on a demand — a demand covering four designs is
   four things to wait for, and three of them arriving is not all of them.
 - Nothing is chased until it is **24 hours** old, and after that at most once a
-  day. Both gaps are settable in Vercel (`RECEIPT_CHASE_FIRST_HOURS`,
+  day. Both gaps are settable in the environment (`RECEIPT_CHASE_FIRST_HOURS`,
   `RECEIPT_CHASE_REPEAT_HOURS`); a value that is not a positive number is
   ignored rather than obeyed, so a typo cannot silently stop the chasing.
   Shortening the repeat is only worth doing alongside a schedule that runs more
@@ -116,8 +148,9 @@ The worker is `/api/receipt-chase/tick`. It holds no state and each run only
 does what has come due, so calling it often costs nothing and missing a run
 costs nothing either — the next one catches up everything overdue.
 
-`vercel.json` runs it **once each morning at 02:35 UTC, which is 08:05 in
-India, Monday to Saturday** (`35 2 * * 1-6`). So: at most one reminder per
+`wrangler.jsonc` runs it **once each morning at 02:35 UTC, which is 08:05 in
+India, Monday to Saturday** (`35 2 * * 1-6`), and `cloudflare/worker.ts` maps
+that expression to the route. So: at most one reminder per
 design per working day, and nothing on Sunday.
 
 **The schedule and the working window must name the same days.** A run on a day
@@ -201,13 +234,8 @@ can provide them: `scrypt`, which every stored password was hashed with, and
 `createSign`, which signs the Google Sheets service-account token. Remove the
 flag and nobody can log in.
 
-**PDFs need the Workers Paid plan.** Memo PDFs, PD sheets, demand sheets, the
-jangad issue slip and the order-board PNG all render real Chrome against the
-app's own pages. On a Worker there is no filesystem and nothing to launch, so
-they go through Cloudflare's Browser Rendering and the `BROWSER` binding —
-included on the $5/month plan, unavailable on the free one. `src/lib/memoPdf.ts`
-picks the browser at run time and still works on Vercel and on a developer's
-machine.
+**Nothing here needs a paid plan.** The portal runs inside the Workers free
+tier, including the cron triggers.
 
 ```bash
 npm run cf:types     # regenerate worker-configuration.d.ts after editing wrangler.jsonc

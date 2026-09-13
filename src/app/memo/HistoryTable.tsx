@@ -208,10 +208,13 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
                 })()}
               </td>
               <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                <a href={`/api/memos/${m.id}/pdf`} className="rowbtn" title="Download PDF">PDF</a>
-                {m.driveLink && (
-                  <a href={m.driveLink} target="_blank" rel="noopener noreferrer" className="rowbtn" title="Open in Google Drive">Drive ↗</a>
-                )}
+                <a
+                  href={`/memo/${m.id}?pdf=1&print=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rowbtn"
+                  title="Open the memo and print it"
+                >Print</a>
                 <Link href={`/memo/${m.id}/edit`} className="rowbtn">Edit</Link>
                 <button
                   className="rowbtn danger"
