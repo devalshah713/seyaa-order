@@ -55,8 +55,36 @@ function cronOk(req: NextRequest): boolean {
   return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
+// Where this deployment has moved to, if it has. Set MOVED_TO on the old host
+// and every page it serves sends the visitor to the new one instead.
+//
+// This is what retires an address without breaking it. A bookmark still works,
+// and nobody can go on quietly using a second live copy of the portal — which
+// is how a day's work ends up in the store nobody is looking at.
+//
+// Machines are the exception, which is why /api is left alone: the office PC's
+// nightly backup may still be pointed here, and a redirect would drop its token
+// on the way across. It keeps answering until its address is updated.
+//
+// Temporary (307) on purpose. A permanent redirect is cached hard by browsers
+// and is painful to undo; this one stops the moment the variable is unset.
+function movedAway(req: NextRequest): NextResponse | null {
+  const movedTo = process.env.MOVED_TO;
+  if (!movedTo) return null;
+  if (req.nextUrl.pathname.startsWith("/api/")) return null;
+
+  const to = new URL(req.nextUrl.pathname + req.nextUrl.search, movedTo);
+  return NextResponse.redirect(to, 307);
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Before anything else, including the sign-in page: there is no reason to let
+  // anyone log in to an address that has been retired.
+  const moved = movedAway(req);
+  if (moved) return moved;
+
   if (isPublic(pathname)) return NextResponse.next();
 
   if (backupReachablePath(pathname) && backupTokenOk(req)) return NextResponse.next();
