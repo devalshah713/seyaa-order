@@ -166,7 +166,7 @@ export default function PiecesPanel({
                   value={p.stockNo}
                   onChange={(e) => setStockNo(i, e.target.value)}
                   placeholder="—"
-                  maxLength={6}
+                  maxLength={12}
                 />
               </td>
               <td data-label="Note">
