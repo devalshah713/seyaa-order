@@ -380,7 +380,7 @@ export default function MemoForm({
                       </ul>
                     );
                   })()}
-                  <p className="hint">Comma-separated · each up to 6 letters/numbers</p>
+                  <p className="hint">Comma-separated · each up to 12 letters/numbers</p>
                 </div>
               );
             })}

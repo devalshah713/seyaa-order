@@ -473,10 +473,14 @@ export function statusLabel(s: MemoStatus, lines: StockLine[]): string {
   return `${lines.filter((l) => l.outcome).length} of ${lines.length} settled`;
 }
 
-// Split a free-text box into clean, 6-char alphanumeric stock codes.
+// Split a free-text box into clean stock codes. Each code keeps only letters
+// and numbers, is uppercased, and is capped at 12 characters. The cap used to
+// be 6, until a 7-character code (A1405CZ) appeared in the stock sheet: it was
+// silently cut to A1405C and then reported as not found. 12 leaves room for
+// longer codes to come.
 export function parseCodes(raw: string): string[] {
   return String(raw)
     .split(/[\s,;]+/)
-    .map((c) => c.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6))
+    .map((c) => c.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 12))
     .filter((c) => c.length > 0);
 }
