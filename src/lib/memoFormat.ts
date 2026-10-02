@@ -1,6 +1,9 @@
 // Pure helpers shared by both client (form preview) and server (store, views).
 // No server-only imports here so it can be bundled either side.
 
+// The Type dropdown on a new memo. New entries go on the end: the order is what
+// staff reach for by position, so inserting in the middle moves every option
+// below it under a hand that already knows where it was.
 export const JEWELLERY_TYPES = [
   "Ring",
   "Earrings",
@@ -9,6 +12,7 @@ export const JEWELLERY_TYPES = [
   "Bracelet",
   "Necklace",
   "Necklace Set",
+  "Plain Gold Chain",
 ] as const;
 
 export const PURPOSES = ["Sell", "Memo", "Repair", "Export"] as const;
