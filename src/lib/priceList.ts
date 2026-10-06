@@ -58,26 +58,64 @@ export type PriceHit = {
   label: string; // what the row says, for showing back on the form
 };
 
+// Every code in both tables, looked up by its spacing-free key.
+//
+// Built once per price list rather than searched each time. The stock book
+// prices every diamond size of every entry, and a scan ran codeKey — a
+// uppercase and a regex — over all 129 rows for each of those lookups. On a
+// couple of hundred entries that measured around 23 ms, and a request is
+// allowed 10.
+//
+// Keyed on the loaded list itself, which loadPrices builds fresh each time and
+// nothing ever modifies in place, so the index cannot outlive what it describes.
+type PriceEntry =
+  | { table: "round"; row: RoundPrice }
+  | { table: "fancy"; row: FancyPrice };
+
+const PRICE_INDEX = new WeakMap<PriceList, Map<string, PriceEntry>>();
+
+function priceIndex(list: PriceList): Map<string, PriceEntry> {
+  const cached = PRICE_INDEX.get(list);
+  if (cached) return cached;
+
+  // Round first, and an earlier row is never displaced, so a code appearing
+  // twice resolves to the same row find() returned: the first in the round
+  // table, or failing that the first in the fancy one.
+  const index = new Map<string, PriceEntry>();
+  for (const row of list.round) {
+    const key = codeKey(row.code);
+    if (key && !index.has(key)) index.set(key, { table: "round", row });
+  }
+  for (const row of list.fancy) {
+    const key = codeKey(row.code);
+    if (key && !index.has(key)) index.set(key, { table: "fancy", row });
+  }
+
+  PRICE_INDEX.set(list, index);
+  return index;
+}
+
 // The round table is searched first and the fancy one second — the order the
 // workbook's nested lookup uses. No code appears in both.
 export function findPrice(list: PriceList, code: string): PriceHit | null {
   const key = codeKey(code);
   if (!key) return null;
-  const r = list.round.find((x) => codeKey(x.code) === key);
-  if (r) {
+
+  const found = priceIndex(list).get(key);
+  if (!found) return null;
+
+  if (found.table === "round") {
+    const r = found.row;
     return {
       code: r.code, table: "round", usd: r.usd, inr: r.inr,
       label: [r.sieve, r.mm && `${r.mm} mm`].filter(Boolean).join(" · "),
     };
   }
-  const f = list.fancy.find((x) => codeKey(x.code) === key);
-  if (f) {
-    return {
-      code: f.code, table: "fancy", usd: f.usd, inr: f.inr,
-      label: [f.shape, f.mm].filter(Boolean).join(" · "),
-    };
-  }
-  return null;
+  const f = found.row;
+  return {
+    code: f.code, table: "fancy", usd: f.usd, inr: f.inr,
+    label: [f.shape, f.mm].filter(Boolean).join(" · "),
+  };
 }
 
 // --- Gold purity -------------------------------------------------------------
@@ -190,9 +228,29 @@ export function pricePiece(list: PriceList, piece: PieceInput): PricedPiece {
 
 // Money is shown to the rupee and the dollar, as the workbook does; the
 // underlying figures keep their full precision.
+//
+// The formatter is kept rather than made each time. toLocaleString builds one
+// per call, which measured 0.029 ms — nothing on its own, but the stock book
+// prints two figures a row and five more in the footer, so 200 rows spent about
+// 11 ms of the 10 ms a request is allowed on commas alone. Reusing them does
+// the same 400 calls in a quarter of a millisecond.
+const MONEY_FORMATS = new Map<number, Intl.NumberFormat>();
+
+function moneyFormat(dp: number): Intl.NumberFormat {
+  let format = MONEY_FORMATS.get(dp);
+  if (!format) {
+    format = new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: dp,
+      maximumFractionDigits: dp,
+    });
+    MONEY_FORMATS.set(dp, format);
+  }
+  return format;
+}
+
 export function money(n: number, dp = 0): string {
   if (!Number.isFinite(n)) return "";
-  return n.toLocaleString("en-IN", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  return moneyFormat(dp).format(n);
 }
 
 export function trim(n: number | null, dp: number): string {
