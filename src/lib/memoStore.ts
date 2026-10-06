@@ -216,6 +216,19 @@ export async function listMemos(): Promise<Memo[]> {
   return db.memos.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
+// Both lists the memo history needs, from one read of the store instead of one
+// read per list. The per-list processing is the same as listMemos() and
+// listEvents() do on their own: memos normalised by readDB() then newest
+// first, events exactly as stored.
+export async function listMemoHistory(): Promise<{ memos: Memo[]; events: StockEvent[] }> {
+  const db = await readDB();
+  return {
+    // Newest first.
+    memos: db.memos.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    events: db.events,
+  };
+}
+
 export async function getMemo(id: string): Promise<Memo | null> {
   const db = await readDB();
   return db.memos.find((m) => m.id === id) || null;

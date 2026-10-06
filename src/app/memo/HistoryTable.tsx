@@ -10,8 +10,13 @@ import {
   statusOf,
   type MemoStatus,
   type StockEvent,
+  type StockLine,
 } from "@/lib/memoFormat";
 import type { Memo } from "@/lib/memoStore";
+
+// One memo with its status worked out. `status` is null exactly when the memo
+// is a gold one, which carries no stock lines and so has no settlement status.
+type Row = { memo: Memo; status: MemoStatus | null; lines: StockLine[] };
 
 export default function HistoryTable({ memos, events }: { memos: Memo[]; events: StockEvent[] }) {
   const router = useRouter();
@@ -34,12 +39,14 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
     [memos]
   );
 
-  // Status is derived from the stock events, so work it out once per memo
-  // rather than inside both the filter and the render.
-  const withStatus = useMemo(
+  // Status is derived from the stock events, so work it out once per memo here.
+  // The lines are carried through to the filter and the render, which both use
+  // them: scanning the whole event list again per row is what made this page
+  // run out of CPU.
+  const withStatus = useMemo<Row[]>(
     () =>
       memos.map((m) => {
-        if (m.kind === "gold") return { memo: m, status: null as MemoStatus | null, lines: [] };
+        if (m.kind === "gold") return { memo: m, status: null, lines: [] };
         const lines = linesFor(m.id, m.items, events);
         return { memo: m, status: statusOf(lines), lines };
       }),
@@ -67,9 +74,8 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
     if (fFrom) rows = rows.filter((r) => r.memo.date >= fFrom);
     if (fUntil) rows = rows.filter((r) => r.memo.date <= fUntil);
 
-    const byKind = rows.map((r) => r.memo);
-    if (!needle) return byKind;
-    return byKind.filter((m) => {
+    if (!needle) return rows;
+    return rows.filter(({ memo: m }) => {
       const hay = [
         m.memoNo, m.to, m.through, m.mobile, m.purpose, m.againstMemoNo || "",
         ...m.items.map((it) => it.type),
@@ -184,7 +190,7 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
           </tr>
         </thead>
         <tbody>
-          {filtered.map((m) => (
+          {filtered.map(({ memo: m, status, lines }) => (
             <tr key={m.id} onClick={() => router.push(`/memo/${m.id}`)}>
               <td className="memono">
                 {m.memoNo}
@@ -199,13 +205,13 @@ export default function HistoryTable({ memos, events }: { memos: Memo[]; events:
                   : `${m.totalPcs} ${m.totalPcs === 1 ? "pc" : "pcs"}`}
               </td>
               <td>
-                {m.kind === "gold" ? (
+                {/* status is null only for a gold memo, which is the same row
+                    as the first branch; the test keeps TypeScript happy. */}
+                {m.kind === "gold" || status === null ? (
                   <span className="status-pill closed">—</span>
-                ) : (() => {
-                  const lines = linesFor(m.id, m.items, events);
-                  const st = statusOf(lines);
-                  return <span className={`status-pill ${st}`}>{statusLabel(st, lines)}</span>;
-                })()}
+                ) : (
+                  <span className={`status-pill ${status}`}>{statusLabel(status, lines)}</span>
+                )}
               </td>
               <td className="row-actions" onClick={(e) => e.stopPropagation()}>
                 <a

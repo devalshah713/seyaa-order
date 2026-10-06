@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listMemos, listEvents, isStorageConfigured, type Memo, type StockEvent } from "@/lib/memoStore";
+import { listMemoHistory, isStorageConfigured, type Memo, type StockEvent } from "@/lib/memoStore";
 import HistoryTable from "./HistoryTable";
 
 export const metadata = { title: "Memo History — Seyaa Solitaire" };
@@ -23,7 +23,9 @@ export default async function HistoryPage() {
   let events: StockEvent[] = [];
   let error = "";
   try {
-    [memos, events] = await Promise.all([listMemos(), listEvents()]);
+    // One read of the store for both lists: the memos and the stock events live
+    // in the same document, so fetching them separately parsed it twice.
+    ({ memos, events } = await listMemoHistory());
   } catch (err) {
     error = err instanceof Error ? err.message : "Could not load memos.";
   }
