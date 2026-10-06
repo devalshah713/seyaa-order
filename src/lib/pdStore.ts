@@ -5,7 +5,7 @@ import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
 import type { DiaLine } from "./pdConfig";
 import {
-  isPieceStatus, matchDesign, reconcilePieces,
+  isPieceStatus, matchDesign, parseDesignNo, pieceTotal, reconcilePieces,
   type DesignHit, type PdPiece,
 } from "./designNo";
 
@@ -189,6 +189,93 @@ export async function listPdSheets(): Promise<PdSheet[]> {
     .slice()
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .map(hydrate);
+}
+
+// --- The list page's own shape -----------------------------------------------
+
+// One row of the PD list, and nothing else.
+//
+// The list used to be handed whole PdSheets. That is expensive twice over: every
+// sheet's piece list is built on the way out, which for a book with bulk runs in
+// it is thousands of objects nobody asked for, and then React writes all of it
+// into the page because the table is a client component. Measured on a few
+// hundred sheets it came to roughly fifty milliseconds and half a megabyte, and
+// a request is allowed ten milliseconds, so the page stopped rendering at all.
+//
+// What the table actually needs is these fields, the piece count, and the few
+// pieces carrying a stock number. The rest never reaches the browser.
+export type PdRowPiece = { no: string; stockNo: string };
+
+export type PdRow = {
+  id: string;
+  pdNo: string;
+  sku: string;
+  // Shown in the table.
+  product: string;
+  assignedTo: string;
+  deliveryDate: string;
+  quantity: string;
+  createdBy?: string;
+  updatedBy?: string;
+  // Searched, but not shown.
+  category: string;
+  subCategory: string;
+  pdMerchandiser: string;
+  zone: string;
+  orderType: string;
+  diaQuality: string;
+  // The Pieces column.
+  total: number;
+  inStock: number;
+  // Only the pieces that reached the stock sheet, so a stock number still finds
+  // its design. A piece nobody has touched says nothing and is left out.
+  stocked: PdRowPiece[];
+};
+
+function toRow(s: PdSheet): PdRow {
+  // Stored pieces are always already reconciled against the stored design
+  // number — every write goes through reconcilePieces — so they can be counted
+  // as they stand, without rebuilding the run to check them.
+  const saved = s.pieces || [];
+  const stocked: PdRowPiece[] = [];
+  let inStock = 0;
+  for (const p of saved) {
+    if (!p) continue;
+    if (p.status === "stock") inStock++;
+    if (p.stockNo) stocked.push({ no: p.no, stockNo: p.stockNo });
+  }
+
+  const total = pieceTotal(parseDesignNo(s.sku));
+  return {
+    id: s.id,
+    pdNo: s.pdNo,
+    sku: s.sku,
+    product: s.product,
+    assignedTo: s.assignedTo,
+    deliveryDate: s.deliveryDate,
+    quantity: s.quantity,
+    createdBy: s.createdBy,
+    updatedBy: s.updatedBy,
+    category: s.category,
+    subCategory: s.subCategory,
+    pdMerchandiser: s.pdMerchandiser,
+    zone: s.zone,
+    orderType: s.orderType,
+    diaQuality: s.diaQuality,
+    total,
+    // A sheet shortened after pieces were recorded could otherwise read as more
+    // in stock than it has pieces.
+    inStock: Math.min(inStock, total),
+    stocked,
+  };
+}
+
+export async function listPdRows(): Promise<PdRow[]> {
+  const db = await readDB();
+  return db.sheets
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map(toRow);
 }
 
 export async function getPdSheet(id: string): Promise<PdSheet | null> {

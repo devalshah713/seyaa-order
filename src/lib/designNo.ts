@@ -111,6 +111,16 @@ export function pieceNumbers(run: DesignRun): string[] {
   return Array.from({ length: count }, (_, i) => pieceNo(run, run.from + i));
 }
 
+// How many pieces the run covers, without writing out their numbers.
+//
+// Exactly pieceNumbers(run).length, and the reason it exists separately is cost:
+// pieceNo copies two arrays and rebuilds a string for every piece, so a run of
+// 400 is 400 of those. The PD list only ever prints the count, and asking for
+// the count alone is what keeps that page inside the CPU a request is allowed.
+export function pieceTotal(run: DesignRun): number {
+  return Math.min(pieceCount(run), MAX_PIECES);
+}
+
 // --- Writing a design number in parts ---------------------------------------
 // The form asks for the design and its run separately — "SN-BR-AMF" and 41 to
 // 49 — because that is how the designer thinks of it. What gets stored is still
