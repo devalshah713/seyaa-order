@@ -7,7 +7,9 @@ import {
 } from "./stockBookConfig";
 import { loadPrices } from "./priceStore";
 import { listJangad, getJangadRows } from "./jangadStore";
-import { traceDesign, type DesignTrace } from "./designTrace";
+import {
+  loadTraceSources, traceDesign, traceDesignFrom, type DesignTrace,
+} from "./designTrace";
 import { joinDesignNo } from "./designNo";
 import { todayInput } from "./memoFormat";
 
@@ -234,11 +236,24 @@ export async function piecesForStock(): Promise<StockSeedPiece[]> {
   // Everything the design number already answers — what the piece is, what gold
   // it is in, where it is going, and the paper trail behind it. All of that was
   // typed once on the PD sheet; none of it should be typed again here.
+  //
+  // The registers behind the trace are read once here and every piece is traced
+  // against that one reading. Tracing each piece on its own meant fetching and
+  // parsing the PD book, the demand book and the jangad register again for
+  // every piece in the register, which is what took the page past the ten
+  // milliseconds of processor time a request is allowed. The jangad rows this
+  // function already has are handed over so that document is not read twice.
   const list = [...byPiece.values()];
-  const traces = await Promise.all(
-    list.map((p) => traceDesign(p.pieceNo).catch(() => null))
-  );
-  list.forEach((p, i) => { p.trace = traces[i]; });
+  const sources = await loadTraceSources({ jangad: rows });
+  for (const p of list) {
+    // Per piece, so one number the trace cannot make sense of leaves that one
+    // piece without a trace rather than losing the whole list.
+    try {
+      p.trace = traceDesignFrom(sources, p.pieceNo);
+    } catch {
+      p.trace = null;
+    }
+  }
 
   return list.sort((a, b) =>
     a.pieceNo.localeCompare(b.pieceNo, undefined, { numeric: true })

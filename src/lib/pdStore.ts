@@ -191,6 +191,20 @@ export async function listPdSheets(): Promise<PdSheet[]> {
     .map(hydrate);
 }
 
+// The same sheets in the same order, but exactly as they are stored.
+//
+// Hydrating is the expensive half of listPdSheets: every sheet's piece list is
+// rebuilt from its design number, which on a book with bulk runs in it is
+// thousands of objects. A reader that never looks at `pieces` is paying for all
+// of them for nothing, and on a ten millisecond request budget that is the
+// difference between a page rendering and a page failing. The design trace is
+// such a reader: it takes the design and gold fields off the sheet and never
+// touches the piece list, so it reads the sheets through here instead.
+export async function listPdSheetsRaw(): Promise<PdSheet[]> {
+  const db = await readDB();
+  return db.sheets.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
 // --- The list page's own shape -----------------------------------------------
 
 // One row of the PD list, and nothing else.
