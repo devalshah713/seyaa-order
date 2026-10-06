@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listPdSheets, isPdStorageConfigured, type PdSheet } from "@/lib/pdStore";
+import { listPdRows, isPdStorageConfigured, type PdRow } from "@/lib/pdStore";
 import PdHistoryTable from "./PdHistoryTable";
 import SheetSync from "./SheetSync";
 
@@ -19,10 +19,12 @@ export default async function PdListPage() {
     );
   }
 
-  let sheets: PdSheet[] = [];
+  // Rows, not whole sheets: the table is a client component, so everything
+  // handed to it is written into the page. See PdRow in pdStore.
+  let rows: PdRow[] = [];
   let error = "";
   try {
-    sheets = await listPdSheets();
+    rows = await listPdRows();
   } catch (err) {
     error = err instanceof Error ? err.message : "Could not load PD sheets.";
   }
@@ -36,13 +38,13 @@ export default async function PdListPage() {
       <SheetSync />
       {error ? (
         <div className="notice">{error}</div>
-      ) : sheets.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="empty-state">
           <p>No PD sheets yet. Create the first one for your design team.</p>
           <Link href="/pd/new" className="btn btn-primary">Create a PD Sheet</Link>
         </div>
       ) : (
-        <PdHistoryTable sheets={sheets} />
+        <PdHistoryTable rows={rows} />
       )}
     </div>
   );
