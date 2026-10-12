@@ -212,6 +212,31 @@ export async function bringForward(id: string, by: string): Promise<ReceiptChase
   });
 }
 
+// The same thing for a list of chases, in one read and one write.
+//
+// Ticking fifty designs and calling bringForward fifty times would read and
+// write the whole document fifty times over, and on the free Worker plan that
+// runs out of its ten milliseconds of processor time long before it finishes.
+// One mutate() for the lot keeps it to a single read and a single write, and
+// every row in the batch gets the same due time, which is also the truth: they
+// were all asked for in the same press of one button.
+export async function bringForwardMany(ids: string[], by: string): Promise<string[]> {
+  if (!ids.length) return [];
+  const at = new Date().toISOString();
+  return mutate((db) => {
+    const moved: string[] = [];
+    for (const id of ids) {
+      const c = db.chases.find((x) => x.id === id);
+      if (!c || !isOpen(c)) continue;
+      if (c.status === "paused") c.status = "reminding";
+      c.nextReminderAt = at;
+      note(c, { at, kind: "reminder", note: "Reminder asked for by hand.", by });
+      moved.push(c.id);
+    }
+    return moved;
+  });
+}
+
 // For the nightly backup.
 export async function exportReceiptChaseDb(): Promise<ReceiptChaseDB> {
   return readDB();

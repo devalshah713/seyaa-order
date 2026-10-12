@@ -1839,12 +1839,32 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
 
 .ch-table td { vertical-align: top; }
 /* A design number broken over four lines is unreadable, and these columns are
-   the ones anybody actually scans down. Give them the room to stay on one. */
-.ch-table td.memono, .ch-table th:first-child { min-width: 200px; }
-.ch-table td.memono, .ch-table td:nth-child(2) a { white-space: nowrap; }
+   the ones anybody actually scans down. Give them the room to stay on one.
+   The tick column is first, so the design number is the second. */
+.ch-table td.memono, .ch-table th:nth-child(2) { min-width: 200px; }
+.ch-table td.memono, .ch-table td:nth-child(3) a { white-space: nowrap; }
 /* The demand number and the date under it each belong on one line. */
-.ch-table td:nth-child(2) { white-space: nowrap; }
-.ch-table th:nth-child(6), .ch-table td:nth-child(6) { min-width: 116px; }
+.ch-table td:nth-child(3) { white-space: nowrap; }
+.ch-table th:nth-child(7), .ch-table td:nth-child(7) { min-width: 116px; }
+
+/* The tick that says "this one too". Narrow, and lined up with the first line
+   of the row rather than floating in the middle of a tall one. */
+.ch-table th.ch-pick, .ch-table td.ch-pick {
+  width: 28px; min-width: 28px; padding-right: 0; text-align: center;
+}
+.ch-table td.ch-pick input, .ch-table th.ch-pick input {
+  cursor: pointer; margin: 2px 0 0;
+}
+/* Only shown while something is ticked, so it can speak plainly. */
+.ch-pickbar {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 8px 10px; border-radius: 4px;
+  border: 1px solid var(--gold-line);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+  font-size: 12.5px;
+}
+.ch-pickbar .btn { padding: 3px 10px; font-size: 11.5px; }
+.ch-pickbar .ch-log-btn { margin-left: 0; }
 /* A second line under the main value — the product, who made it, the exact
    clock time. Small and grey so the column still reads as one figure. */
 .ch-by, .ch-product {
