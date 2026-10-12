@@ -13,12 +13,12 @@ import type { JangadRow } from "./jangadConfig";
 import { listJangad } from "./jangadStore";
 import type { Demand } from "./demandStore";
 import {
-  bringForward, bringForwardMany, closeReceiptChase, getReceiptChase, isOpen,
-  listReceiptChases, openReceiptChases, recordReminder,
+  applyClose, applyReminder, bringForward, bringForwardMany, closeReceiptChase,
+  isOpen, listReceiptChases, mutateReceiptChases, openReceiptChases,
   type NewReceiptChase,
 } from "./receiptChaseStore";
 import type { ReceiptChase } from "./receiptChase";
-import { buildPost, postReceiptEvent, resultNote } from "./receiptWebhook";
+import { buildMessageText } from "./receiptMessage";
 
 // Every way a jangad row writes the design it belongs to. The register splits
 // a piece across two columns — "SN-BR-AMF-10CT" and "63" — so the joined piece
@@ -47,7 +47,7 @@ export function findJangadIssue(chase: ReceiptChase, rows: JangadRow[]): JangadR
   return rows.find((r) => jangadAnswers(chase, r)) || null;
 }
 
-// How the register entry is named in the webhook and the log.
+// How the register entry is named in the log and on the chase row.
 function refFor(row: JangadRow): string {
   const piece = joinDesignNo(row.designNo, row.subDesignNo, "");
   return [row.id, piece, row.date].filter(Boolean).join(" · ");
@@ -82,12 +82,7 @@ export async function startReceiptChasesQuietly(demand: Demand, by: string): Pro
       });
     }
 
-    const made = await openReceiptChases(inputs, by);
-    // The optional heartbeat: one post per design, so a Grok routine can show
-    // what is now being waited on.
-    for (const chase of made) {
-      await postReceiptEvent(buildPost(chase, "demand.issued"), { attempts: 1, timeoutMs: 4000 });
-    }
+    await openReceiptChases(inputs, by);
   } catch {
     // A demand must save whether the chase list is reachable or not.
   }
@@ -102,16 +97,11 @@ export async function finishReceiptChasesQuietly(rows: JangadRow[]): Promise<voi
     for (const chase of open) {
       const hit = findJangadIssue(chase, rows);
       if (!hit) continue;
-      const closed = await closeReceiptChase(
+      await closeReceiptChase(
         chase.id, "done", "the jangad register",
         `Diamonds issued on the jangad for ${chase.designNumber}.`,
         refFor(hit)
       );
-      if (closed) {
-        await postReceiptEvent(buildPost(closed, "receipt.done"), {
-          attempts: 1, timeoutMs: 4000,
-        });
-      }
     }
   } catch {
     // The register must save whether the chase list is reachable or not.
@@ -143,8 +133,12 @@ export type TickReport = {
 // One pass: close what has turned up, remind what is overdue.
 //
 // Safe to run at any time and any number of times. Two overlapping runs can at
-// worst send the same reminder number twice, which the idempotency key on the
-// post lets the receiver drop.
+// worst record the same reminder number twice.
+//
+// The whole pass is one read and one write of the chase document, however many
+// designs it covers. The morning run has well over a hundred overdue, and
+// touching the document once per design would spend the ten milliseconds of
+// processor time the free Worker plan allows long before it reached the end.
 export async function runReceiptTick(
   now = new Date(),
   opts: { force?: boolean } = {}
@@ -157,74 +151,79 @@ export async function runReceiptTick(
   // A person pressing "Run the checks now" is the deliberate exception: they
   // are asking for it, and they can see what they are asking for.
   const quiet = !opts.force && !inWorkingHours(now);
-  const chases = (await listReceiptChases()).filter(isOpen);
-  const due = chases.filter(
-    (c) => c.status !== "paused" && Date.parse(c.nextReminderAt) <= now.getTime()
-  );
 
-  const report: TickReport = {
-    at: now.toISOString(),
-    open: chases.length,
-    due: due.length,
-    reminded: 0,
-    closed: 0,
-    deferred: 0,
-    outcomes: [],
-  };
-  if (!due.length) return report;
-
-  // Read the register once for the whole pass — but re-read each chase as it
-  // is handled, so anything closed while this ran is respected.
+  // The register is a different document, so it is read once here, before the
+  // chase document is opened. Nothing inside the pass below waits on the
+  // network: every moment spent in there is a moment somebody else's save
+  // could be changing the chase document underneath it.
   const jangad = await listJangad();
 
-  for (const stale of due) {
-    const chase = await getReceiptChase(stale.id);
-    if (!chase || !isOpen(chase)) continue;
-    // Somebody may have pushed the due time out, or already reminded, between
-    // the list being read and now.
-    if (Date.parse(chase.nextReminderAt) > now.getTime()) continue;
+  return mutateReceiptChases((db) => {
+    const chases = db.chases.filter(isOpen);
+    const due = chases.filter(
+      (c) => c.status !== "paused" && Date.parse(c.nextReminderAt) <= now.getTime()
+    );
 
-    const hit = findJangadIssue(chase, jangad);
-    if (hit) {
-      const closed = await closeReceiptChase(
-        chase.id, "done", "the jangad register",
-        `Diamonds found on the jangad for ${chase.designNumber}.`,
-        refFor(hit)
-      );
-      report.closed++;
+    const report: TickReport = {
+      at: now.toISOString(),
+      open: chases.length,
+      due: due.length,
+      reminded: 0,
+      closed: 0,
+      deferred: 0,
+      outcomes: [],
+    };
+    if (!due.length) return report;
+
+    // One stamp for the whole pass. It is also the truth: these reminders all
+    // went out together, in one run.
+    const stamp = new Date();
+
+    for (const chase of due) {
+      // The due list is built from this same document, so nothing outside this
+      // request can close a chase while the pass runs. The only thing that
+      // could is the pass itself, and a chase appears in the due list once, so
+      // one that was closed a moment ago is never also reminded. The check
+      // stays because that is the rule being relied on, not an accident.
+      if (!isOpen(chase)) continue;
+
+      const hit = findJangadIssue(chase, jangad);
+      if (hit) {
+        applyClose(
+          chase, "done", "the jangad register",
+          `Diamonds found on the jangad for ${chase.designNumber}.`,
+          refFor(hit), stamp
+        );
+        report.closed++;
+        report.outcomes.push({
+          id: chase.id, demandNo: chase.demandNo, designNumber: chase.designNumber,
+          did: "closed", note: `On the jangad as ${refFor(hit)} — chase closed.`,
+        });
+        continue;
+      }
+
+      // Still nothing — but the office is shut, so it waits for the next run
+      // rather than going out at midnight or on a Sunday. Nothing is recorded,
+      // so it is still due when the window opens and keeps its number.
+      if (quiet) {
+        report.deferred++;
+        continue;
+      }
+
+      // Reminder number n: write the text down and set the next due time.
+      const n = chase.reminderNumber + 1;
+      const messageText = buildMessageText(chase, "receipt.reminder", now, n);
+      applyReminder(chase, n, messageText, stamp);
+      report.reminded++;
       report.outcomes.push({
         id: chase.id, demandNo: chase.demandNo, designNumber: chase.designNumber,
-        did: "closed", note: `On the jangad as ${refFor(hit)} — chase closed.`,
+        did: "reminded", reminderNumber: n,
+        note: `Reminder ${n} recorded. Copy the text from the row into the WhatsApp group.`,
       });
-      if (closed) {
-        await postReceiptEvent(buildPost(closed, "receipt.done", { now }), {
-          attempts: 2, timeoutMs: 6000,
-        });
-      }
-      continue;
     }
 
-    // Still nothing — but the office is shut, so it waits for the next run
-    // rather than going out at midnight or on a Sunday. Nothing is recorded,
-    // so it is still due when the window opens and keeps its number.
-    if (quiet) {
-      report.deferred++;
-      continue;
-    }
-
-    // Send reminder number n.
-    const n = chase.reminderNumber + 1;
-    const post = buildPost(chase, "receipt.reminder", { reminderNumber: n, now });
-    const sent = await postReceiptEvent(post);
-    await recordReminder(chase.id, n, post.messageText, resultNote(sent));
-    report.reminded++;
-    report.outcomes.push({
-      id: chase.id, demandNo: chase.demandNo, designNumber: chase.designNumber,
-      did: "reminded", reminderNumber: n, note: resultNote(sent),
-    });
-  }
-
-  return report;
+    return report;
+  });
 }
 
 // "Send reminder now" — brings the row forward and runs the pass, so the

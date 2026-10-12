@@ -18,8 +18,8 @@ import { runReceiptTick } from "@/lib/receiptChaseRun";
 // browser and no session.
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// A backlog of overdue rows is worked through one at a time, each with a
-// webhook post that may retry.
+// A backlog of overdue rows is one read and one write of the chase document,
+// but the register it is checked against can be a long one.
 export const maxDuration = 60;
 
 function cronOk(req: NextRequest): boolean {
