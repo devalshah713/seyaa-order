@@ -157,7 +157,35 @@ function normalize(m: Memo): Memo {
 
 export async function createMemo(input: NewMemo): Promise<Memo> {
   const db = await readDB();
+  const memo = createMemoIn(db, input);
+  await writeDB(db);
+  return memo;
+}
 
+// Saving a memo, from one read of the store.
+//
+// The party check and the create each used to read the whole document for
+// themselves, so saving parsed it twice and then wrote it back. Measured on a
+// few hundred memos that was about 37 milliseconds, and a request is allowed
+// ten. This does both against one reading.
+//
+// It answers rather than throws when the party is wrong, because that is the
+// person's mistake to correct and deserves its own message, not a failure.
+export async function saveMemo(
+  input: NewMemo
+): Promise<{ ok: true; memo: Memo } | { ok: false; error: string }> {
+  const db = await readDB();
+
+  const party = resolvePartyIn(db, input.to);
+  if (!party.ok) return party;
+
+  const memo = createMemoIn(db, { ...input, to: party.name });
+  await writeDB(db);
+  return { ok: true, memo };
+}
+
+// The memo itself, added to a database already in hand. The caller writes.
+function createMemoIn(db: DB, input: NewMemo): Memo {
   const date = input.date || todayInput();
   const fy = fyFromInput(date);
   const kind: MemoKind = input.kind === "gold" ? "gold" : "jewellery";
@@ -190,7 +218,6 @@ export async function createMemo(input: NewMemo): Promise<Memo> {
     updatedAt: new Date().toISOString(),
   };
   db.memos.push(memo);
-  await writeDB(db);
   return memo;
 }
 
@@ -433,8 +460,15 @@ export async function deleteParty(
 export async function resolveParty(
   name: string
 ): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
-  const db = await readDB();
+  return resolvePartyIn(await readDB(), name);
+}
 
+// The same check against a database already in hand, so a caller that has read
+// the store does not read it a second time to ask this.
+function resolvePartyIn(
+  db: DB,
+  name: string
+): { ok: true; name: string } | { ok: false; error: string } {
   // An empty list means the feature has not been set up yet; refusing every
   // memo until an admin adds a party would stop the business dead.
   if (db.parties.length === 0) return { ok: true, name: name.trim() };

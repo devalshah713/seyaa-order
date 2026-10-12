@@ -233,8 +233,26 @@ export default function MemoForm({
         setSaving(false);
         return;
       }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not save the memo.");
+      // The app always answers in JSON, but something in front of it may not:
+      // when the platform gives up on a request it returns its own HTML page.
+      // Reading that as JSON used to fail with "Unexpected token '<'", which
+      // sent people looking for a problem with the memo rather than the server.
+      type Reply = { error?: string; memo?: { id: string } };
+      const body = await res.text();
+      let data: Reply | null;
+      try {
+        data = JSON.parse(body) as Reply;
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          data?.error ||
+            `The server could not save this memo (error ${res.status}). Nothing has been saved, so your typing is still here. Try once more, and if it keeps happening the site needs attention.`
+        );
+      }
+      if (!data?.memo) throw new Error("The memo saved, but the server's reply could not be read. Check the memo history before saving it again.");
       router.push(`/memo/${data.memo.id}`);
       router.refresh();
     } catch (err) {
