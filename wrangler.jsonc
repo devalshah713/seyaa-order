@@ -40,8 +40,7 @@
 	// bucket name opens nothing without the key. The two that do matter —
 	// R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY — are secrets, set in the
 	// dashboard or with `wrangler secret put`, and never in this file, which is
-	// in the repository. Same for AUTH_SECRET, CRON_SECRET, BACKUP_TOKEN and the
-	// Grok credentials.
+	// in the repository. Same for AUTH_SECRET, CRON_SECRET and BACKUP_TOKEN.
 	"vars": {
 		"R2_ACCOUNT_ID": "e1743308256647a78cb93c3accd6032e",
 		"R2_BUCKET": "seyaa-data"

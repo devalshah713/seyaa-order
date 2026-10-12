@@ -136,10 +136,10 @@ jangad issue entry exists for that design number.
   for the window to open and keeps its number. The window is enforced twice:
   when the next reminder is timed, and again before it is sent, so the rule
   does not rest on the crontab being right.
-- Every reminder is posted to the Grok Bot with a `messageText` block written
-  ready to forward to the WhatsApp group **Diamond bagging group internal**.
-  Nothing is sent to WhatsApp automatically — Deval forwards it by hand, and
-  the same text is on the screen with a **Copy text** button.
+- Every reminder is recorded on the chase row with its text written ready to
+  go to the WhatsApp group **Diamond bagging group internal**. Nothing is sent
+  anywhere automatically — Deval copies it across by hand, with the **Copy
+  text** button beside it on the screen.
 - Saving a jangad issue entry closes the chase there and then; the worker also
   re-checks the register immediately before every reminder, so a chase answered
   outside the app never gets one.
@@ -202,8 +202,6 @@ repository:
 | `AUTH_SECRET` | signs the session cookie |
 | `BACKUP_TOKEN` | lets the office PC download without a login, and lets the Apps Script run the receipt chase |
 | `CRON_SECRET` | lets the scheduler call the nightly sheet copy and the receipt chase |
-| `GROK_DIAMOND_RECEIPT_WEBHOOK_URL` | where reminders are posted for Deval to see in Grok |
-| `GROK_DIAMOND_RECEIPT_WEBHOOK_AUTH` | the Authorization header value from the Grok routine panel, sent verbatim |
 | `RECEIPT_CHASE_FIRST_HOURS` | optional; hours before the first reminder, 24 by default |
 | `RECEIPT_CHASE_REPEAT_HOURS` | optional; hours between reminders after that, 24 by default, matching the once-a-day schedule |
 | `GOOGLE_SHEET_ID` | the spreadsheet the copy is written into |

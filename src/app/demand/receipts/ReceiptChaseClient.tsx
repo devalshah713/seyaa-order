@@ -6,11 +6,10 @@ import { isOpenStatus, STATUS_LABEL, type ReceiptChase } from "@/lib/receiptChas
 import { formatDate } from "@/lib/memoFormat";
 
 export default function ReceiptChaseClient({
-  chases, isAdmin, webhookOn, renderedAt,
+  chases, isAdmin, renderedAt,
 }: {
   chases: ReceiptChase[];
   isAdmin: boolean;
-  webhookOn: boolean;
   renderedAt: string;
 }) {
   const router = useRouter();
@@ -230,13 +229,6 @@ export default function ReceiptChaseClient({
         </span>
       </div>
 
-      {!webhookOn && (
-        <p className="hint">
-          The Grok Bot webhook isn&rsquo;t set up, so reminders are only shown here.
-          Set <code>GROK_DIAMOND_RECEIPT_WEBHOOK_URL</code> to have them
-          pushed to Grok as well.
-        </p>
-      )}
       {error && <p className="save-error">{error}</p>}
       {said && <p className="ch-said">{said}</p>}
 

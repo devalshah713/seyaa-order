@@ -117,10 +117,6 @@ export function elapsedWords(fromIso: string, now: Date): string {
   return `${days} day${days === 1 ? "" : "s"}` + (rest ? ` ${rest} hour${rest === 1 ? "" : "s"}` : "");
 }
 
-export function elapsedHours(fromIso: string, now: Date): number {
-  return Math.max(0, Math.floor((now.getTime() - Date.parse(fromIso)) / 3_600_000));
-}
-
 // "03 Sep 2026" — how a date reads in the chase message.
 export function istDate(iso: string): string {
   const t = Date.parse(iso);
@@ -129,14 +125,6 @@ export function istDate(iso: string): string {
   const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][s.getUTCMonth()];
   return `${String(s.getUTCDate()).padStart(2, "0")} ${month} ${s.getUTCFullYear()}`;
-}
-
-// The same instant written with India's offset on it, which is what the
-// webhook payload asks for: "2026-09-03T14:00:00+05:30".
-export function istStampOffset(iso: string): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  return new Date(t + IST_OFFSET_MS).toISOString().replace(/\.\d+Z$/, "+05:30");
 }
 
 // "in 25 minutes" / "8 minutes ago" — for the chase screen.

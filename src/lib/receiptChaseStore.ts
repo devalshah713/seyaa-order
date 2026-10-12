@@ -130,36 +130,84 @@ export async function openReceiptChases(
   });
 }
 
+// The whole document, handed over inside one read-modify-write.
+//
+// For a caller with a whole pass to make rather than one row to change. The
+// worker walks every chase that has come due, and going through the one-row
+// functions below would read and write the document once per row: fifty
+// designs is about a hundred and fifty reads and fifty writes, and the free
+// Worker plan gives a request ten milliseconds of processor time. One pass in
+// memory is one read and one write however many rows it touches.
+//
+// Anything the pass needs from another document must be fetched before this is
+// called. Nothing inside should be waiting on the network, because every
+// moment spent in here is a moment another writer could be changing the same
+// document underneath.
+export async function mutateReceiptChases<T>(fn: (db: ReceiptChaseDB) => T): Promise<T> {
+  return mutate(fn);
+}
+
 // Record that a reminder went out, and work out when the next one is due.
+//
+// This is the in-memory half, so a pass holding the whole document can record
+// fifty reminders without fifty writes. `at` is passed in rather than read
+// from the clock here, so every row in one pass carries the same stamp, which
+// is also the truth: they went out together.
+export function applyReminder(
+  c: ReceiptChase,
+  n: number,
+  messageText: string,
+  at: Date
+): void {
+  const stamp = at.toISOString();
+  c.reminderNumber = n;
+  c.lastRemindedAt = stamp;
+  c.lastMessageText = messageText;
+  c.status = n >= MAX_REMINDERS ? "paused" : "reminding";
+  c.nextReminderAt = dueAt(at, n + 1).toISOString();
+  note(c, { at: stamp, kind: "reminder", n, note: `Reminder ${n} sent.` });
+  if (c.status === "paused") {
+    note(c, {
+      at: stamp, kind: "paused",
+      note: `Chased ${MAX_REMINDERS} times with nothing on the jangad — paused, waiting for a decision.`,
+    });
+  }
+}
+
 // Called only by the worker, which has already decided this one is due.
 export async function recordReminder(
   id: string,
   n: number,
-  messageText: string,
-  webhookNote: string
+  messageText: string
 ): Promise<ReceiptChase | null> {
   const now = new Date();
-  const at = now.toISOString();
   return mutate((db) => {
     const c = db.chases.find((x) => x.id === id);
     if (!c) return null;
-    c.reminderNumber = n;
-    c.lastRemindedAt = at;
-    c.lastMessageText = messageText;
-    c.status = n >= MAX_REMINDERS ? "paused" : "reminding";
-    c.nextReminderAt = dueAt(now, n + 1).toISOString();
-    note(c, {
-      at, kind: "reminder", n,
-      note: `Reminder ${n} sent.${webhookNote ? ` ${webhookNote}` : ""}`,
-    });
-    if (c.status === "paused") {
-      note(c, {
-        at, kind: "paused",
-        note: `Chased ${MAX_REMINDERS} times with nothing on the jangad — paused, waiting for a decision.`,
-      });
-    }
+    applyReminder(c, n, messageText, now);
     return c;
   });
+}
+
+// The in-memory half of closing a chase. Says whether it closed: only an open
+// chase can be, and a caller that already closed this row in the same pass
+// must not be told it closed it twice.
+export function applyClose(
+  c: ReceiptChase,
+  outcome: "done" | "cancelled",
+  by: string,
+  detail: string,
+  jangadRef: string,
+  at: Date
+): boolean {
+  if (!isOpen(c)) return false;
+  const stamp = at.toISOString();
+  c.status = outcome;
+  c.completedAt = stamp;
+  c.closedBy = by;
+  if (jangadRef) c.jangadRef = jangadRef;
+  note(c, { at: stamp, kind: outcome === "done" ? "done" : "cancelled", note: detail, by });
+  return true;
 }
 
 export async function closeReceiptChase(
@@ -169,15 +217,10 @@ export async function closeReceiptChase(
   detail: string,
   jangadRef = ""
 ): Promise<ReceiptChase | null> {
-  const at = new Date().toISOString();
+  const at = new Date();
   return mutate((db) => {
     const c = db.chases.find((x) => x.id === id);
-    if (!c || !isOpen(c)) return null;
-    c.status = outcome;
-    c.completedAt = at;
-    c.closedBy = by;
-    if (jangadRef) c.jangadRef = jangadRef;
-    note(c, { at, kind: outcome === "done" ? "done" : "cancelled", note: detail, by });
+    if (!c || !applyClose(c, outcome, by, detail, jangadRef, at)) return null;
     return c;
   });
 }
