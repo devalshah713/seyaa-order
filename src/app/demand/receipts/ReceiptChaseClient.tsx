@@ -31,6 +31,9 @@ export default function ReceiptChaseClient({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [said, setSaid] = useState("");
+  // Which designs are ticked. Ids, not rows, so a refresh that rebuilds the
+  // list does not lose the ticks.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
 
   const open = useMemo(() => chases.filter((c) => isOpenStatus(c.status)), [chases]);
   const closed = useMemo(() => chases.filter((c) => !isOpenStatus(c.status)), [chases]);
@@ -51,6 +54,95 @@ export default function ReceiptChaseClient({
         .join(" ").toLowerCase().includes(needle)
     );
   }, [chases, open, showClosed, q]);
+
+  // Only an open chase can be reminded, so only an open row can be ticked.
+  const pickable = useMemo(() => shown.filter((c) => isOpenStatus(c.status)), [shown]);
+  // A design that has since been received, or cancelled, drops its tick by
+  // itself rather than sitting in the count as something that cannot be sent.
+  useEffect(() => {
+    const live = new Set(open.map((c) => c.id));
+    setPicked((was) => {
+      const next = new Set(Array.from(was).filter((id) => live.has(id)));
+      return next.size === was.size ? was : next;
+    });
+  }, [open]);
+
+  const pickedCount = picked.size;
+  const shownPicked = pickable.filter((c) => picked.has(c.id)).length;
+  const allShownPicked = pickable.length > 0 && shownPicked === pickable.length;
+  const someShownPicked = shownPicked > 0 && !allShownPicked;
+
+  function togglePick(id: string): void {
+    setPicked((was) => {
+      const next = new Set(was);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // The header tick works on what is on screen, so a search for one demand and
+  // a tick at the top means that demand and nothing else.
+  function togglePickAllShown(on: boolean): void {
+    setPicked((was) => {
+      const next = new Set(was);
+      for (const c of pickable) {
+        if (on) next.add(c.id);
+        else next.delete(c.id);
+      }
+      return next;
+    });
+  }
+
+  // One request for the whole tickful. The server does the work in a single
+  // read and a single write of the chase list, which is the only way fifty
+  // designs fit inside what the Worker is allowed to spend on one request.
+  async function remindPicked() {
+    const ids = Array.from(picked);
+    if (!ids.length) return;
+    setError(""); setSaid(""); setBusy("bulk");
+    try {
+      const res = await fetch("/api/receipt-chase/remind", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      // When a request runs out of processor time the platform answers with an
+      // HTML page, not JSON. Reading the text first means that shows up as a
+      // sentence about the server rather than a parsing complaint nobody can
+      // act on.
+      const text = await res.text();
+      let data: Record<string, unknown> = {};
+      let readable = true;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        readable = false;
+      }
+      if (!readable) {
+        throw new Error(
+          `The server answered with something this page could not read (status ${res.status}). ` +
+          "Please try again with fewer designs ticked."
+        );
+      }
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" && data.error
+            ? data.error
+            : "Could not send the reminders."
+        );
+      }
+      if (typeof data.note === "string" && data.note) {
+        setSaid(`${ids.length} ${ids.length === 1 ? "design" : "designs"}: ${data.note}`);
+      }
+      setPicked(new Set());
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send the reminders.");
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function act(c: ReceiptChase, action: string, confirmWith = "") {
     if (confirmWith && !window.confirm(confirmWith)) return;
@@ -148,6 +240,20 @@ export default function ReceiptChaseClient({
       {error && <p className="save-error">{error}</p>}
       {said && <p className="ch-said">{said}</p>}
 
+      {pickedCount > 0 && (
+        <div className="ch-pickbar">
+          <b>{pickedCount} selected</b>
+          <button type="button" className="btn btn-small"
+            disabled={!!busy} onClick={remindPicked}>
+            {busy === "bulk" ? "Sending…" : "Remind selected"}
+          </button>
+          <button type="button" className="ch-log-btn"
+            disabled={!!busy} onClick={() => setPicked(new Set())}>
+            Clear
+          </button>
+        </div>
+      )}
+
       {shown.length === 0 ? (
         <div className="empty-state">
           <p>{open.length === 0 && !showClosed
@@ -158,6 +264,15 @@ export default function ReceiptChaseClient({
         <table className="history ch-table">
           <thead>
             <tr>
+              <th className="ch-pick">
+                {/* Ticks everything on screen, which is everything the filter
+                    and the search have left. */}
+                <input type="checkbox" aria-label="Select every design shown"
+                  checked={allShownPicked}
+                  disabled={pickable.length === 0}
+                  ref={(el) => { if (el) el.indeterminate = someShownPicked; }}
+                  onChange={(e) => togglePickAllShown(e.target.checked)} />
+              </th>
               <th>Design Number</th><th>Demand</th><th>Issued To</th>
               <th>Waiting</th><th className="num">Reminders</th><th>Next</th>
               <th>Status</th><th className="actions-col">Actions</th>
@@ -171,6 +286,18 @@ export default function ReceiptChaseClient({
               return (
                 <Fragment key={c.id}>
                   <tr className={`ch-row ch-${c.status}`}>
+                    {/* A received or cancelled design gets no tick: there is
+                        nobody left to remind about it. The click is kept off
+                        the row so ticking never opens or follows anything. */}
+                    <td className="ch-pick" onClick={(e) => e.stopPropagation()}>
+                      {isOpen && (
+                        <input type="checkbox"
+                          aria-label={`Select ${c.designNumber}`}
+                          checked={picked.has(c.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => togglePick(c.id)} />
+                      )}
+                    </td>
                     <td className="memono">
                       {c.designNumber}
                       {c.pdNo && <span className="ch-product">{c.pdNo}</span>}
@@ -243,7 +370,7 @@ export default function ReceiptChaseClient({
                   </tr>
                   {logOpen && (
                     <tr className="ch-logrow">
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         {c.lastMessageText ? (
                           <div className="rc-copy">
                             <div className="rc-copy-head">

@@ -13,8 +13,8 @@ import type { JangadRow } from "./jangadConfig";
 import { listJangad } from "./jangadStore";
 import type { Demand } from "./demandStore";
 import {
-  bringForward, closeReceiptChase, getReceiptChase, isOpen, listReceiptChases,
-  openReceiptChases, recordReminder,
+  bringForward, bringForwardMany, closeReceiptChase, getReceiptChase, isOpen,
+  listReceiptChases, openReceiptChases, recordReminder,
   type NewReceiptChase,
 } from "./receiptChaseStore";
 import type { ReceiptChase } from "./receiptChase";
@@ -233,4 +233,21 @@ export async function remindNow(id: string, by: string): Promise<TickReport | nu
   const moved = await bringForward(id, by);
   if (!moved) return null;
   return runReceiptTick(new Date(), { force: true });
+}
+
+// "Remind selected" — the same thing for a tickful of designs.
+//
+// One pass covers the whole batch: runReceiptTick already walks every chase
+// that has come due, and after the batch bring-forward all of them have. So the
+// tick runs once, not once per design, and the processor time of reminding
+// fifty rows is barely more than the time of reminding one.
+export async function remindMany(
+  ids: string[],
+  by: string
+): Promise<{ moved: string[]; report: TickReport | null }> {
+  const moved = await bringForwardMany(ids, by);
+  // Everything asked for was already closed, so there is nothing a pass could
+  // find and no reason to spend a read of the register on it.
+  if (!moved.length) return { moved: [], report: null };
+  return { moved, report: await runReceiptTick(new Date(), { force: true }) };
 }
