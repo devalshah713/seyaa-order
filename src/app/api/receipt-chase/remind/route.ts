@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentSession } from "@/lib/currentUser";
 import { remindMany } from "@/lib/receiptChaseRun";
+import { isReceiptWebhookConfigured } from "@/lib/receiptWebhook";
 
 // Remind a whole tickful of designs at once.
 //
@@ -64,13 +65,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 409 }
       );
     }
+    // "Sent" is only true when there is somewhere to send to. Without the
+    // webhook the reminder is recorded and its text put on the screen for
+    // somebody to forward by hand, and saying it was sent is how a person ends
+    // up believing the diamond team has been told when nobody has told them.
+    const raised = `${report.reminded} ${report.reminded === 1 ? "reminder" : "reminders"}`;
+    const alsoClosed = report.closed
+      ? ` ${report.closed} of the ticked designs turned out to be on the jangad already, so they are closed.`
+      : "";
+
     return NextResponse.json({
       moved,
       reminded: report.reminded,
       closed: report.closed,
-      note:
-        `${report.reminded} ${report.reminded === 1 ? "reminder" : "reminders"} sent` +
-        `${report.closed ? `, ${report.closed} found on the jangad and closed` : ""}.`,
+      sent: isReceiptWebhookConfigured(),
+      note: isReceiptWebhookConfigured()
+        ? `${raised} sent.${alsoClosed}`
+        : `${raised} recorded. Nothing was sent anywhere, so copy the text from each row into the WhatsApp group.${alsoClosed}`,
     });
   } catch (err) {
     return NextResponse.json(
