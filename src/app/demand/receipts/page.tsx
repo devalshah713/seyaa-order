@@ -32,7 +32,10 @@ export default async function ReceiptChasePage() {
   }
 
   return (
-    <div className="wrap">
+    // The wide layout, the same one the jangad and the stock book use. Nine
+    // columns do not fit the ordinary 1000px page, so the table used to run off
+    // the right and take the whole window's sideways scrollbar with it.
+    <div className="wrap jg-wrap">
       <div className="page-head">
         <h1>Diamond Receipts</h1>
         <Link href="/demand" className="btn">All Demands</Link>

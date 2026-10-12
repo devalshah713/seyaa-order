@@ -253,6 +253,10 @@ export default function ReceiptChaseClient({
             : "Nothing to show."}</p>
         </div>
       ) : (
+        // On a screen too narrow for nine columns the table scrolls inside this
+        // box rather than pushing the page sideways, so the heading, the search
+        // and the counts stay where they are put.
+        <div className="ch-scroll">
         <table className="history ch-table">
           <thead>
             <tr>
@@ -395,6 +399,7 @@ export default function ReceiptChaseClient({
             })}
           </tbody>
         </table>
+        </div>
       )}
     </>
   );

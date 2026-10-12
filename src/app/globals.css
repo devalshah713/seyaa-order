@@ -1837,6 +1837,13 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
   background: color-mix(in srgb, var(--gold) 7%, transparent); border-radius: 0 4px 4px 0;
 }
 
+/* Nine columns will not fit a phone or a small laptop whatever is done to them,
+   so the table scrolls inside this box instead of pushing the page sideways.
+   No border or background of its own: the table already carries both, and a
+   second set would read as a box inside a box. The radius is here only so the
+   table's own rounded corners are not clipped square while it scrolls. */
+.ch-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
+
 .ch-table td { vertical-align: top; }
 /* A design number broken over four lines is unreadable, and these columns are
    the ones anybody actually scans down. Give them the room to stay on one.
@@ -1845,6 +1852,13 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
 .ch-table td.memono, .ch-table td:nth-child(3) a { white-space: nowrap; }
 /* The demand number and the date under it each belong on one line. */
 .ch-table td:nth-child(3) { white-space: nowrap; }
+/* Issued To, the fourth column. The field is empty on every row the office has
+   so far, so it is a column of dashes; it keeps its place but is given no width
+   it is not using. A width of 1% is how a table is told to shrink a column to
+   its contents and hand the rest to the columns that need it. */
+.ch-table th:nth-child(4), .ch-table td:nth-child(4) {
+  width: 1%; min-width: 0; white-space: nowrap;
+}
 .ch-table th:nth-child(7), .ch-table td:nth-child(7) { min-width: 116px; }
 
 /* The tick that says "this one too". Narrow, and lined up with the first line
