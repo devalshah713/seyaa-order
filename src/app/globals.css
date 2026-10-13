@@ -1844,6 +1844,12 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
    table's own rounded corners are not clipped square while it scrolls. */
 .ch-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
 
+/* History tables elsewhere open a record when the row is clicked, so they get a
+   pointer. Nothing happens when a chase row is clicked: the design number, the
+   ticks and the buttons are each their own thing. Promising a click that does
+   not come is worse than promising nothing. */
+table.ch-table tbody tr { cursor: default; }
+
 .ch-table td { vertical-align: top; }
 /* A design number broken over four lines is unreadable, and these columns are
    the ones anybody actually scans down. Give them the room to stay on one.
