@@ -38,6 +38,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           totalPieces: sheet.pieces?.length || 0,
           assignedTo: sheet.assignedTo,
           deliveryDate: sheet.deliveryDate,
+          // Enough of the sheet to read it without opening it. The chase list
+          // shows this in a panel over the page, photo first, so the photo and
+          // the few lines printed beside it travel with the answer.
+          photoPath: sheet.photoPath,
+          category: sheet.category,
+          subCategory: sheet.subCategory,
+          tdw: sheet.tdw,
+          diaQuality: sheet.diaQuality,
+          goldPurity: sheet.goldPurity,
+          goldColor: sheet.goldColor,
+          size: sheet.size,
+          remarks: sheet.remarks,
         };
       }),
     });
