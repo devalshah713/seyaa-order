@@ -396,11 +396,17 @@ export type DesignLookup = { sheet: PdSheet; hit: DesignHit };
 // part of a design number, find the sheets it names. Exact piece hits sort
 // first — that is what someone holding one unlabelled piece is asking for.
 export async function findByDesignNo(query: string): Promise<DesignLookup[]> {
-  const sheets = await listPdSheets();
+  // Matching reads one field, `sku`, so the sheets come in exactly as stored.
+  // Rebuilding every sheet's piece list first was the expensive half of the
+  // search and all of it was thrown away for the sheets that did not match,
+  // which on a book with bulk runs in it is thousands of objects built for
+  // nothing. The few that did match are hydrated here instead, so a caller
+  // still gets the same sheets with the same piece lists it always got.
+  const sheets = await listPdSheetsRaw();
   const hits: DesignLookup[] = [];
   for (const sheet of sheets) {
     const hit = matchDesign(sheet.sku, query);
-    if (hit) hits.push({ sheet, hit });
+    if (hit) hits.push({ sheet: hydrate(sheet), hit });
   }
   return hits.sort((a, b) =>
     a.hit.kind === b.hit.kind ? 0 : a.hit.kind === "piece" ? -1 : 1

@@ -1844,6 +1844,12 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
    table's own rounded corners are not clipped square while it scrolls. */
 .ch-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
 
+/* History tables elsewhere open a record when the row is clicked, so they get a
+   pointer. Nothing happens when a chase row is clicked: the design number, the
+   ticks and the buttons are each their own thing. Promising a click that does
+   not come is worse than promising nothing. */
+table.ch-table tbody tr { cursor: default; }
+
 .ch-table td { vertical-align: top; }
 /* A design number broken over four lines is unreadable, and these columns are
    the ones anybody actually scans down. Give them the room to stay on one.
@@ -1915,6 +1921,90 @@ table.jg-table td[data-label="Add-on"] input { min-width: 62px; }
   display: inline-block; min-width: 130px; color: var(--panel-muted); font-size: 11.5px;
 }
 .ch-log .ch-by { display: inline; margin-left: 6px; }
+
+/* The design number, which is now pressed to see the PD sheet. It has to go
+   on reading as the design number and not as a button, so the browser's own
+   button look is taken off entirely and the cell's styling is inherited
+   through. The dotted underline is the only hint that it does something, and
+   it firms up under the pointer. */
+.ch-peek {
+  display: inline; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; font-weight: inherit; letter-spacing: inherit;
+  font-variant-numeric: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+  text-decoration-color: var(--gold-line);
+}
+.ch-peek:hover, .ch-peek:focus-visible {
+  text-decoration-style: solid; text-decoration-color: var(--gold);
+}
+
+/* --- The PD sheet read over the page --------------------------------------- */
+/* A screen on a screen: the chase list stays where it was and the sheet comes
+   up on top of it. The dark backdrop is also the way out, so it covers the
+   whole window and nothing behind it can be clicked by accident. */
+.pk-back {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(12, 11, 9, .62);
+}
+/* Capped at most of the window's height and scrolling inside itself, so a
+   sheet with a tall photo and a page of remarks still has its close cross
+   within reach on a phone. */
+.pk-panel {
+  position: relative; width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 18px 20px 20px;
+  background: var(--panel); color: var(--panel-ink);
+  border: 1px solid var(--panel-line); border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .34);
+}
+/* Top right, over the photo, and big enough to hit with a thumb. */
+.pk-close {
+  position: absolute; top: 8px; right: 10px; z-index: 1;
+  width: 32px; height: 32px; padding: 0; line-height: 1;
+  border: 1px solid var(--panel-line); border-radius: 999px;
+  background: var(--panel); color: var(--panel-muted);
+  font-size: 20px; cursor: pointer;
+}
+.pk-close:hover { color: var(--panel-ink); border-color: var(--gold-soft); }
+/* The photo is what was asked for, so it comes first and gets the room.
+   Contained, never cropped, the same as on the sheet itself. */
+.pk-photo {
+  display: block; width: 100%; max-height: 54vh; margin: 4px 0 14px;
+  object-fit: contain; border-radius: 8px; background: var(--field-bg);
+}
+.pk-design {
+  margin: 0 0 12px; font-family: var(--serif); font-size: 20px;
+  font-weight: 600; color: var(--gold); letter-spacing: .4px;
+}
+.pk-rows { display: grid; gap: 7px; font-size: 13px; }
+.pk-row { display: flex; gap: 12px; align-items: baseline; }
+.pk-lab {
+  flex: 0 0 148px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 700; color: var(--panel-muted);
+}
+.pk-val { flex: 1 1 auto; word-break: break-word; }
+/* Loading, and the plain sentences for a sheet with no photo or no sheet at
+   all. One voice for all three, because to the reader they are all the same
+   thing: the panel saying what is going on. */
+.pk-note {
+  margin: 6px 34px 6px 0; font-size: 13px; line-height: 1.55;
+  color: var(--panel-muted);
+}
+.pk-full {
+  display: inline-block; margin-top: 16px; font-size: 12.5px;
+  color: var(--gold); text-decoration: underline; text-underline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  /* Full width with a gutter either side on a phone. */
+  .pk-back { padding: 10px; align-items: flex-start; }
+  .pk-panel { max-width: none; padding: 16px 14px 18px; }
+  .pk-photo { max-height: 42vh; }
+  /* Two columns of labels and values do not fit, so the label sits above. */
+  .pk-row { display: block; }
+  .pk-lab { display: block; margin-bottom: 1px; }
+}
 
 /* The three figures the office actually asks about: what is late, what is
    still out, what has come in. */

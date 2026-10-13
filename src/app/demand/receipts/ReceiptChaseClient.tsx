@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { elapsedWords, istClock, relativeTime, MAX_REMINDERS } from "@/lib/chaseTime";
 import { isOpenStatus, STATUS_LABEL, type ReceiptChase } from "@/lib/receiptChase";
 import { formatDate } from "@/lib/memoFormat";
+import PdPeek from "./PdPeek";
 
 export default function ReceiptChaseClient({
   chases, isAdmin, renderedAt,
@@ -33,6 +34,8 @@ export default function ReceiptChaseClient({
   // Which designs are ticked. Ids, not rows, so a refresh that rebuilds the
   // list does not lose the ticks.
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  // The design number whose PD sheet is being read over the list, or nothing.
+  const [peek, setPeek] = useState<string | null>(null);
 
   const open = useMemo(() => chases.filter((c) => isOpenStatus(c.status)), [chases]);
   const closed = useMemo(() => chases.filter((c) => !isOpenStatus(c.status)), [chases]);
@@ -295,7 +298,14 @@ export default function ReceiptChaseClient({
                       )}
                     </td>
                     <td className="memono">
-                      {c.designNumber}
+                      {/* A button and not a link: the PD sheet opens on top of
+                          this list, and nothing about reading it should move
+                          the page the office is working down. */}
+                      <button type="button" className="ch-peek"
+                        onClick={() => setPeek(c.designNumber)}
+                        title="Show this design's PD sheet">
+                        {c.designNumber}
+                      </button>
                       {c.pdNo && <span className="ch-product">{c.pdNo}</span>}
                     </td>
                     <td>
@@ -401,6 +411,8 @@ export default function ReceiptChaseClient({
         </table>
         </div>
       )}
+
+      <PdPeek designNo={peek} onClose={() => setPeek(null)} />
     </>
   );
 }
