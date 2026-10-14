@@ -41,7 +41,7 @@ import {
   memosAreInSql,
   type SqlColumn,
 } from "./sqlSchema";
-import { insertRows, sqlRecordCounts, sqlSetCounters, sqlSetFlag } from "./memoSql";
+import { insertRows, sqlExistingIds, sqlRecordCounts, sqlSetCounters, sqlSetFlag } from "./memoSql";
 import { normalizeMemo, readMemoDoc, type DB, type Memo, type Order } from "./memoStore";
 import { PARTY_KINDS, type Party, type PartyKind, type StockEvent } from "./memoFormat";
 
@@ -54,9 +54,10 @@ const CHUNK_BYTES = 48_000;
 // records. The rest of the run needs the others, and the worst case is the
 // first press, which also makes the tables: asking whether the schema is there
 // (1), making it (14), counting before and after (2), the running numbers (1),
-// up to one flag per controlled list (7) and the flag at the end (1). That is
-// 26, so the records get what is left.
-const QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 26;
+// up to one flag per controlled list (7), the flag at the end (1) and, on a
+// second press, one query per kind to find out what is already across (4).
+// That is 30, so the records get what is left.
+const QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 30;
 
 export type RecordCounts = {
   memos: number;
@@ -146,20 +147,35 @@ function chunked<T>(records: T[]): T[][] {
 }
 
 // One kind of record, as far as the query budget allows.
-async function copyKind<T>(
+//
+// What the database already holds is left out before anything is sent rather
+// than ignored on arrival. The database would ignore it either way, but a
+// second run that offered the first run's work again would spend its whole
+// allowance on records already across and never reach the ones that are not.
+async function copyKind<T extends { id: string }>(
   table: string,
   columns: SqlColumn<T>[],
   records: T[],
+  alreadyThere: number,
   budget: { left: number }
-): Promise<{ copied: number; remaining: number }> {
+): Promise<{ copied: number; remaining: number; skipped: number }> {
+  let todo = records;
+  let skipped = 0;
+  if (alreadyThere > 0 && records.length > 0) {
+    const have = await sqlExistingIds(table);
+    budget.left--;
+    todo = records.filter((record) => !have.has(record.id));
+    skipped = records.length - todo.length;
+  }
+
   let copied = 0;
-  for (const chunk of chunked(records)) {
+  for (const chunk of chunked(todo)) {
     if (budget.left <= 0) break;
     await insertRows(table, columns, chunk);
     budget.left--;
     copied += chunk.length;
   }
-  return { copied, remaining: records.length - copied };
+  return { copied, remaining: todo.length - copied, skipped };
 }
 
 // Copy the memo records across.
@@ -194,10 +210,10 @@ export async function copyMemosToSql(): Promise<CopyReport> {
   const parties = (doc.parties || []) as Party[];
 
   const budget = { left: QUERY_BUDGET };
-  const memoResult = await copyKind(MEMO_TABLE, MEMO_COLUMNS, memos, budget);
-  const eventResult = await copyKind(EVENT_TABLE, EVENT_COLUMNS, events, budget);
-  const orderResult = await copyKind(ORDER_TABLE, ORDER_COLUMNS, orders, budget);
-  const partyResult = await copyKind(PARTY_TABLE, PARTY_COLUMNS, parties, budget);
+  const memoResult = await copyKind(MEMO_TABLE, MEMO_COLUMNS, memos, before.memos, budget);
+  const eventResult = await copyKind(EVENT_TABLE, EVENT_COLUMNS, events, before.events, budget);
+  const orderResult = await copyKind(ORDER_TABLE, ORDER_COLUMNS, orders, before.orders, budget);
+  const partyResult = await copyKind(PARTY_TABLE, PARTY_COLUMNS, parties, before.parties, budget);
 
   // The running numbers. Without these the next memo saved in D1 would start
   // the book again at 001, so they go across before anything is switched over.
@@ -222,10 +238,10 @@ export async function copyMemosToSql(): Promise<CopyReport> {
     parties: Math.max(0, after.parties - before.parties),
   };
   report.skipped = {
-    memos: Math.max(0, memoResult.copied - report.copied.memos),
-    events: Math.max(0, eventResult.copied - report.copied.events),
-    orders: Math.max(0, orderResult.copied - report.copied.orders),
-    parties: Math.max(0, partyResult.copied - report.copied.parties),
+    memos: memoResult.skipped + Math.max(0, memoResult.copied - report.copied.memos),
+    events: eventResult.skipped + Math.max(0, eventResult.copied - report.copied.events),
+    orders: orderResult.skipped + Math.max(0, orderResult.copied - report.copied.orders),
+    parties: partyResult.skipped + Math.max(0, partyResult.copied - report.copied.parties),
   };
 
   const left =
