@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { listDemands, isDemandStorageConfigured, type Demand } from "@/lib/demandStore";
+import {
+  listDemandRows, isDemandStorageConfigured, type DemandListRow,
+} from "@/lib/demandStore";
 import { openReceiptCount } from "@/lib/receiptChaseStore";
 import DemandHistoryTable from "./DemandHistoryTable";
 
@@ -19,10 +21,13 @@ export default async function DemandListPage() {
     );
   }
 
-  let demands: Demand[] = [];
+  // Rows, not whole demands: the table is a client component, so whatever it is
+  // given is written into the page, and a demand's diamond rows are most of it.
+  // See DemandListRow.
+  let demands: DemandListRow[] = [];
   let error = "";
   try {
-    demands = await listDemands();
+    demands = await listDemandRows();
   } catch (err) {
     error = err instanceof Error ? err.message : "Could not load demands.";
   }

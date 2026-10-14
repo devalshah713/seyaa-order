@@ -4,17 +4,23 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDate } from "@/lib/memoFormat";
 import { matchDesign } from "@/lib/designNo";
-import {
-  RESULT_LABEL, answerLabel, failedChecks, qcResult, type QcRecord,
-} from "@/lib/qcConfig";
+import { RESULT_LABEL, answerLabel, type QcLine } from "@/lib/qcConfig";
+import type { QcRow } from "@/lib/qcStore";
 
 // What has been checked, and how it went. The verdict is what anyone opening
 // this is looking for, so it leads every row.
+//
+// This is a client component, so every field it is given is written into the
+// page the server sends. It is therefore given rows rather than whole QC
+// records (see QcRow), and in particular it is not given each record's fifteen
+// checks, which are most of a record and are hidden until somebody opens the
+// row. The verdict and the names of the failed checks come worked out on the
+// row, so nothing here rebuilds them from the lines.
 export default function QcClient({
   records,
   initialQuery,
 }: {
-  records: QcRecord[];
+  records: QcRow[];
   initialQuery: string;
 }) {
   const router = useRouter();
@@ -23,20 +29,47 @@ export default function QcClient({
   const [only, setOnly] = useState<"all" | "pass" | "fail">("all");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  // The checks of the records somebody has opened, fetched one record at a
+  // time and kept for as long as the screen is up, so opening a row twice asks
+  // once. A record with no checks at all stores an empty list, which is an
+  // answer and must not read as "not fetched yet".
+  const [lines, setLines] = useState<Record<string, QcLine[]>>({});
+  const [lineError, setLineError] = useState<Record<string, string>>({});
 
-  const toggle = (id: string) =>
+  async function loadLines(id: string) {
+    try {
+      const res = await fetch(`/api/qc/${id}`);
+      const d = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(d?.error || "Could not read the checks.");
+      setLines((prev) => ({ ...prev, [id]: d?.lines || [] }));
+    } catch (err) {
+      setLineError((prev) => ({
+        ...prev,
+        [id]: err instanceof Error ? err.message : "Could not read the checks.",
+      }));
+    }
+  }
+
+  const toggle = (id: string) => {
+    const opening = !open.has(id);
     setOpen((prev) => {
       const next = new Set(prev);
       if (!next.delete(id)) next.add(id);
       return next;
     });
+    // Only on the way open, and only if the checks are not already here: a row
+    // that failed to load once can be asked for again by opening it again.
+    if (opening && !lines[id]) {
+      setLineError((prev) => (prev[id] ? { ...prev, [id]: "" } : prev));
+      void loadLines(id);
+    }
+  };
 
   const shown = useMemo(() => {
     const needle = q.trim();
     const lower = needle.toLowerCase();
     return rows.filter((r) => {
-      const result = qcResult(r.lines);
-      if (only !== "all" && result !== only) return false;
+      if (only !== "all" && r.result !== only) return false;
       if (!needle) return true;
       if (r.designNo && matchDesign(r.designNo, needle)) return true;
       return [r.qcNo, r.stockNo, r.design, r.category, r.checkedBy, r.comments]
@@ -47,13 +80,12 @@ export default function QcClient({
   const counts = useMemo(() => {
     let pass = 0, fail = 0, open2 = 0;
     for (const r of rows) {
-      const v = qcResult(r.lines);
-      if (v === "pass") pass++; else if (v === "fail") fail++; else open2++;
+      if (r.result === "pass") pass++; else if (r.result === "fail") fail++; else open2++;
     }
     return { pass, fail, open: open2 };
   }, [rows]);
 
-  async function del(r: QcRecord) {
+  async function del(r: QcRow) {
     if (!window.confirm(`Delete QC ${r.qcNo} for ${r.stockNo}?`)) return;
     setError("");
     try {
@@ -116,9 +148,10 @@ export default function QcClient({
             </thead>
             <tbody>
               {shown.flatMap((r) => {
-                const result = qcResult(r.lines);
-                const failed = failedChecks(r.lines);
+                const result = r.result;
+                const failed = r.failed;
                 const isOpen = open.has(r.id);
+                const checks = lines[r.id];
                 return [
                   <tr key={r.id} className={isOpen ? "sb-open" : undefined}>
                     <td data-label="Result">
@@ -134,7 +167,7 @@ export default function QcClient({
                     <td data-label="QC Date">{r.date ? formatDate(r.date) : "—"}</td>
                     <td data-label="Checked By">{r.checkedBy || "—"}</td>
                     <td data-label="Failed on" className="sb-wide">
-                      {failed.length ? failed.map((f) => f.check).join(", ") : "—"}
+                      {failed.length ? failed.join(", ") : "—"}
                     </td>
                     <td className="jg-sr">
                       <button className="del" onClick={() => del(r)}
@@ -145,19 +178,29 @@ export default function QcClient({
                     <tr key={`${r.id}-detail`} className="sb-breakup">
                       <td colSpan={9}>
                         <div className="sb-breakup-in">
-                          <h4>{r.qcNo} · {r.stockNo} · {r.lines.length} checks</h4>
-                          <table className="sb-sub qc-sub">
-                            <thead><tr><th>Check</th><th>Answer</th><th>Remark</th></tr></thead>
-                            <tbody>
-                              {r.lines.map((l, i) => (
-                                <tr key={i} className={l.answer === "no" ? "bad" : ""}>
-                                  <td>{l.check}</td>
-                                  <td className={`ans ${l.answer}`}>{answerLabel(l.answer) || "—"}</td>
-                                  <td>{l.remark || "—"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                          <h4>{r.qcNo} · {r.stockNo} · {r.lineCount} checks</h4>
+                          {/* The checks are fetched when the row is opened, so
+                              there is a moment before they are here, and a
+                              fetch that fails says so rather than showing an
+                              empty sheet. */}
+                          {lineError[r.id] ? (
+                            <p className="save-error">{lineError[r.id]}</p>
+                          ) : !checks ? (
+                            <p className="pieces-hint">Loading the checks…</p>
+                          ) : (
+                            <table className="sb-sub qc-sub">
+                              <thead><tr><th>Check</th><th>Answer</th><th>Remark</th></tr></thead>
+                              <tbody>
+                                {checks.map((l, i) => (
+                                  <tr key={i} className={l.answer === "no" ? "bad" : ""}>
+                                    <td>{l.check}</td>
+                                    <td className={`ans ${l.answer}`}>{answerLabel(l.answer) || "—"}</td>
+                                    <td>{l.remark || "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
                           {r.comments && <p className="pieces-hint">{r.comments}</p>}
                         </div>
                       </td>

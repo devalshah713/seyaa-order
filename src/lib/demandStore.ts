@@ -3,7 +3,7 @@
 import "server-only";
 import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
-import type { DemandRow } from "./demandConfig";
+import { totalPcs, type DemandRow } from "./demandConfig";
 
 const DB_PATH = "demand/db.json";
 
@@ -94,6 +94,64 @@ export async function createDemand(input: NewDemand): Promise<Demand> {
 export async function listDemands(): Promise<Demand[]> {
   const db = await readDB();
   return db.demands.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+// --- The list screen's own shape ---------------------------------------------
+
+// One row of the demand list, and nothing else.
+//
+// The list used to be handed whole demands. That is expensive because of
+// `rows`: a demand carries one row per diamond size, each with its comments and
+// bag count, and the table is a client component, so React wrote every field of
+// every row into the page the server sent. All the table does with them is list
+// the distinct design numbers and add up the pieces, and all the search does is
+// look for text in three of their seven fields. Measured on a few hundred
+// demands that is tens of milliseconds and most of a megabyte, and a request on
+// the free Worker plan is allowed ten.
+//
+// So the designs and the piece total are worked out here, and the searchable
+// text is prepared here as one string, which is both smaller than the rows and
+// exactly what the search was building in the browser on every keystroke. The
+// notes, the financial year, the sequence, the PD link, the timestamps and each
+// row's comments and bags never reach the browser at all.
+export type DemandListRow = {
+  id: string;
+  demandNo: string;
+  date: string;
+  // The distinct design numbers, in the order they appear on the demand.
+  designs: string[];
+  // Stones to count out, not stones per piece. See totalPcs.
+  pcs: number;
+  // Everything the search can match on, joined exactly as the browser used to
+  // join it and lower-cased once instead of once per keystroke.
+  search: string;
+};
+
+function toRow(d: Demand): DemandListRow {
+  const designs: string[] = [];
+  const text: string[] = [d.demandNo, d.issuedTo, d.pdNo || ""];
+  for (const r of d.rows) {
+    if (r.designNo && !designs.includes(r.designNo)) designs.push(r.designNo);
+    text.push(`${r.designNo} ${r.shape} ${r.pointers} ${r.growth}`);
+  }
+  return {
+    id: d.id,
+    demandNo: d.demandNo,
+    date: d.date,
+    designs,
+    // Counted here through the same function the table used, so the figure in
+    // the Pcs column is worked out exactly as it always was.
+    pcs: totalPcs(d.rows),
+    search: text.join(" ").toLowerCase(),
+  };
+}
+
+export async function listDemandRows(): Promise<DemandListRow[]> {
+  const db = await readDB();
+  return db.demands
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map(toRow);
 }
 
 export async function getDemand(id: string): Promise<Demand | null> {
