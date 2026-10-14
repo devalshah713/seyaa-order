@@ -15,6 +15,24 @@ type DocResult = {
   note: string;
 };
 
+// What the memo records look like in each store, side by side.
+type RecordCounts = { memos: number; events: number; orders: number; parties: number };
+
+type SqlCheck = {
+  hint: string;
+  r2: RecordCounts;
+  sql: RecordCounts;
+  live: boolean;
+};
+
+type CopyReport = {
+  at: string;
+  copied: RecordCounts;
+  skipped: RecordCounts;
+  finished: boolean;
+  notes: string[];
+};
+
 export default function BackupClient({
   sheetConfigured,
   sheetHint,
@@ -24,6 +42,8 @@ export default function BackupClient({
   r2Configured,
   blobStillSet,
   migrationHint,
+  sqlAttached,
+  sqlHint,
 }: {
   sheetConfigured: boolean;
   sheetHint: string;
@@ -33,6 +53,8 @@ export default function BackupClient({
   r2Configured: boolean;
   blobStillSet: boolean;
   migrationHint: string;
+  sqlAttached: boolean;
+  sqlHint: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [tabs, setTabs] = useState<TabResult[] | null>(null);
@@ -45,6 +67,13 @@ export default function BackupClient({
   // portal is actually being used on.
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
+
+  // The memo move into the Cloudflare database, which is a separate thing from
+  // the R2 copy above and has its own button.
+  const [sqlBusy, setSqlBusy] = useState(false);
+  const [sqlError, setSqlError] = useState("");
+  const [sqlCheck, setSqlCheck] = useState<SqlCheck | null>(null);
+  const [sqlReport, setSqlReport] = useState<CopyReport | null>(null);
 
   async function sync() {
     setBusy(true); setError(""); setTabs(null);
@@ -88,6 +117,35 @@ export default function BackupClient({
       setMoveError(err instanceof Error ? err.message : "The copy failed.");
     } finally {
       setMoving(false);
+    }
+  }
+
+  // Look, but touch nothing: how many memo records each store holds.
+  async function checkD1() {
+    setSqlBusy(true); setSqlError(""); setSqlCheck(null); setSqlReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setSqlCheck(d as SqlCheck);
+    } catch (err) {
+      setSqlError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setSqlBusy(false);
+    }
+  }
+
+  async function copyToD1() {
+    setSqlBusy(true); setSqlError(""); setSqlCheck(null); setSqlReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setSqlReport(d as CopyReport);
+    } catch (err) {
+      setSqlError(err instanceof Error ? err.message : "The copy failed.");
+    } finally {
+      setSqlBusy(false);
     }
   }
 
@@ -253,6 +311,113 @@ export default function BackupClient({
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <div className="bk-card">
+        <h2>Memos into the Cloudflare database</h2>
+        <p className="bk-lede">
+          Saving a memo currently rewrites the whole memo book, so it gets
+          slower every month: about 14 thousandths of a second of computing time
+          at 200 memos and 26 at 400, against the 10 this free plan allows.
+          Cloudflare&rsquo;s own database, which is also free, writes one memo
+          as one line instead, and stays the same speed at four thousand memos
+          as at four.
+        </p>
+        <p className="bk-lede">
+          Only memos, stock entries, orders and the controlled lists move now.
+          PD sheets, demands, the jangad register, the stock book, QC, prices,
+          the receipt chase and the sign-in list all stay exactly where they are
+          and are not touched.
+        </p>
+        {sqlHint ? (
+          <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The database is attached. The records are copied into it, and the
+            portal only starts reading memos from it once every record is
+            across. Before that moment nothing changes for anybody.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> counts what is in each store and says nothing else.{" "}
+          <b>Copy the memos across</b> reads the R2 file and writes what the
+          database has not got yet. Neither one writes to R2, neither one
+          deletes anything, and both are safe to press more than once. If there
+          are more records than one press can carry, it says so and the next
+          press carries on from there.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkD1} disabled={sqlBusy}>
+            {sqlBusy ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyToD1}
+            disabled={sqlBusy || !sqlAttached || !r2Configured}
+          >
+            Copy the memos across
+          </button>
+        </div>
+        {sqlError && <p className="party-warn">{sqlError}</p>}
+
+        {sqlCheck && !sqlCheck.hint && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>In the R2 file</th><th>In the database</th></tr>
+              </thead>
+              <tbody>
+                {([
+                  ["Memos", "memos"],
+                  ["Stock entries", "events"],
+                  ["Orders", "orders"],
+                  ["List names", "parties"],
+                ] as const).map(([label, key]) => (
+                  <tr key={key}>
+                    <td>{label}</td>
+                    <td>{sqlCheck.r2[key].toLocaleString()}</td>
+                    <td className={sqlCheck.sql[key] >= sqlCheck.r2[key] ? "bk-ok" : ""}>
+                      {sqlCheck.sql[key].toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="bk-lede">
+              {sqlCheck.live
+                ? "The portal is reading memos from the database now. The R2 file is left as it was on the day of the move."
+                : "The portal is still reading memos from the R2 file."}
+            </p>
+          </>
+        )}
+        {sqlCheck?.hint && <p className="party-warn">{sqlCheck.hint}</p>}
+
+        {sqlReport && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>Copied in</th><th>Already there</th></tr>
+              </thead>
+              <tbody>
+                {([
+                  ["Memos", "memos"],
+                  ["Stock entries", "events"],
+                  ["Orders", "orders"],
+                  ["List names", "parties"],
+                ] as const).map(([label, key]) => (
+                  <tr key={key}>
+                    <td>{label}</td>
+                    <td className="bk-ok">{sqlReport.copied[key].toLocaleString()}</td>
+                    <td>{sqlReport.skipped[key].toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {sqlReport.notes.map((note, i) => (
+              <p key={i} className={sqlReport.finished ? "bk-lede" : "party-warn"}>{note}</p>
+            ))}
+          </>
         )}
       </div>
     </>

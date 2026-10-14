@@ -1,0 +1,302 @@
+// The tables, and what each column is for.
+//
+// The shape here is chosen to be the smallest change that can possibly work,
+// because this is the owner's live business ledger and a clever schema that
+// loses a field is worse than a dull one that keeps every record whole.
+//
+// So every table has two kinds of column:
+//
+//   * the fields a list page sorts, filters or searches on, as real columns;
+//   * `doc`, the entire record as JSON, exactly as it sits in the R2 document
+//     today.
+//
+// A list page selects the small columns and never reads `doc`. Opening one
+// record selects its `doc` and gets back precisely the object the TypeScript
+// types already describe, so nothing above this layer has to change and no
+// field can be quietly dropped on the way through. A field added to a memo next
+// year keeps working without a schema change; it is in `doc` either way, and it
+// only needs a column of its own if a list page starts filtering on it.
+//
+// The column lists below are the single description of each table. The
+// CREATE TABLE statement, the INSERT a save uses, and the SELECT that copies
+// records out of R2 are all generated from them, so there is no second list to
+// keep in step.
+import "server-only";
+import { isMissingTable, sqlFirst, sqlRun } from "./sql";
+import type { Party, StockEvent } from "./memoFormat";
+import type { Memo, Order } from "./memoStore";
+
+// One real column: its name, its type, where to find its value in a record in
+// hand, and where to find it inside a stored JSON record.
+export type SqlColumn<T> = {
+  name: string;
+  type: "TEXT" | "INTEGER" | "REAL";
+  // The field's SQLite JSON path inside the stored record. Used by the copy,
+  // which expands whole records inside the database rather than one query per
+  // record.
+  path: string;
+  // The same value taken from a record already in memory. Used by every save.
+  get: (record: T) => unknown;
+  // What a record that has not got this field at all becomes. Older memos have
+  // no kind and no gold rows; every column is NOT NULL and carries a blank
+  // rather than a null, so nothing downstream has to test for both.
+  blank: string | number;
+  primaryKey?: boolean;
+};
+
+const text = (value: unknown): string => (value === undefined || value === null ? "" : String(value));
+const num = (value: unknown): number => (typeof value === "number" && isFinite(value) ? value : 0);
+const json = (value: unknown): string => JSON.stringify(value ?? []);
+
+// --- Memos -------------------------------------------------------------------
+//
+// Why each real column is real:
+//
+//   id             the row's identity, and the address of its page (/memo/ID).
+//   memo_no        the first column of the history, and searched.
+//   kind           the Jewellery / Gold tabs filter on it, and the counts beside
+//                  each tab are counts of it.
+//   fy, seq        the number the memo was issued under. Separate columns
+//                  because the two books are counted and audited per year.
+//   to_party       the "To" column, and its own filter dropdown. Named
+//                  to_party because TO is a reserved word in SQL.
+//   through,
+//   mobile         both searched by the box above the history.
+//   memo_date      the Date column, and the From / Until filters.
+//   purpose        the Purpose column and its filter.
+//   comment        not on the history. It is a column so that the history's
+//                  rebuilt memo is the whole memo and not a memo with one
+//                  field silently missing.
+//   against_memo_no  searched; it is how a receipt is tied to its issue.
+//   total_pcs,
+//   total_gross_wt,
+//   total_fine_wt  the Qty column, which shows pieces for a jewellery memo and
+//                  fine grams for a gold one.
+//   created_at     the sort order of the history, newest first. Indexed.
+//   updated_at     what the nightly backup uses to decide whether a memo's PDF
+//                  needs fetching again.
+//   items          the jewellery rows. The history needs them for two things it
+//                  works out in the browser: the status pill, and the search
+//                  box matching a stock number. They are their own column so
+//                  the list can have them without reading `doc`.
+//   gold_items     the same, for searching a gold description.
+export const MEMO_COLUMNS: SqlColumn<Memo>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (m) => m.id, blank: "", primaryKey: true },
+  { name: "memo_no", type: "TEXT", path: "$.memoNo", get: (m) => text(m.memoNo), blank: "" },
+  // A memo written before gold existed has no kind and is a jewellery memo,
+  // which is the same reading normalize() has always given it.
+  { name: "kind", type: "TEXT", path: "$.kind", get: (m) => (m.kind === "gold" ? "gold" : "jewellery"), blank: "jewellery" },
+  { name: "fy", type: "TEXT", path: "$.fy", get: (m) => text(m.fy), blank: "" },
+  { name: "seq", type: "INTEGER", path: "$.seq", get: (m) => num(m.seq), blank: 0 },
+  { name: "to_party", type: "TEXT", path: "$.to", get: (m) => text(m.to), blank: "" },
+  { name: "through", type: "TEXT", path: "$.through", get: (m) => text(m.through), blank: "" },
+  { name: "mobile", type: "TEXT", path: "$.mobile", get: (m) => text(m.mobile), blank: "" },
+  { name: "memo_date", type: "TEXT", path: "$.date", get: (m) => text(m.date), blank: "" },
+  { name: "purpose", type: "TEXT", path: "$.purpose", get: (m) => text(m.purpose), blank: "" },
+  { name: "comment", type: "TEXT", path: "$.comment", get: (m) => text(m.comment), blank: "" },
+  { name: "against_memo_no", type: "TEXT", path: "$.againstMemoNo", get: (m) => text(m.againstMemoNo), blank: "" },
+  { name: "total_pcs", type: "INTEGER", path: "$.totalPcs", get: (m) => num(m.totalPcs), blank: 0 },
+  { name: "total_gross_wt", type: "REAL", path: "$.totalGrossWt", get: (m) => num(m.totalGrossWt), blank: 0 },
+  { name: "total_fine_wt", type: "REAL", path: "$.totalFineWt", get: (m) => num(m.totalFineWt), blank: 0 },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (m) => text(m.createdAt), blank: "" },
+  { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (m) => text(m.updatedAt), blank: "" },
+  { name: "items", type: "TEXT", path: "$.items", get: (m) => json(m.items), blank: "[]" },
+  { name: "gold_items", type: "TEXT", path: "$.goldItems", get: (m) => json(m.goldItems), blank: "[]" },
+];
+
+// --- Stock events ------------------------------------------------------------
+//
+// What became of each piece on a memo, append-only. These are read two ways and
+// both are a column: every event for one memo (the memo's own page), and every
+// event for one stock number (the ledger for that piece). The whole event is
+// rebuilt from `doc`, which is both faithful and no more work than rebuilding
+// it from the columns would be.
+export const EVENT_COLUMNS: SqlColumn<StockEvent>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (e) => e.id, blank: "", primaryKey: true },
+  { name: "memo_id", type: "TEXT", path: "$.memoId", get: (e) => text(e.memoId), blank: "" },
+  { name: "stock_no", type: "TEXT", path: "$.stockNo", get: (e) => text(e.stockNo), blank: "" },
+  // The recording time orders two events about the same piece, so a correction
+  // keyed in later wins over the mistake it corrects.
+  { name: "recorded_at", type: "TEXT", path: "$.at", get: (e) => text(e.at), blank: "" },
+];
+
+// --- Orders ------------------------------------------------------------------
+//
+// The order board shows every open order newest first, and the whole row is
+// shown rather than filtered on, so the only columns that earn their place are
+// the identity, the number it was taken under, the sort, and the status the
+// board groups by.
+export const ORDER_COLUMNS: SqlColumn<Order>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (o) => o.id, blank: "", primaryKey: true },
+  { name: "order_no", type: "TEXT", path: "$.orderNo", get: (o) => text(o.orderNo), blank: "" },
+  // ORD/26-27/004 is counted per fiscal year in its own book, exactly as a
+  // memo is, and takes its number the same way.
+  { name: "fy", type: "TEXT", path: "$.fy", get: (o) => text(o.fy), blank: "" },
+  { name: "seq", type: "INTEGER", path: "$.seq", get: (o) => num(o.seq), blank: 0 },
+  { name: "status", type: "TEXT", path: "$.status", get: (o) => text(o.status), blank: "in_production" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (o) => text(o.createdAt), blank: "" },
+  { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (o) => text(o.updatedAt), blank: "" },
+];
+
+// --- Parties -----------------------------------------------------------------
+//
+// The controlled lists: memo parties, manufacturers, categories and the rest.
+// Every screen asks for one list at a time, alphabetically, so kind and name
+// are columns and are indexed together. parent_id is a column because a
+// sub-category is reached through the category above it.
+//
+// A party saved before kinds existed has none and is a memo party, which is the
+// reading partyKindOf() has always given it.
+export const PARTY_COLUMNS: SqlColumn<Party>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (p) => p.id, blank: "", primaryKey: true },
+  { name: "name", type: "TEXT", path: "$.name", get: (p) => text(p.name), blank: "" },
+  { name: "kind", type: "TEXT", path: "$.kind", get: (p) => text(p.kind) || "party", blank: "party" },
+  { name: "parent_id", type: "TEXT", path: "$.parentId", get: (p) => text(p.parentId), blank: "" },
+  { name: "code", type: "TEXT", path: "$.code", get: (p) => text(p.code), blank: "" },
+];
+
+// --- Building the statements -------------------------------------------------
+
+function createTable<T>(table: string, columns: SqlColumn<T>[]): string {
+  const lines = columns.map((column) => {
+    const constraint = column.primaryKey ? "PRIMARY KEY" : "NOT NULL";
+    return `  ${column.name} ${column.type} ${constraint}`;
+  });
+  // Last, and never optional: the record itself.
+  lines.push("  doc TEXT NOT NULL");
+  return `CREATE TABLE IF NOT EXISTS ${table} (\n${lines.join(",\n")}\n)`;
+}
+
+// The column names an INSERT names, in order, with `doc` last.
+export function columnNames<T>(columns: SqlColumn<T>[]): string[] {
+  return [...columns.map((c) => c.name), "doc"];
+}
+
+// A record's values in that same order, with the record itself last.
+export function columnValues<T>(columns: SqlColumn<T>[], record: T): unknown[] {
+  return [...columns.map((c) => c.get(record)), JSON.stringify(record)];
+}
+
+export const MEMO_TABLE = "memos";
+export const EVENT_TABLE = "memo_events";
+export const ORDER_TABLE = "memo_orders";
+export const PARTY_TABLE = "memo_parties";
+export const COUNTER_TABLE = "memo_counters";
+export const FLAG_TABLE = "memo_flags";
+
+// Set to 1 by the copy, and only once every record is across. Until then the
+// portal reads memos from R2 as it always has, so the two can be deployed in
+// either order and there is no window where the memo book looks empty.
+export const MEMOS_FILLED = "memos:filled";
+
+// Every statement, in the order they have to run: tables before the indexes on
+// them. Each is IF NOT EXISTS, so running the whole list again changes nothing
+// and a run that stopped half way is finished by running it again.
+export const MEMO_SCHEMA: string[] = [
+  createTable(MEMO_TABLE, MEMO_COLUMNS),
+  createTable(EVENT_TABLE, EVENT_COLUMNS),
+  createTable(ORDER_TABLE, ORDER_COLUMNS),
+  createTable(PARTY_TABLE, PARTY_COLUMNS),
+
+  // The running numbers, one row per book: "26-27" for jewellery memos,
+  // "G:26-27" for gold, "O:26-27" for orders. Exactly the key/value map the
+  // JSON document holds today, which is what keeps SS/26-27/008 following
+  // SS/26-27/007 after the move.
+  `CREATE TABLE IF NOT EXISTS ${COUNTER_TABLE} (
+  counter_key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  // Things that have happened once and must not happen twice: the records
+  // copied in, a built-in list written in. Separate from the counters so that
+  // backing the counters up and restoring them cannot carry a flag with them.
+  `CREATE TABLE IF NOT EXISTS ${FLAG_TABLE} (
+  flag TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  // The memo history's sort order. Newest first is how every list in the
+  // portal reads, and it is the one index the history cannot do without.
+  `CREATE INDEX IF NOT EXISTS idx_memos_created_at ON ${MEMO_TABLE} (created_at DESC)`,
+  // The stock ledger walks memos in date order rather than entry order,
+  // because what matters there is when goods moved.
+  `CREATE INDEX IF NOT EXISTS idx_memos_memo_date ON ${MEMO_TABLE} (memo_date)`,
+  // The issue memos a gold receipt can be booked against: one kind, one
+  // purpose, newest first.
+  `CREATE INDEX IF NOT EXISTS idx_memos_kind_purpose ON ${MEMO_TABLE} (kind, purpose, created_at DESC)`,
+  // Who a memo went to: counting a party's memos before it may be removed,
+  // and finding the typed names the free-text era left behind.
+  `CREATE INDEX IF NOT EXISTS idx_memos_to_party ON ${MEMO_TABLE} (to_party)`,
+
+  // One memo's outcomes, for its own page.
+  `CREATE INDEX IF NOT EXISTS idx_events_memo_id ON ${EVENT_TABLE} (memo_id)`,
+  // One piece's outcomes, for the stock ledger.
+  `CREATE INDEX IF NOT EXISTS idx_events_stock_no ON ${EVENT_TABLE} (stock_no)`,
+
+  // The order board, newest first.
+  `CREATE INDEX IF NOT EXISTS idx_orders_created_at ON ${ORDER_TABLE} (created_at DESC)`,
+  // One controlled list at a time, alphabetically, which is how every dropdown
+  // in the portal asks for it.
+  `CREATE INDEX IF NOT EXISTS idx_parties_kind_name ON ${PARTY_TABLE} (kind, name)`,
+];
+
+// Everything the statements above create, by name, so whether they have all
+// been run can be asked in one query instead of fourteen.
+const MEMO_OBJECTS = [
+  MEMO_TABLE, EVENT_TABLE, ORDER_TABLE, PARTY_TABLE, COUNTER_TABLE, FLAG_TABLE,
+  "idx_memos_created_at", "idx_memos_memo_date", "idx_memos_kind_purpose",
+  "idx_memos_to_party", "idx_events_memo_id", "idx_events_stock_no",
+  "idx_orders_created_at", "idx_parties_kind_name",
+];
+
+// Create what is missing. Safe to run as often as anyone presses the button.
+//
+// Asks first, in one query, whether there is anything to do, because the only
+// other thing this request is for is copying records and those statements come
+// out of the same allowance of fifty. On a database that is already set up this
+// costs one query rather than fourteen.
+//
+// Then one statement at a time rather than as one batch. A batch would be a
+// single transaction, which sounds safer, but these statements do not need it:
+// every one of them is IF NOT EXISTS, so the only thing a half-finished run
+// costs is pressing the button again. Running them plainly is the behaviour
+// least likely to surprise.
+export async function applyMemoSchema(): Promise<number> {
+  const marks = MEMO_OBJECTS.map(() => "?").join(", ");
+  const row = await sqlFirst<{ found: number }>(
+    `SELECT COUNT(*) AS found FROM sqlite_master WHERE name IN (${marks})`,
+    MEMO_OBJECTS
+  );
+  if (row && Number(row.found) === MEMO_OBJECTS.length) return 0;
+
+  for (const statement of MEMO_SCHEMA) await sqlRun(statement);
+  return MEMO_SCHEMA.length;
+}
+
+// Are the memo tables filled, and is D1 therefore the live store?
+//
+// Only the flag answers this. Counting rows would not: a database with the
+// tables made but the records not yet copied holds zero memos, and zero memos
+// is also what a brand new business looks like.
+//
+// Tables that do not exist yet mean the move has not started, which is an
+// ordinary answer. Anything else, such as a database that cannot be reached or
+// is refusing, is thrown, because reading that as "not moved yet" would send the
+// next save to R2 while the office works from D1, and the records would quietly
+// part company.
+let filled = false;
+
+export async function memosAreInSql(): Promise<boolean> {
+  if (filled) return true;
+  try {
+    const row = await sqlFirst<{ value: number }>(
+      `SELECT value FROM ${FLAG_TABLE} WHERE flag = ?`,
+      [MEMOS_FILLED]
+    );
+    filled = !!row && Number(row.value) === 1;
+    return filled;
+  } catch (err) {
+    if (isMissingTable(err)) return false;
+    throw err;
+  }
+}
