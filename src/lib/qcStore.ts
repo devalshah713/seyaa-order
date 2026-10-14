@@ -6,7 +6,10 @@ import { listPartyNames } from "./memoStore";
 import { priceOf, type StockEntry } from "./stockBookConfig";
 import { loadPrices } from "./priceStore";
 import { todayInput } from "./memoFormat";
-import type { NewQcRecord, QcAnswer, QcLine, QcRecord } from "./qcConfig";
+import {
+  failedChecks, qcResult,
+  type NewQcRecord, type QcAnswer, type QcLine, type QcRecord, type QcResult,
+} from "./qcConfig";
 
 const DB_PATH = "qc/db.json";
 
@@ -62,6 +65,79 @@ export function normalizeQcInput(body: Record<string, unknown>): NewQcRecord {
 export async function listQcRecords(): Promise<QcRecord[]> {
   const db = await readDB();
   return db.records.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+// --- The list screen's own shape ---------------------------------------------
+
+// One row of the QC list, and nothing else.
+//
+// The list used to be handed whole QcRecords. A QC record is the heaviest thing
+// the portal stores, because of its `lines`: a category is looked over for
+// fifteen or so things, each line carrying the check as the list spells it
+// ("Gold Color Check with Master Piece"), an answer and a remark. That is about
+// two thirds of every record, and the list is a client component, so React
+// wrote all of it into the page the server sent. Half the top level fields were
+// never read at all. Measured on a few hundred records that is tens of
+// milliseconds and most of a megabyte, and a request on the free Worker plan is
+// allowed ten, so the screen stopped rendering.
+//
+// What the screen needs from the lines is the verdict and the names of whatever
+// failed, so both are worked out here, once per record, and the lines stay in
+// storage. The detail table under a row is collapsed until somebody opens it,
+// and that is when the lines for that one record are fetched.
+export type QcRow = {
+  id: string;
+  // Shown in the table.
+  qcNo: string;
+  stockNo: string;
+  designNo: string;
+  category: string;
+  date: string;
+  checkedBy: string;
+  // Searched, but not shown.
+  design: string;
+  // Searched, and shown under a row that has been opened.
+  comments: string;
+  // The verdict, and the checks it failed on by name. The table shows both and
+  // the tabs count by verdict, so working it out on the client meant building
+  // every record's line list in the browser twice over.
+  result: QcResult;
+  failed: string[];
+  // How many checks the record holds, for the heading on the detail table. The
+  // lines themselves are not sent, but the count is one number.
+  lineCount: number;
+};
+
+function toRow(r: QcRecord): QcRow {
+  return {
+    id: r.id,
+    qcNo: r.qcNo,
+    stockNo: r.stockNo,
+    designNo: r.designNo,
+    category: r.category,
+    date: r.date,
+    checkedBy: r.checkedBy,
+    design: r.design,
+    comments: r.comments,
+    result: qcResult(r.lines),
+    failed: failedChecks(r.lines).map((l) => l.check),
+    lineCount: r.lines.length,
+  };
+}
+
+export async function listQcRows(): Promise<QcRow[]> {
+  const db = await readDB();
+  return db.records
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map(toRow);
+}
+
+// The checks of one record, for a row somebody has just opened.
+export async function qcLinesOf(id: string): Promise<QcLine[] | null> {
+  const db = await readDB();
+  const rec = db.records.find((r) => r.id === id);
+  return rec ? rec.lines : null;
 }
 
 export async function getQcRecord(id: string): Promise<QcRecord | null> {

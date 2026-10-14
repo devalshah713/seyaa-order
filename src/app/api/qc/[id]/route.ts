@@ -1,8 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteQcRecord, normalizeQcInput, updateQcRecord } from "@/lib/qcStore";
+import {
+  deleteQcRecord, normalizeQcInput, qcLinesOf, updateQcRecord,
+} from "@/lib/qcStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// Just the checks of one record.
+//
+// The QC list sends rows without their lines, because fifteen checks a record
+// across a few hundred records is most of the page and the detail table is
+// collapsed. Opening one row asks for that one record's checks here instead.
+export async function GET(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const params = await ctx.params;
+  try {
+    const lines = await qcLinesOf(params.id);
+    if (!lines) return NextResponse.json({ error: "QC record not found." }, { status: 404 });
+    return NextResponse.json({ lines });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not read the QC." },
+      { status: 503 }
+    );
+  }
+}
 
 export async function PATCH(
   req: NextRequest,

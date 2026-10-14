@@ -44,5 +44,34 @@
 	"vars": {
 		"R2_ACCOUNT_ID": "e1743308256647a78cb93c3accd6032e",
 		"R2_BUCKET": "seyaa-data"
-	}
+	},
+	// The SQL database the records are moving into, one module at a time.
+	//
+	// Why: every module keeps its records as one JSON file in the bucket above,
+	// read whole and written whole, so saving one memo costs the size of the
+	// whole memo book. Measured at 14 milliseconds of processor time with 200
+	// memos and 26 with 400, against the 10 a request is allowed on this plan.
+	// In D1 a save is one row, and the time a query takes is time spent waiting
+	// rather than working, which is not what the 10 milliseconds counts.
+	//
+	// database_id has to be pasted in by the owner: Cloudflare dashboard,
+	// Storage & Databases, D1 SQL Database, create a database named seyaa-data,
+	// then copy the Database ID from its page into the line below, replacing
+	// PLACEHOLDER_SET_BY_OWNER and keeping the quotation marks.
+	//
+	// It is not a secret. Like the account id above it is visible in the
+	// dashboard URL and opens nothing on its own, and it has to live in this
+	// file rather than in the dashboard because a deploy rebuilds the Worker's
+	// bindings from this file.
+	//
+	// Until a real id is in place the binding does not resolve, hasSql() in
+	// src/lib/sql.ts answers false, and every module reads and writes the JSON
+	// files exactly as it does today.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "seyaa-data",
+			"database_id": "PLACEHOLDER_SET_BY_OWNER"
+		}
+	]
 }

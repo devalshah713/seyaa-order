@@ -3,10 +3,15 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDate } from "@/lib/memoFormat";
-import { totalPcs } from "@/lib/demandConfig";
-import type { Demand } from "@/lib/demandStore";
+import type { DemandListRow } from "@/lib/demandStore";
 
-export default function DemandHistoryTable({ demands }: { demands: Demand[] }) {
+// This table is a client component, so every field it is given is written into
+// the page the server sends. It is therefore given rows rather than whole
+// demands (see DemandListRow), and in particular it is not given each demand's
+// diamond rows: the designs, the piece total and the searchable text are all
+// worked out on the server, which is also where they were cheapest to make.
+
+export default function DemandHistoryTable({ demands }: { demands: DemandListRow[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -15,14 +20,13 @@ export default function DemandHistoryTable({ demands }: { demands: Demand[] }) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return demands;
-    return demands.filter((d) =>
-      [d.demandNo, d.issuedTo, d.pdNo || "",
-       ...d.rows.map((r) => `${r.designNo} ${r.shape} ${r.pointers} ${r.growth}`)]
-        .join(" ").toLowerCase().includes(needle)
-    );
+    // The row carries the same text the browser used to join together here, in
+    // the same order and already lower-cased, so a search matches what it
+    // always matched.
+    return demands.filter((d) => d.search.includes(needle));
   }, [q, demands]);
 
-  async function del(d: Demand) {
+  async function del(d: DemandListRow) {
     if (!window.confirm(`Delete demand ${d.demandNo}? This cannot be undone.`)) return;
     setError(""); setBusyId(d.id);
     try {
@@ -52,32 +56,29 @@ export default function DemandHistoryTable({ demands }: { demands: Demand[] }) {
           </tr>
         </thead>
         <tbody>
-          {filtered.map((d) => {
-            const designs = Array.from(new Set(d.rows.map((r) => r.designNo).filter(Boolean)));
-            return (
-              <tr key={d.id} onClick={() => router.push(`/demand/${d.id}`)}>
-                <td className="memono">{d.demandNo}</td>
-                <td>{formatDate(d.date)}</td>
-                <td style={{ fontSize: 12 }}>
-                  {designs.length ? designs.join(", ") : "—"}
-                </td>
-                <td className="num">{totalPcs(d.rows) || "—"}</td>
-                <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                  <a
-                    href={`/demand/${d.id}?pdf=1&print=1`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rowbtn"
-                    title="Open the demand and print it"
-                  >Print</a>
-                  <Link href={`/demand/${d.id}/edit`} className="rowbtn">Edit</Link>
-                  <button className="rowbtn danger" onClick={() => del(d)} disabled={busyId === d.id}>
-                    {busyId === d.id ? "Deleting…" : "Delete"}
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+          {filtered.map((d) => (
+            <tr key={d.id} onClick={() => router.push(`/demand/${d.id}`)}>
+              <td className="memono">{d.demandNo}</td>
+              <td>{formatDate(d.date)}</td>
+              <td style={{ fontSize: 12 }}>
+                {d.designs.length ? d.designs.join(", ") : "—"}
+              </td>
+              <td className="num">{d.pcs || "—"}</td>
+              <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                <a
+                  href={`/demand/${d.id}?pdf=1&print=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rowbtn"
+                  title="Open the demand and print it"
+                >Print</a>
+                <Link href={`/demand/${d.id}/edit`} className="rowbtn">Edit</Link>
+                <button className="rowbtn danger" onClick={() => del(d)} disabled={busyId === d.id}>
+                  {busyId === d.id ? "Deleting…" : "Delete"}
+                </button>
+              </td>
+            </tr>
+          ))}
           {filtered.length === 0 && (
             <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--panel-muted)" }}>No matches.</td></tr>
           )}

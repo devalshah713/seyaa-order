@@ -4,6 +4,8 @@ import { isSheetConfigured, sheetSetupHint, sheetTab, sheetUrl } from "@/lib/goo
 import { isBackupConfigured } from "@/lib/backup";
 import { hasBlob, hasR2 } from "@/lib/db";
 import { migrationHint } from "@/lib/dbMigrate";
+import { hasSql } from "@/lib/sql";
+import { sqlMigrationHint } from "@/lib/sqlMigrate";
 import BackupClient from "./BackupClient";
 
 export const metadata = { title: "Backups — Seyaa Solitaire" };
@@ -29,6 +31,8 @@ export default async function BackupPage() {
         r2Configured={hasR2()}
         blobStillSet={hasBlob()}
         migrationHint={migrationHint()}
+        sqlAttached={hasSql()}
+        sqlHint={sqlMigrationHint()}
       />
     </div>
   );
