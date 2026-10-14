@@ -586,6 +586,14 @@ ON CONFLICT(flag) DO UPDATE SET value = excluded.value`,
 
 // --- Counting, for the admin screen ------------------------------------------
 
+// The ids one table already holds, so a copy that has to be run more than once
+// can leave out what is already across instead of offering it again. One
+// column, one query, and only asked for when the table is not empty.
+export async function sqlExistingIds(table: string): Promise<Set<string>> {
+  const rows = await sqlAll<{ id: string }>(`SELECT id FROM ${table}`);
+  return new Set(rows.map((row) => str(row.id)));
+}
+
 export async function sqlRecordCounts(): Promise<{
   memos: number;
   events: number;
