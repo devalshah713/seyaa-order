@@ -33,6 +33,24 @@ type CopyReport = {
   notes: string[];
 };
 
+// And the same two questions for the jangad register, which moves on its own.
+type JangadCounts = { rows: number };
+
+type JangadCheck = {
+  hint: string;
+  r2: JangadCounts;
+  sql: JangadCounts;
+  live: boolean;
+};
+
+type JangadCopyReport = {
+  at: string;
+  copied: JangadCounts;
+  skipped: JangadCounts;
+  finished: boolean;
+  notes: string[];
+};
+
 export default function BackupClient({
   sheetConfigured,
   sheetHint,
@@ -74,6 +92,12 @@ export default function BackupClient({
   const [sqlError, setSqlError] = useState("");
   const [sqlCheck, setSqlCheck] = useState<SqlCheck | null>(null);
   const [sqlReport, setSqlReport] = useState<CopyReport | null>(null);
+
+  // The jangad move, which has its own buttons and its own answers.
+  const [jgBusy, setJgBusy] = useState(false);
+  const [jgError, setJgError] = useState("");
+  const [jgCheck, setJgCheck] = useState<JangadCheck | null>(null);
+  const [jgReport, setJgReport] = useState<JangadCopyReport | null>(null);
 
   async function sync() {
     setBusy(true); setError(""); setTabs(null);
@@ -146,6 +170,35 @@ export default function BackupClient({
       setSqlError(err instanceof Error ? err.message : "The copy failed.");
     } finally {
       setSqlBusy(false);
+    }
+  }
+
+  // Look, but touch nothing: how many register entries each store holds.
+  async function checkJangadD1() {
+    setJgBusy(true); setJgError(""); setJgCheck(null); setJgReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/jangad");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setJgCheck(d as JangadCheck);
+    } catch (err) {
+      setJgError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setJgBusy(false);
+    }
+  }
+
+  async function copyJangadToD1() {
+    setJgBusy(true); setJgError(""); setJgCheck(null); setJgReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/jangad", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setJgReport(d as JangadCopyReport);
+    } catch (err) {
+      setJgError(err instanceof Error ? err.message : "The copy failed.");
+    } finally {
+      setJgBusy(false);
     }
   }
 
@@ -325,10 +378,10 @@ export default function BackupClient({
           as at four.
         </p>
         <p className="bk-lede">
-          Only memos, stock entries, orders and the controlled lists move now.
-          PD sheets, demands, the jangad register, the stock book, QC, prices,
-          the receipt chase and the sign-in list all stay exactly where they are
-          and are not touched.
+          This card moves memos, stock entries, orders and the controlled lists
+          only. The jangad register has its own card below it. PD sheets,
+          demands, the stock book, QC, prices, the receipt chase and the
+          sign-in list all stay exactly where they are and are not touched.
         </p>
         {sqlHint ? (
           <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
@@ -416,6 +469,100 @@ export default function BackupClient({
             </table>
             {sqlReport.notes.map((note, i) => (
               <p key={i} className={sqlReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="bk-card">
+        <h2>The jangad register into the Cloudflare database</h2>
+        <p className="bk-lede">
+          This is the one that had to move. The register is the biggest ledger
+          in the portal, thousands of entries of twenty-eight columns, and
+          filling in one cell rewrote the whole register. It had grown past the
+          10 thousandths of a second of computing time this free plan allows, so
+          the save was being cut off part way through and the register page was
+          failing outright. Cloudflare&rsquo;s own database writes one entry as
+          one line, and stays the same speed at forty thousand entries as at
+          four hundred.
+        </p>
+        <p className="bk-lede">
+          This card moves the register only. The memo card above it is a
+          separate move, and the two can be done in either order or one without
+          the other.
+        </p>
+        {sqlHint ? (
+          <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The database is attached. The entries are copied into it, and the
+            portal only starts reading the register from it once every entry is
+            across. Before that moment nothing changes for anybody.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> counts what is in each store and says nothing else.{" "}
+          <b>Copy the register across</b> reads the R2 file and writes what the
+          database has not got yet. Neither one writes to R2, neither one
+          deletes anything, and both are safe to press more than once. If there
+          are more entries than one press can carry, it says so and the next
+          press carries on from there.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkJangadD1} disabled={jgBusy}>
+            {jgBusy ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyJangadToD1}
+            disabled={jgBusy || !sqlAttached || !r2Configured}
+          >
+            Copy the register across
+          </button>
+        </div>
+        {jgError && <p className="party-warn">{jgError}</p>}
+
+        {jgCheck && !jgCheck.hint && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>In the R2 file</th><th>In the database</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Register entries</td>
+                  <td>{jgCheck.r2.rows.toLocaleString()}</td>
+                  <td className={jgCheck.sql.rows >= jgCheck.r2.rows ? "bk-ok" : ""}>
+                    {jgCheck.sql.rows.toLocaleString()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="bk-lede">
+              {jgCheck.live
+                ? "The portal is reading the register from the database now. The R2 file is left as it was on the day of the move."
+                : "The portal is still reading the register from the R2 file."}
+            </p>
+          </>
+        )}
+        {jgCheck?.hint && <p className="party-warn">{jgCheck.hint}</p>}
+
+        {jgReport && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>Copied in</th><th>Already there</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Register entries</td>
+                  <td className="bk-ok">{jgReport.copied.rows.toLocaleString()}</td>
+                  <td>{jgReport.skipped.rows.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+            {jgReport.notes.map((note, i) => (
+              <p key={i} className={jgReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
             ))}
           </>
         )}

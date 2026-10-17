@@ -25,6 +25,7 @@ import "server-only";
 import { isMissingTable, sqlFirst, sqlRun } from "./sql";
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, Order } from "./memoStore";
+import type { JangadRow } from "./jangadConfig";
 
 // One real column: its name, its type, where to find its value in a record in
 // hand, and where to find it inside a stored JSON record.
@@ -153,6 +154,74 @@ export const PARTY_COLUMNS: SqlColumn<Party>[] = [
   { name: "kind", type: "TEXT", path: "$.kind", get: (p) => text(p.kind) || "party", blank: "party" },
   { name: "parent_id", type: "TEXT", path: "$.parentId", get: (p) => text(p.parentId), blank: "" },
   { name: "code", type: "TEXT", path: "$.code", get: (p) => text(p.code), blank: "" },
+];
+
+// --- The jangad register -----------------------------------------------------
+//
+// The register is the largest thing in the portal and the one that grows
+// fastest: one row per piece of jewellery per diamond size, 28 columns of typed
+// text, thousands of rows and more every week. Saving one of them rewrote the
+// whole register, which is why /jangad stopped working.
+//
+// Every column of the workbook is in `doc`, as always, so nothing above this
+// layer loses a field. The real columns below are only the ones something
+// actually asks the database for.
+//
+// Why each real column is real:
+//
+//   id             the row's identity, and the address a save goes to
+//                  (/api/jangad/JG-04910). It is also the register's own
+//                  serial, so it orders rows inside a batch.
+//   jangad_date    the issue date: the From and Until filters above the
+//                  register, and what the piece picker shows about an earlier
+//                  issue. Named the long way for the same reason memo_date is:
+//                  date() is one of SQLite's own functions, and a column of
+//                  that name reads as a call to it.
+//   design_no,
+//   sub_design_no  the piece. The register keeps the design and the piece in
+//                  separate columns and the search puts them back together, so
+//                  both are needed to answer "which rows are this piece".
+//   product        searched by the box above the register.
+//   shape, size,
+//   pcs            searched, and together they are the stone line as the piece
+//                  picker reads it out: "ROUND +15.5-16 45 pcs". That label is
+//                  how a second issue against the same piece is spotted before
+//                  it is made, so the picker must be able to ask for these
+//                  without reading every record whole.
+//   certi_no       searched.
+//   memo_no        searched, and shown by the picker beside the date.
+//   mfg_name       its own filter dropdown, the list of factories that fills
+//                  it, the search, and the picker.
+//   status         searched.
+//   stock_code     searched, and the stock book writes it back here when a
+//                  finished piece is taken into stock.
+//   run_no         the whole design run as the PD sheet writes it. No workbook
+//                  column holds it, and it is searched, so it is the only way
+//                  back from a run number to the pieces issued under it.
+//   created_at     the register's order, newest batch first. Indexed.
+//   updated_at     written on every save. A column rather than only a field in
+//                  `doc` so "what has been touched since" can be asked of the
+//                  register without reading the register.
+export const JANGAD_ROW_COLUMNS: SqlColumn<JangadRow>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (r) => r.id, blank: "", primaryKey: true },
+  { name: "jangad_date", type: "TEXT", path: "$.date", get: (r) => text(r.date), blank: "" },
+  { name: "design_no", type: "TEXT", path: "$.designNo", get: (r) => text(r.designNo), blank: "" },
+  { name: "sub_design_no", type: "TEXT", path: "$.subDesignNo", get: (r) => text(r.subDesignNo), blank: "" },
+  { name: "product", type: "TEXT", path: "$.product", get: (r) => text(r.product), blank: "" },
+  { name: "shape", type: "TEXT", path: "$.shape", get: (r) => text(r.shape), blank: "" },
+  { name: "size", type: "TEXT", path: "$.size", get: (r) => text(r.size), blank: "" },
+  // Pieces of stone, kept as the text it was typed as. Every figure in this
+  // register is text on purpose: a half-typed weight has to survive being
+  // typed, and the export converts on the way out.
+  { name: "pcs", type: "TEXT", path: "$.pcs", get: (r) => text(r.pcs), blank: "" },
+  { name: "certi_no", type: "TEXT", path: "$.certiNo", get: (r) => text(r.certiNo), blank: "" },
+  { name: "memo_no", type: "TEXT", path: "$.memoNo", get: (r) => text(r.memoNo), blank: "" },
+  { name: "mfg_name", type: "TEXT", path: "$.mfgName", get: (r) => text(r.mfgName), blank: "" },
+  { name: "status", type: "TEXT", path: "$.status", get: (r) => text(r.status), blank: "" },
+  { name: "stock_code", type: "TEXT", path: "$.stockCode", get: (r) => text(r.stockCode), blank: "" },
+  { name: "run_no", type: "TEXT", path: "$.runNo", get: (r) => text(r.runNo), blank: "" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (r) => text(r.createdAt), blank: "" },
+  { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (r) => text(r.updatedAt), blank: "" },
 ];
 
 // --- Building the statements -------------------------------------------------
@@ -295,6 +364,95 @@ export async function memosAreInSql(): Promise<boolean> {
     );
     filled = !!row && Number(row.value) === 1;
     return filled;
+  } catch (err) {
+    if (isMissingTable(err)) return false;
+    throw err;
+  }
+}
+
+// --- The jangad register, separately -----------------------------------------
+//
+// The register has its own tables, its own serial and its own flag, and shares
+// nothing with the memo tables above. That is deliberate. The two modules moved
+// on different days, and the owner presses Copy for each of them when he is
+// ready; a register that could only be moved after the memos, or a memo book
+// whose counters a jangad restore could carry away, would tie two decisions
+// together that have no reason to be tied.
+export const JANGAD_TABLE = "jangad";
+export const JANGAD_COUNTER_TABLE = "jangad_counters";
+export const JANGAD_FLAG_TABLE = "jangad_flags";
+
+// The register's one running number, under this key: JG-04910 is the 4,910th
+// row ever entered, and the next row must be JG-04911 whichever store it is
+// written to. The same key/value shape the memo counters use, because this is
+// the same kind of fact.
+export const JANGAD_SEQ = "jangad";
+
+// Set to 1 by the copy, and only once every row is across. Until then the
+// register is read from R2 exactly as it always has been.
+export const JANGAD_FILLED = "jangad:filled";
+
+export const JANGAD_SCHEMA: string[] = [
+  createTable(JANGAD_TABLE, JANGAD_ROW_COLUMNS),
+
+  `CREATE TABLE IF NOT EXISTS ${JANGAD_COUNTER_TABLE} (
+  counter_key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  `CREATE TABLE IF NOT EXISTS ${JANGAD_FLAG_TABLE} (
+  flag TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  // The register's own order: newest batch first. It is the only sort the
+  // register has ever had and the one index it cannot do without.
+  `CREATE INDEX IF NOT EXISTS idx_jangad_created_at ON ${JANGAD_TABLE} (created_at DESC)`,
+];
+
+const JANGAD_OBJECTS = [
+  JANGAD_TABLE, JANGAD_COUNTER_TABLE, JANGAD_FLAG_TABLE, "idx_jangad_created_at",
+];
+
+// Create what is missing, exactly as applyMemoSchema() does and for the same
+// reasons: one query to ask whether there is anything to do, because the rest
+// of this request's fifty are wanted for copying rows, and then one statement
+// at a time because every one of them is IF NOT EXISTS and a run that stopped
+// half way is finished by pressing the button again.
+export async function applyJangadSchema(): Promise<number> {
+  const marks = JANGAD_OBJECTS.map(() => "?").join(", ");
+  const row = await sqlFirst<{ found: number }>(
+    `SELECT COUNT(*) AS found FROM sqlite_master WHERE name IN (${marks})`,
+    JANGAD_OBJECTS
+  );
+  if (row && Number(row.found) === JANGAD_OBJECTS.length) return 0;
+
+  for (const statement of JANGAD_SCHEMA) await sqlRun(statement);
+  return JANGAD_SCHEMA.length;
+}
+
+// Is the register in D1, and is D1 therefore where a jangad row is saved?
+//
+// The same reasoning as memosAreInSql(), and it matters more here. Counting
+// rows would not answer it: a database with the table made and the rows not yet
+// copied holds no rows, and so does a register nobody has written in yet. Only
+// the flag says the copy finished.
+//
+// A table that is not there yet means the move has not started, which is an
+// ordinary answer. Anything else is thrown, because reading a database that is
+// refusing as "not moved yet" would send the next save to R2 while the office
+// reads D1, and the register would quietly split in two.
+let jangadFilled = false;
+
+export async function jangadIsInSql(): Promise<boolean> {
+  if (jangadFilled) return true;
+  try {
+    const row = await sqlFirst<{ value: number }>(
+      `SELECT value FROM ${JANGAD_FLAG_TABLE} WHERE flag = ?`,
+      [JANGAD_FILLED]
+    );
+    jangadFilled = !!row && Number(row.value) === 1;
+    return jangadFilled;
   } catch (err) {
     if (isMissingTable(err)) return false;
     throw err;
