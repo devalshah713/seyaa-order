@@ -1685,6 +1685,18 @@ table.qc-sub td.ans.na { color: var(--panel-muted); }
 .bk-lede { font-size: 13px; color: var(--panel-muted); line-height: 1.65; margin: 0 0 10px; }
 .bk-lede b { color: var(--panel-ink); font-weight: 600; }
 .bk-lede a { color: var(--gold); }
+/* A copy that has more to carry is reporting progress, not trouble. It used to
+   borrow the red warning style, which made a run that had just moved three and
+   a half thousand records look like it had failed. Gold, like every other line
+   in the portal that is telling you something rather than warning you. */
+.bk-more {
+  font-size: 12.5px; color: var(--panel-ink); line-height: 1.5;
+  margin: 0 0 10px; padding: 8px 11px;
+  border-left: 3px solid var(--gold-soft);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+  border-radius: 0 7px 7px 0;
+}
+
 .bk-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
 .bk-stamp { font-size: 12px; color: var(--panel-muted); }
 .bk-table { margin-top: 14px; }

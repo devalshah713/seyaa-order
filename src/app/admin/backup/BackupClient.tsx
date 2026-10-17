@@ -415,7 +415,7 @@ export default function BackupClient({
               </tbody>
             </table>
             {sqlReport.notes.map((note, i) => (
-              <p key={i} className={sqlReport.finished ? "bk-lede" : "party-warn"}>{note}</p>
+              <p key={i} className={sqlReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
             ))}
           </>
         )}
