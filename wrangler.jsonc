@@ -54,24 +54,22 @@
 	// In D1 a save is one row, and the time a query takes is time spent waiting
 	// rather than working, which is not what the 10 milliseconds counts.
 	//
-	// database_id has to be pasted in by the owner: Cloudflare dashboard,
-	// Storage & Databases, D1 SQL Database, create a database named seyaa-data,
-	// then copy the Database ID from its page into the line below, replacing
-	// PLACEHOLDER_SET_BY_OWNER and keeping the quotation marks.
+	// The id is the one the dashboard shows on the database's own page. It is
+	// not a secret. Like the account id above it is visible in the dashboard URL
+	// and opens nothing on its own, and it has to live in this file rather than
+	// in the dashboard because a deploy rebuilds the Worker's bindings from this
+	// file.
 	//
-	// It is not a secret. Like the account id above it is visible in the
-	// dashboard URL and opens nothing on its own, and it has to live in this
-	// file rather than in the dashboard because a deploy rebuilds the Worker's
-	// bindings from this file.
-	//
-	// Until a real id is in place the binding does not resolve, hasSql() in
-	// src/lib/sql.ts answers false, and every module reads and writes the JSON
-	// files exactly as it does today.
+	// Attaching the database does not move anything on its own. A module reads
+	// and writes D1 only once its records are in there, which is what the card
+	// on the Backups screen does and what the memos:filled flag records. Until
+	// then every module reads and writes the JSON files exactly as before, so
+	// this binding can sit here from the moment the database exists.
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "seyaa-data",
-			"database_id": "PLACEHOLDER_SET_BY_OWNER"
+			"database_id": "a2e1cf10-76ed-4400-b44f-68e769c87468"
 		}
 	]
 }
