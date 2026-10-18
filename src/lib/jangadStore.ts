@@ -54,15 +54,19 @@ import {
   sqlDeleteJangadRow,
   sqlGetJangadRow,
   sqlGetJangadRows,
+  sqlJangadFactories,
   sqlJangadIssueLines,
   sqlJangadSeq,
+  sqlJangadStockLines,
   sqlListJangad,
+  sqlListJangadPage,
   sqlUpdateJangadRow,
   sqlUpdateJangadRows,
   type JangadIssueLine,
+  type JangadStockLine,
 } from "./jangadSql";
 import {
-  BLANK_JANGAD, JANGAD_FIELDS, suggestedPieces,
+  BLANK_JANGAD, JANGAD_FIELDS, searchJangad, suggestedPieces,
   type JangadField, type JangadRow,
 } from "./jangadConfig";
 import { getPdSheet, findByDesignNo, markPiecesInProduction } from "./pdStore";
@@ -139,6 +143,131 @@ export async function listJangad(): Promise<JangadRow[]> {
   return db.rows.slice().sort((a, b) => (a.createdAt === b.createdAt
     ? a.id.localeCompare(b.id, undefined, { numeric: true })
     : a.createdAt < b.createdAt ? 1 : -1));
+}
+
+// --- One page of the register ------------------------------------------------
+//
+// How many entries the register page may carry at once.
+//
+// Measured on this machine, serialising rows of the register's real shape into
+// a page: 300 rows costs 0.18 MB and 1.3 milliseconds at worst, 1,000 rows
+// 0.61 MB and 5.4, 5,000 rows 3.06 MB and 14.8. A request on this plan gets 10
+// milliseconds of processor time for everything it does, and React's own
+// serialisation costs more than the plain measurement above. 400 entries is
+// around 2 milliseconds and a quarter of a megabyte, which leaves the rest of
+// the request its allowance and still shows the office more than a fortnight of
+// issues at the rate the register grows.
+export const JANGAD_PAGE = 400;
+
+// And how many a filter may bring back. A search or a date range is somebody
+// looking for something, so it is worth more of the allowance than the opening
+// page is; past this the answer is to narrow the filter rather than to read
+// further.
+export const JANGAD_MATCHES = 1000;
+
+export type JangadFilters = {
+  q?: string;
+  from?: string;
+  to?: string;
+  mfg?: string;
+};
+
+export type JangadPage = {
+  rows: JangadRow[];
+  // Every factory the register has ever been issued to, for the filter. Not
+  // gathered from `rows` any more: a page of 400 entries does not mention every
+  // factory somebody may want to filter by.
+  factories: string[];
+  // The cap that was in force, and whether it cut the list short. The page says
+  // so on screen rather than quietly showing part of the register.
+  cap: number;
+  more: boolean;
+  filtered: boolean;
+};
+
+// The rows the register page is showing, and nothing else.
+//
+// The database narrows by date, factory and a plain LIKE, and hands back
+// candidates; the design-number matching that decides which rows a phrase really
+// names is done here, over those candidates, by the same searchJangad() the page
+// itself uses. See sqlListJangadPage() for why it is split that way.
+//
+// On the R2 path the whole document is still read, because a document can only
+// be read whole, and the narrowing happens in memory afterwards. That path runs
+// only until the register has been copied into the database, and it has to give
+// the same answers while it does.
+export async function listJangadPage(filters: JangadFilters = {}): Promise<JangadPage> {
+  const q = (filters.q || "").trim();
+  const from = (filters.from || "").trim();
+  const to = (filters.to || "").trim();
+  const mfg = (filters.mfg || "").trim();
+  const filtered = !!(q || from || to || mfg);
+  const cap = filtered ? JANGAD_MATCHES : JANGAD_PAGE;
+
+  let candidates: JangadRow[];
+  let factories: string[];
+  // True when the database had more candidates than were looked at, so a row
+  // beyond the cap may have matched and gone unseen. Honest either way: what
+  // the screen says is that there are more than it is showing.
+  let cut = false;
+
+  if (await useSql()) {
+    [candidates, factories] = await Promise.all([
+      sqlListJangadPage({ q, from, to, mfg }, cap + 1),
+      sqlJangadFactories(),
+    ]);
+    cut = candidates.length > cap;
+  } else {
+    const all = await listJangad();
+    factories = [...new Set(all.map((r) => r.mfgName).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    // Dates are stored as yyyy-mm-dd, which compares correctly as text. An
+    // entry with no date is outside every range rather than inside the open end
+    // of one, exactly as the register has always read it.
+    candidates = all.filter(
+      (r) =>
+        (!from || (r.date && r.date >= from)) &&
+        (!to || (r.date && r.date <= to)) &&
+        (!mfg || r.mfgName === mfg)
+    );
+  }
+
+  const matched = searchJangad(candidates, q);
+  return {
+    rows: matched.slice(0, cap),
+    factories,
+    cap,
+    more: cut || matched.length > cap,
+    filtered,
+  };
+}
+
+// The fourteen fields the stock book's piece list needs off every row the
+// register holds.
+//
+// Fourteen of twenty-eight, and the list used to get all twenty-eight by reading
+// every record whole and throwing most of it away. From the database the fields
+// come out of the row; from the document there is only the whole register, as
+// there always was.
+export async function jangadStockLines(): Promise<JangadStockLine[]> {
+  if (await useSql()) return sqlJangadStockLines();
+
+  return (await listJangad()).map((r) => ({
+    id: r.id,
+    designNo: r.designNo,
+    subDesignNo: r.subDesignNo,
+    product: r.product,
+    mfgName: r.mfgName,
+    stockCode: r.stockCode,
+    pdId: r.pdId || "",
+    pdNo: r.pdNo || "",
+    shape: r.shape,
+    size: r.size,
+    carats: r.carats,
+    ctsUsed: r.ctsUsed,
+    pcs: r.pcs,
+    pcsUsed: r.pcsUsed,
+  }));
 }
 
 // The rows behind a print, in the order they were asked for — the slip should

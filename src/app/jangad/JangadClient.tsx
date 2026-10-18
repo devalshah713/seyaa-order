@@ -1,14 +1,14 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Combo from "@/components/Combo";
-import { joinDesignNo, matchDesign } from "@/lib/designNo";
+import { joinDesignNo } from "@/lib/designNo";
 import {
   JANGAD_COLUMNS, SELL_STATUSES, SETTINGS, STAGES, STATUSES,
   STAGE_DATE, columnsFor, expectedCtsReturn, expectedPcsReturn, isMergedColumn,
-  isPerPieceColumn, mergeSpans, mergedValue, missingStageDates, num, shortfall,
-  totalPriceFor,
+  isPerPieceColumn, mergeSpans, mergedValue, missingStageDates, num,
+  searchJangad, shortfall, totalPriceFor,
   type JangadColumn, type JangadField, type JangadRow, type JangadStage,
 } from "@/lib/jangadConfig";
 
@@ -22,12 +22,37 @@ const ANCHORS: JangadField[] = ["subDesignNo", "shape", "size"];
 // piece's number.
 const fullPieceNo = (r: JangadRow) => joinDesignNo(r.designNo, r.subDesignNo, "");
 
+// The filters as the address bar writes them, so the page in hand and the page
+// being asked for can be compared without the key order mattering.
+function asQuery(f: { q: string; from: string; to: string; mfg: string }): string {
+  const out = new URLSearchParams();
+  if (f.q.trim()) out.set("q", f.q.trim());
+  if (f.from) out.set("from", f.from);
+  if (f.to) out.set("to", f.to);
+  if (f.mfg) out.set("mfg", f.mfg);
+  return out.toString();
+}
+
 export default function JangadClient({
   rows: saved,
+  factories,
+  cap,
+  more,
+  filtered,
   initialQuery,
+  initialFrom,
+  initialTo,
+  initialMfg,
 }: {
   rows: JangadRow[];
+  factories: string[];
+  cap: number;
+  more: boolean;
+  filtered: boolean;
   initialQuery: string;
+  initialFrom: string;
+  initialTo: string;
+  initialMfg: string;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<JangadRow[]>(saved);
@@ -36,9 +61,13 @@ export default function JangadClient({
   // Filters kept apart from the free-text search: an audit asks "everything
   // that went to this factory in July", which is a date range and a name, not
   // a phrase.
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [mfg, setMfg] = useState("");
+  //
+  // All four are held here as well as in the address bar: typing is answered
+  // straight away out of the rows in hand, and the address bar catches up a
+  // moment later so the server can fetch the rows that are not.
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
+  const [mfg, setMfg] = useState(initialMfg);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // Set by "Show them" on the blocked-save message: the entries holding the
   // save up, so they can be dealt with without hunting through the register.
@@ -78,12 +107,46 @@ export default function JangadClient({
     );
   }, [rows, beforeById, touched]);
 
-  // Every manufacturer the register has ever been issued to, for the filter.
-  const factories = useMemo(() => {
-    const seen = new Set<string>();
-    for (const r of rows) if (r.mfgName) seen.add(r.mfgName);
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  }, [rows]);
+  // The filters, into the address bar, a moment after the last keystroke.
+  //
+  // That round trip is what fetches the rows this page has not got: the server
+  // narrows the register and sends back the entries the filters name. Waiting
+  // out the typing matters — one trip per letter would be one request per
+  // letter.
+  const wanted = asQuery({ q, from, to, mfg });
+  const current = asQuery({
+    q: initialQuery, from: initialFrom, to: initialTo, mfg: initialMfg,
+  });
+  useEffect(() => {
+    if (wanted === current) return;
+    const timer = setTimeout(() => {
+      router.replace(wanted ? `/jangad?${wanted}` : "/jangad", { scroll: false });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [wanted, current, router]);
+
+  // The page the server sent, taken up as the rows in hand.
+  //
+  // A filter change is a fresh page of the register, so what is held has to be
+  // replaced by it, and so does the refresh after a save. What must not happen
+  // is that figures somebody typed and has not saved disappear because the page
+  // underneath them changed: so a touched entry keeps what was typed, and one
+  // the new page does not carry at all is kept anyway, at the end, where it
+  // stays countable by Save rather than being quietly dropped.
+  useEffect(() => {
+    setRows((prev) => {
+      const typed = new Map(
+        prev.filter((r) => touched.has(r.id)).map((r) => [r.id, r])
+      );
+      if (!typed.size) return saved;
+      const next = saved.map((r) => typed.get(r.id) || r);
+      const onPage = new Set(saved.map((r) => r.id));
+      return [...next, ...[...typed.values()].filter((r) => !onPage.has(r.id))];
+    });
+    // touched is read rather than depended on: a keystroke must not pull the
+    // page back from under the person typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
   // Dates are stored as yyyy-mm-dd, which compares correctly as text.
   const inRange = useMemo(() => {
@@ -93,29 +156,13 @@ export default function JangadClient({
       (!mfg || r.mfgName === mfg);
   }, [from, to, mfg]);
 
+  // The same filtering as ever, over the rows this page was given. The server
+  // has already narrowed the register to those; this is what answers a keystroke
+  // before the round trip catches up, and it is searchJangad() on both sides so
+  // the two can never disagree about what a phrase names.
   const shown = useMemo(() => {
     if (focus) return rows.filter((r) => focus.has(r.id));
-    const scoped = rows.filter(inRange);
-    const needle = q.trim();
-    if (!needle) return scoped;
-    const lower = needle.toLowerCase();
-
-    // Naming one piece means that piece, not the whole design it came from, so
-    // a piece-level hit wins outright when there is one. The register keeps the
-    // design and the piece in separate columns, so the number being searched
-    // for has to be put back together first.
-    const byPiece = scoped.filter((r) => matchDesign(fullPieceNo(r), needle));
-    if (byPiece.length) return byPiece;
-
-    return scoped.filter((r) => {
-      if (r.designNo && matchDesign(r.designNo, needle)) return true;
-      // runNo is the whole run off the PD sheet ("…-63-67"), which no column
-      // holds any more — matched as plain text so searching it still finds
-      // every piece that was issued under it.
-      return [r.runNo, r.memoNo, r.stockCode, r.certiNo, r.product,
-              r.shape, r.size, r.status, r.mfgName]
-        .join(" ").toLowerCase().includes(lower);
-    });
+    return searchJangad(rows.filter(inRange), q);
   }, [q, rows, inRange, focus]);
 
   const spans = useMemo(() => mergeSpans(shown), [shown]);
@@ -409,7 +456,13 @@ export default function JangadClient({
         <label className="field"><span>Factory</span>
           <select value={mfg} onChange={(e) => setMfg(e.target.value)}>
             <option value="">All factories</option>
+            {/* Every factory the register has ever been issued to, counted by
+                the database. The page's own rows would only ever list the ones
+                it happens to be showing. */}
             {factories.map((f) => <option key={f} value={f}>{f}</option>)}
+            {/* A factory filter set in the address bar for a factory that is
+                not in the list any more still shows what it is filtering by. */}
+            {mfg && !factories.includes(mfg) && <option value={mfg}>{mfg}</option>}
           </select></label>
         {(from || to || mfg) && (
           <button type="button" className="linkbtn"
@@ -436,6 +489,17 @@ export default function JangadClient({
           : STAGES.find((s) => s.key === view)?.blurb}
       </p>
 
+      {/* The register is thousands of entries and a page may only carry so
+          many, so when it is cut short it says so and says what to do about
+          it. Silence here would read as a register that had lost entries. */}
+      {more && (
+        <p className="jg-focus">
+          {filtered
+            ? `More than ${plain(cap)} entries match. Narrow the dates to see the rest.`
+            : `Showing the latest ${plain(cap)} entries. Use the dates, the factory or the search box to find older ones.`}
+        </p>
+      )}
+
       {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
       {note && <p className="pieces-ok">{note}</p>}
 
@@ -448,6 +512,10 @@ export default function JangadClient({
         </p>
       )}
 
+      {/* The focus list is drawn from the entries on screen, so it covers the
+          page of the register currently shown rather than the whole register.
+          An entry outside the dates or the search in the address bar is not
+          among these, and narrowing differently is how it is reached. */}
       {focus && (
         <p className="jg-focus">
           Showing the {focus.size} {focus.size === 1 ? "entry" : "entries"} waiting
@@ -493,12 +561,15 @@ export default function JangadClient({
 
       {shown.length === 0 ? (
         <div className="empty-state">
+          {/* An empty page under a filter is not an empty register, and must
+              not read as one: the dates or the search found nothing, which is
+              a different thing to say. */}
           <p>
-            {rows.length === 0
+            {rows.length === 0 && !filtered
               ? "Nothing in the register yet. Issue diamonds against a design to start."
               : "No entries match that."}
           </p>
-          {rows.length === 0 && (
+          {rows.length === 0 && !filtered && (
             <Link href="/jangad/new" className="btn btn-primary">Issue Diamonds</Link>
           )}
         </div>
@@ -650,4 +721,11 @@ export default function JangadClient({
 
 function round(n: number, dp = 3): string {
   return String(parseFloat(n.toFixed(dp)));
+}
+
+// A figure as it is read out loud: 1000 is a thousand, written "1,000". The
+// locale is named rather than left to the browser, so the page the server sends
+// and the page the browser draws say the same thing.
+function plain(n: number): string {
+  return n.toLocaleString("en-US");
 }

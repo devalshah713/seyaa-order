@@ -6,7 +6,7 @@ import {
   type NewStockEntry, type StockEntry, type StockLine,
 } from "./stockBookConfig";
 import { loadPrices } from "./priceStore";
-import { listJangad, getJangadRows } from "./jangadStore";
+import { getJangadRows, jangadStockLines } from "./jangadStore";
 import {
   traceDesign, type DesignTrace,
 } from "./designTrace";
@@ -199,8 +199,11 @@ export type StockSeedPiece = {
 // the shape a stock entry wants. What came back studded is what is now in the
 // jewellery, so the used figures are the ones carried across — not what went
 // out, some of which came back loose.
+// The register is asked for the fourteen fields this uses rather than for its
+// rows: everything else in a register row was parsed out of the stored record
+// and thrown away, one JSON.parse per entry on a page that only lists pieces.
 export async function piecesForStock(): Promise<StockSeedPiece[]> {
-  const [rows, prices] = await Promise.all([listJangad(), loadPrices()]);
+  const [rows, prices] = await Promise.all([jangadStockLines(), loadPrices()]);
   const byPiece = new Map<string, StockSeedPiece>();
 
   for (const r of rows) {
@@ -212,7 +215,10 @@ export async function piecesForStock(): Promise<StockSeedPiece[]> {
       p = {
         key, pieceNo, designNo: r.designNo, subDesignNo: r.subDesignNo,
         product: r.product, mfgName: r.mfgName, stockCode: r.stockCode,
-        jangadIds: [], pdId: r.pdId, pdNo: r.pdNo, trace: null,
+        // Left off rather than blank when the entry has no PD sheet behind it,
+        // which is the shape the form and the saved entry both expect.
+        jangadIds: [], pdId: r.pdId || undefined, pdNo: r.pdNo || undefined,
+        trace: null,
         lines: [],
       };
       byPiece.set(key, p);

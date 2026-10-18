@@ -162,16 +162,24 @@ const SEARCHED_COLUMNS = [
 
 // What a design number is compared without. matchDesign() ignores every
 // separator, so "snbramf" finds "SN-BR-AMF-…" and a piece written with slashes
-// finds one written with dashes. Both sides of the comparison are stripped with
-// this same list, so they always agree about what a separator is; a design
-// number using some other punctuation is still found by the plain-text clauses.
+// finds one written with dashes.
+//
+// The two sides are stripped differently, and that is deliberate. A phrase that
+// was typed is stripped of everything matchDesign() would strip, because that
+// is what it will be compared against. A column can only be stripped of a list
+// of characters, since SQLite has no pattern replace, so it loses the
+// separators design numbers are actually written with. Stripping the typed
+// phrase harder than the column can only widen what comes back, never narrow
+// it, and a number written with some other punctuation is still found by the
+// plain-text clauses, which compare it exactly as typed.
 const SEPARATORS = ["-", " ", "/", "_", "+", "#", "&", ",", "(", ")"];
 
 const flatColumn = (expr: string): string =>
   SEPARATORS.reduce((sql, ch) => `replace(${sql}, '${ch}', '')`, `upper(${expr})`);
 
-const flatText = (s: string): string =>
-  SEPARATORS.reduce((t, ch) => t.split(ch).join(""), s.toUpperCase());
+// The same rule as flat() in designNo.ts: a separator is anything that is not a
+// letter, a digit or a decimal point.
+const flatText = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9.]/g, "");
 
 // A LIKE pattern for a typed phrase. The two wildcards and the escape itself
 // are escaped, so a stock code with an underscore in it searches for that
