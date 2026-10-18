@@ -262,11 +262,43 @@ export async function piecesForQc(): Promise<QcSeed[]> {
   });
 }
 
+// One piece, ready to be checked.
+//
+// The piece is found in the book first and only that one is priced. Working
+// through piecesForQc instead meant pricing every entry in the stock book —
+// diamond lines, gold rate, labour, the lot — to answer about one stock
+// number, and the number was looked up twice for every QC saved.
 export async function qcSeedForStock(stockNo: string): Promise<QcSeed | null> {
   const wanted = stockNo.trim().toLowerCase();
   if (!wanted) return null;
-  const all = await piecesForQc();
-  return all.find((p) => p.stockNo.toLowerCase() === wanted) || null;
+
+  const entries = await listStockEntries();
+  const entry = entries.find((e) => e.stockNo.toLowerCase() === wanted);
+  if (!entry) return null;
+
+  const [prices, lists, records] = await Promise.all([
+    loadPrices(),
+    listPartyNames(["qcCheck"]).catch(() => ({ qcCheck: [] })),
+    listQcRecords().catch(() => [] as QcRecord[]),
+  ]);
+
+  const p = priceOf(prices, entry);
+  return {
+    ...seedOf(entry, { wt: p.totalWeight, pcs: p.totalPcs }),
+    checks: (lists.qcCheck || [])
+      .filter((c) => c.parent === entry.category)
+      .map((c) => c.name),
+    done: records.filter((r) => r.stockNo === entry.stockNo).length,
+  };
+}
+
+// Is this stock number in the book? The save only needs to know the piece
+// exists, so it does not pay for the piece's prices and checks as well.
+export async function stockNoInBook(stockNo: string): Promise<boolean> {
+  const wanted = stockNo.trim().toLowerCase();
+  if (!wanted) return false;
+  const entries = await listStockEntries();
+  return entries.some((e) => e.stockNo.toLowerCase() === wanted);
 }
 
 // Every check any category uses, for an export that has to be one table.

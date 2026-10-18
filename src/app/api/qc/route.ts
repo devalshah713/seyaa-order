@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createQcRecord, listQcRecords, normalizeQcInput, piecesForQc, qcSeedForStock,
+  stockNoInBook,
 } from "@/lib/qcStore";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   // The piece has to be in stock. Checking something the portal never took in
   // would record a verdict on nothing.
-  if (!(await qcSeedForStock(input.stockNo))) {
+  if (!(await stockNoInBook(input.stockNo))) {
     return NextResponse.json(
       { error: `${input.stockNo} is not in stock.` },
       { status: 400 }
