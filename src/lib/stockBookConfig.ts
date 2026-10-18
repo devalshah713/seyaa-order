@@ -123,6 +123,28 @@ function band(text: string): [number, number] {
   return [Number(m[1]), Number(m[2])];
 }
 
+// The round codes by sieve name, worked out once per price list.
+//
+// A code is suggested for every diamond line in the jangad register whenever
+// the take-into-stock page is opened, and the register holds a line per stone
+// size per piece. Scanning the whole round list for each of them meant tens of
+// thousands of string comparisons for a page that is only listing design
+// numbers, so the one lookup the list can answer by name is kept against it.
+const SIEVE_CODES = new WeakMap<PriceList, Map<string, string>>();
+
+function sieveCodes(list: PriceList): Map<string, string> {
+  let index = SIEVE_CODES.get(list);
+  if (index) return index;
+  index = new Map<string, string>();
+  // First one wins, which is what scanning the list in order did.
+  for (const r of list.round) {
+    const key = norm(r.sieve);
+    if (key && !index.has(key)) index.set(key, r.code);
+  }
+  SIEVE_CODES.set(list, index);
+  return index;
+}
+
 export function suggestCode(
   list: PriceList,
   line: { shape: string; sieve: string; breakupWt: string; pcs: string }
@@ -133,8 +155,8 @@ export function suggestCode(
   // Round: the sieve name is the identity, and it is written the same way in
   // both places.
   if (sieve) {
-    const hit = list.round.find((r) => norm(r.sieve) === sieve);
-    if (hit) return hit.code;
+    const hit = sieveCodes(list).get(sieve);
+    if (hit) return hit;
   }
 
   if (!shape || shape === MIX) return "";

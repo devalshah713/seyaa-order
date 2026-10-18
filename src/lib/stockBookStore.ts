@@ -8,7 +8,7 @@ import {
 import { loadPrices } from "./priceStore";
 import { listJangad, getJangadRows } from "./jangadStore";
 import {
-  loadTraceSources, traceDesign, traceDesignFrom, type DesignTrace,
+  traceDesign, type DesignTrace,
 } from "./designTrace";
 import { joinDesignNo } from "./designNo";
 import { todayInput } from "./memoFormat";
@@ -233,27 +233,15 @@ export async function piecesForStock(): Promise<StockSeedPiece[]> {
     if (hasContent(line)) p.lines.push(line);
   }
 
-  // Everything the design number already answers — what the piece is, what gold
-  // it is in, where it is going, and the paper trail behind it. All of that was
-  // typed once on the PD sheet; none of it should be typed again here.
+  // No traces here, deliberately.
   //
-  // The registers behind the trace are read once here and every piece is traced
-  // against that one reading. Tracing each piece on its own meant fetching and
-  // parsing the PD book, the demand book and the jangad register again for
-  // every piece in the register, which is what took the page past the ten
-  // milliseconds of processor time a request is allowed. The jangad rows this
-  // function already has are handed over so that document is not read twice.
+  // A trace walks the PD book, the demand book and the register for one design
+  // number. This list used to trace every piece the register has ever held, so
+  // opening the page cost a trace per piece — and the page it feeds shows the
+  // piece number, the product, the factory and how many stone sizes it has,
+  // none of which comes from a trace. The one piece somebody actually picks is
+  // traced then, through the same lookup the design-number box already uses.
   const list = [...byPiece.values()];
-  const sources = await loadTraceSources({ jangad: rows });
-  for (const p of list) {
-    // Per piece, so one number the trace cannot make sense of leaves that one
-    // piece without a trace rather than losing the whole list.
-    try {
-      p.trace = traceDesignFrom(sources, p.pieceNo);
-    } catch {
-      p.trace = null;
-    }
-  }
 
   return list.sort((a, b) =>
     a.pieceNo.localeCompare(b.pieceNo, undefined, { numeric: true })
@@ -270,7 +258,9 @@ export async function seedFromDesign(query: string): Promise<StockSeedPiece | nu
   const already = known.find(
     (p) => p.pieceNo.toUpperCase() === trace.pieceNo.toUpperCase()
   );
-  if (already) return already;
+  // The register's own figures, with the trace that was just worked out for
+  // this one number put back on them.
+  if (already) return { ...already, trace };
   return {
     key: trace.pieceNo.toUpperCase(),
     pieceNo: trace.pieceNo,

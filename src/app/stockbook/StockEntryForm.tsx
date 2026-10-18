@@ -14,6 +14,7 @@ import {
   type PriceList,
 } from "@/lib/priceList";
 import type { StockSeedPiece } from "@/lib/stockBookStore";
+import { readReply } from "@/lib/readReply";
 
 // Taking a finished piece into stock, and pricing it.
 //
@@ -115,21 +116,32 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
   }
 
   // Looking a design number up by hand, for a piece the register never saw.
-  async function lookup() {
-    const q = from.trim();
+  async function lookup(q = from.trim()) {
     if (!q) return;
     setError("");
     setSearching(true);
     try {
       const res = await fetch(`/api/stockbook?design=${encodeURIComponent(q)}`);
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || `Nothing found for “${q}”.`);
+      const data = await readReply(res, `Nothing found for “${q}”.`);
       take(data.seed as StockSeedPiece);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not look that up.");
     } finally {
       setSearching(false);
     }
+  }
+
+  // Picking a piece off the list.
+  //
+  // What the register knows goes in at once, so the boxes fill the moment the
+  // piece is pressed. The paper trail behind the number — the sheet it was
+  // designed on, the demand its stones came from, the gold it was drawn in — is
+  // then fetched for this one piece. The list used to arrive with that trail
+  // already worked out for every piece in the register, which is what made the
+  // page itself too slow to open.
+  function pick(p: StockSeedPiece) {
+    take(p);
+    void lookup(p.pieceNo);
   }
 
   // Priced as you type, from the same code the server prices it with.
@@ -196,7 +208,7 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookup(); } }}
               placeholder="SN-BR-AMF-10CT-63"
             />
-            <button type="button" className="btn" onClick={lookup} disabled={searching}>
+            <button type="button" className="btn" onClick={() => lookup()} disabled={searching}>
               {searching ? "Looking…" : "Fetch details"}
             </button>
           </div>
@@ -216,14 +228,16 @@ export default function StockEntryForm({ prices, pieces, stockNo, entry }: Props
                     key={p.key}
                     type="button"
                     className={["sb-piece", from === p.pieceNo ? "on" : ""].filter(Boolean).join(" ")}
-                    onClick={() => take(p)}
+                    onClick={() => pick(p)}
                   >
                     <b>{p.pieceNo}</b>
                     <small>
                       {[p.product, p.mfgName].filter(Boolean).join(" · ") || "—"}
                     </small>
                     <small>
-                      {p.lines.length} diamond {p.lines.length === 1 ? "size" : "sizes"}
+                      {from === p.pieceNo && searching
+                        ? "Fetching the details…"
+                        : `${p.lines.length} diamond ${p.lines.length === 1 ? "size" : "sizes"}`}
                     </small>
                   </button>
                 ))}
