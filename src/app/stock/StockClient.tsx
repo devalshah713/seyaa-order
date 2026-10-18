@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { eventDate, formatDate, outcomeLabel, type StockEvent, type StockOutcome } from "@/lib/memoFormat";
+import { readReply } from "@/lib/readReply";
 
 type Row = {
   stockNo: string;
@@ -41,8 +42,12 @@ export default function StockClient({ rows }: { rows: Row[] }) {
     setLoading(true);
     try {
       const res = await fetch(`/api/stock/${encodeURIComponent(stockNo)}`);
-      const data = await res.json();
-      setHistory(data.history || []);
+      const data = await readReply(res, "Could not load this piece's history.");
+      setHistory((data.history as Entry[] | undefined) || []);
+    } catch {
+      // Nothing to show rather than a half-opened row: the list itself is
+      // still right, and pressing the number again tries afresh.
+      setHistory([]);
     } finally {
       setLoading(false);
     }

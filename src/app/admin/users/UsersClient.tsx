@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { PublicUser } from "@/lib/userStore";
 import { MODULES, allowedModules, type ModuleKey } from "@/lib/access";
+import { readReply } from "@/lib/readReply";
 
 export default function UsersClient({ meId }: { meId: string }) {
   const [users, setUsers] = useState<PublicUser[] | null>(null);
@@ -16,10 +17,13 @@ export default function UsersClient({ meId }: { meId: string }) {
   const [editing, setEditing] = useState<{ id: string; role: "user" | "admin"; mods: ModuleKey[] } | null>(null);
 
   async function load() {
-    const res = await fetch("/api/users");
-    const data = (await res.json()) as { users?: PublicUser[]; error?: string };
-    if (!res.ok) { setError(data.error || "Could not load users."); return; }
-    setUsers(data.users || []);
+    try {
+      const res = await fetch("/api/users");
+      const data = await readReply(res, "Could not load users.");
+      setUsers((data.users as PublicUser[] | undefined) || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load users.");
+    }
   }
 
   useEffect(() => { void load(); }, []);
@@ -36,11 +40,12 @@ export default function UsersClient({ meId }: { meId: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, password, role, modules: mods }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) { setError(data.error || "Could not create the user."); return; }
+      await readReply(res, "Could not create the user.");
       setNotice(`Created ${username}. Give them this password — they will need it to sign in.`);
       setUsername(""); setPassword(""); setRole("user"); setMods([]);
       await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create the user.");
     } finally {
       setBusy(false);
     }
@@ -55,11 +60,12 @@ export default function UsersClient({ meId }: { meId: string }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ role: editing.role, modules: editing.mods }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) { setError(data.error || "Could not save access."); return; }
+      await readReply(res, "Could not save access.");
       setNotice("Access updated. It applies the next time they sign in.");
       setEditing(null);
       await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save access.");
     } finally {
       setBusy(false);
     }
@@ -68,11 +74,14 @@ export default function UsersClient({ meId }: { meId: string }) {
   async function removeUser(u: PublicUser) {
     if (!window.confirm(`Delete ${u.username}? They will lose access immediately.`)) return;
     setError(""); setNotice("");
-    const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
-    const data = (await res.json()) as { error?: string };
-    if (!res.ok) { setError(data.error || "Could not delete the user."); return; }
-    setNotice(`Deleted ${u.username}.`);
-    await load();
+    try {
+      const res = await fetch(`/api/users/${u.id}`, { method: "DELETE" });
+      await readReply(res, "Could not delete the user.");
+      setNotice(`Deleted ${u.username}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete the user.");
+    }
   }
 
   function accessLabel(u: PublicUser): string {

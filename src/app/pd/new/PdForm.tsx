@@ -17,6 +17,7 @@ import {
   MAX_PIECES,
 } from "@/lib/designNo";
 import { photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
+import { readReply } from "@/lib/readReply";
 
 export type PdInitial = {
   id: string;
@@ -208,9 +209,15 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
           ...f, sku: designNo, diaShape, diaWeightPointers: diaText, diaLines,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not save the PD sheet.");
-      router.push(`/pd/${data.sheet.id}`);
+      const data = await readReply(res, "Could not save the PD sheet.");
+      const sheet = data.sheet as { id?: string } | undefined;
+      if (!sheet?.id) {
+        throw new Error(
+          "The PD sheet was saved, but this page could not open it. " +
+            "Find it in the PD sheet list."
+        );
+      }
+      router.push(`/pd/${sheet.id}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the PD sheet.");

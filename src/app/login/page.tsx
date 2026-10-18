@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 import { COMPANY } from "@/lib/memoFormat";
+import { readReply } from "@/lib/readReply";
 
 type Mode = "loading" | "login" | "setup" | "unconfigured";
 
@@ -47,12 +48,7 @@ export default function LoginPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setError(data.error || "Could not sign in.");
-        setBusy(false);
-        return;
-      }
+      await readReply(res, "Could not sign in.");
       // Deliberately a full page load, not router.replace(). The user reached
       // this screen via a middleware redirect, and that redirect is sitting in
       // the client router cache — a soft navigation just replays it and bounces
@@ -60,8 +56,8 @@ export default function LoginPage() {
       // navigation re-runs middleware with the cookie that was just set.
       const next = new URLSearchParams(window.location.search).get("next");
       window.location.assign(next && next.startsWith("/") ? next : "/");
-    } catch {
-      setError("Could not reach the server.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reach the server.");
       setBusy(false);
     }
   }

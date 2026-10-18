@@ -8,6 +8,7 @@ import {
   type OrderStatus,
 } from "@/lib/memoFormat";
 import type { Order } from "@/lib/memoStore";
+import { readReply } from "@/lib/readReply";
 
 type Draft = {
   customer: string;
@@ -85,8 +86,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not add the order.");
+      await readReply(res, "Could not add the order.");
       setForm(empty);
       router.refresh();
     } catch (err) {

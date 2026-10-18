@@ -12,6 +12,7 @@ import {
   type StockLine,
   type StockOutcome,
 } from "@/lib/memoFormat";
+import { readReply } from "@/lib/readReply";
 
 type Staged = { outcome: StockOutcome | ""; replacedBy: string; note: string };
 
@@ -69,8 +70,7 @@ export default function StockPanel({
         setError("You were signed out. Sign in again in a new tab, then press Record again.");
         return;
       }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not record.");
+      await readReply(res, "Could not record.");
       setStaged({});
       router.refresh();
     } catch (err) {
