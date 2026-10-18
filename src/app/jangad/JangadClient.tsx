@@ -47,12 +47,36 @@ export default function JangadClient({
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
+  // Which entries somebody has actually typed in.
+  //
+  // What goes back is still decided by comparing against the saved copy, so
+  // typing a figure and typing it back out again sends nothing. But that
+  // comparison used to run over the whole register on every keystroke, writing
+  // out every row twice as text to compare them: four milliseconds a letter at
+  // five hundred entries and thirty-six at four thousand, which is what made
+  // the register feel like it was typing a word behind. Now only the rows
+  // somebody has been in are compared, and there are never many of those.
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const markTouched = (ids: string[]) =>
+    setTouched((prev) => {
+      if (ids.every((id) => prev.has(id))) return prev;
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+
+  const beforeById = useMemo(() => new Map(saved.map((r) => [r.id, r])), [saved]);
+
   // Only what actually changed goes back, so two people working different
   // stages of the same design do not overwrite each other's whole row.
   const dirty = useMemo(() => {
-    const before = new Map(saved.map((r) => [r.id, r]));
-    return rows.filter((r) => JSON.stringify(before.get(r.id)) !== JSON.stringify(r));
-  }, [rows, saved]);
+    if (!touched.size) return [];
+    return rows.filter(
+      (r) =>
+        touched.has(r.id) &&
+        JSON.stringify(beforeById.get(r.id)) !== JSON.stringify(r)
+    );
+  }, [rows, beforeById, touched]);
 
   // Every manufacturer the register has ever been issued to, for the filter.
   const factories = useMemo(() => {
@@ -205,11 +229,13 @@ export default function JangadClient({
   function setCells(ids: string[], key: JangadField, value: string) {
     setNote("");
     const wanted = new Set(ids);
+    markTouched(ids);
     setRows((list) => list.map((r) => (wanted.has(r.id) ? { ...r, [key]: value } : r)));
   }
 
   function setCell(id: string, key: JangadField, value: string) {
     setNote("");
+    markTouched([id]);
     setRows((list) =>
       list.map((r) => {
         if (r.id !== id) return r;
@@ -271,6 +297,9 @@ export default function JangadClient({
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || `Could not save (${res.status}).`);
       setNote(`Saved ${dirty.length} ${dirty.length === 1 ? "entry" : "entries"}.`);
+      // Everything typed is now in the register, so nothing is waiting to go
+      // back. The refresh below brings the saved copy up to date behind it.
+      setTouched(new Set());
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
