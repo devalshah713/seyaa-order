@@ -8,6 +8,7 @@
 // and its lines kept on a second sheet. Here it is one thing with a list of
 // lines, and the export puts it back into whichever shape the workbook wants.
 
+import { matchDesign } from "./designNo";
 import { pricePiece, type PriceList, type PricedPiece } from "./priceList";
 
 export type StockLine = {
@@ -56,6 +57,95 @@ export type StockEntry = {
 };
 
 export type NewStockEntry = Omit<StockEntry, "id" | "createdAt" | "updatedAt">;
+
+// --- One row of the book -----------------------------------------------------
+
+// What the book's own page shows, and nothing else.
+//
+// The page used to be handed every entry whole. At the 3,429 entries the book
+// holds that is 2.5 MB of page payload and about 10 milliseconds of processor
+// time spent merely writing it out, which is the whole allowance a request
+// gets. These sixteen fields are what the table reads; the rest of an entry —
+// the inch size, the factory, and the links back to the jangad entries, the PD
+// sheet, the demands and the memos the piece came from — is read when one entry
+// is opened.
+//
+// Priced in the browser, which is why the three fields nothing on screen shows
+// are here: the net weight, the gold description and the polki flag are what a
+// row is priced from, along with the lines. Sending the priced figures instead
+// measured about twice the payload, because the price list is 13 KB sent once
+// however many rows there are, while a priced row is paid for per row.
+export type StockRow = {
+  id: string;
+  stockNo: string;
+  date: string;
+  design: string;
+  designNo: string;
+  category: string;
+  subCategory: string;
+  subSubCategory: string;
+  location: string;
+  goldDetails: string;
+  grossWt: string;
+  netWt: string;
+  partyName: string;
+  polkiLabour: boolean;
+  comments: string;
+  lines: StockLine[];
+};
+
+// An entry reduced to the row the page shows.
+export function stockRowOf(e: StockEntry): StockRow {
+  return {
+    id: e.id, stockNo: e.stockNo, date: e.date, design: e.design,
+    designNo: e.designNo, category: e.category, subCategory: e.subCategory,
+    subSubCategory: e.subSubCategory, location: e.location,
+    goldDetails: e.goldDetails, grossWt: e.grossWt, netWt: e.netWt,
+    partyName: e.partyName, polkiLabour: !!e.polkiLabour, comments: e.comments,
+    lines: e.lines || [],
+  };
+}
+
+// --- What a typed phrase names -----------------------------------------------
+
+// Everything the box above the book searches. A row and a whole entry both
+// carry these, so either can be searched.
+export type StockSearchable = {
+  stockNo: string;
+  design: string;
+  designNo: string;
+  category: string;
+  subCategory: string;
+  subSubCategory: string;
+  location: string;
+  goldDetails: string;
+  partyName: string;
+  comments: string;
+  lines: StockLine[];
+};
+
+// The rows a typed phrase names.
+//
+// One function, called by the page and by the server, because the database only
+// narrows the book to candidates: a design number is matched rather than
+// compared, so "SN-BR-AMF-10CT-46" reaches a piece of the run written
+// "SN-BR-AMF-10CT-45-49" and no LIKE can express that. Two copies of this rule
+// would mean the page and the server disagreeing about what was asked for.
+export function searchStock<T extends StockSearchable>(rows: T[], needle: string): T[] {
+  const phrase = (needle || "").trim();
+  if (!phrase) return rows;
+  const lower = phrase.toLowerCase();
+
+  return rows.filter((e) => {
+    // A design number names one piece, so it is matched the way the rest of the
+    // portal matches one: a piece of a run finds the run it came from.
+    if (e.designNo && matchDesign(e.designNo, phrase)) return true;
+    return [e.stockNo, e.design, e.category, e.subCategory, e.subSubCategory,
+            e.location, e.goldDetails, e.partyName, e.comments,
+            ...(e.lines || []).map((l) => `${l.shape} ${l.sieve} ${l.code}`)]
+      .join(" ").toLowerCase().includes(lower);
+  });
+}
 
 // Suggestions only — every one of these boxes takes a typed value, because the
 // workbook's own columns do.

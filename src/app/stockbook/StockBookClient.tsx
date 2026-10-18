@@ -1,32 +1,66 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatDate } from "@/lib/memoFormat";
-import { matchDesign } from "@/lib/designNo";
-import { MIX, isMix, priceOf, type StockEntry } from "@/lib/stockBookConfig";
+import {
+  MIX, isMix, priceOf, searchStock, type StockRow,
+} from "@/lib/stockBookConfig";
 import { money, trim, type PriceList } from "@/lib/priceList";
+
+// The filters as the address bar writes them, so the page in hand and the page
+// being asked for can be compared without the key order mattering.
+function asQuery(f: { q: string; from: string; to: string; location: string }): string {
+  const out = new URLSearchParams();
+  if (f.q.trim()) out.set("q", f.q.trim());
+  if (f.from) out.set("from", f.from);
+  if (f.to) out.set("to", f.to);
+  if (f.location) out.set("location", f.location);
+  return out.toString();
+}
 
 // The stock book: what is in stock, and what it is worth today.
 //
 // Every figure here is worked out from the current price list rather than
 // stamped onto the entry when it was made — so changing the gold rate re-values
 // the whole book, exactly as the workbook does when its rate cell is edited.
+// The price list is 13 KB and arrives once however many rows the page carries,
+// which is why the pricing stayed here rather than moving to the server: priced
+// figures would be paid for per row and came to about twice the payload.
 export default function StockBookClient({
-  entries,
+  rows: saved,
   prices,
+  locations,
+  total,
+  cap,
+  more,
+  filtered,
   initialQuery,
+  initialFrom,
+  initialTo,
+  initialLocation,
 }: {
-  entries: StockEntry[];
+  rows: StockRow[];
   prices: PriceList;
+  locations: string[];
+  total: number;
+  cap: number;
+  more: boolean;
+  filtered: boolean;
   initialQuery: string;
+  initialFrom: string;
+  initialTo: string;
+  initialLocation: string;
 }) {
   const router = useRouter();
-  const [rows, setRows] = useState(entries);
+  const [rows, setRows] = useState<StockRow[]>(saved);
   const [q, setQ] = useState(initialQuery);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [location, setLocation] = useState("");
+  // All four are held here as well as in the address bar: typing is answered
+  // straight away out of the rows in hand, and the address bar catches up a
+  // moment later so the server can fetch the rows that are not.
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
+  const [location, setLocation] = useState(initialLocation);
   // A MIX row stands for several stone sizes. The workbook keeps their breakup
   // on a second sheet; here the row opens onto it.
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -39,28 +73,42 @@ export default function StockBookClient({
       return next;
     });
 
-  const locations = useMemo(() => {
-    const seen = new Set<string>();
-    for (const e of rows) if (e.location) seen.add(e.location);
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  }, [rows]);
+  // The filters, into the address bar, a moment after the last keystroke.
+  //
+  // That round trip is what fetches the rows this page has not got: the server
+  // narrows the book and sends back the entries the filters name. Waiting out
+  // the typing matters — one trip per letter would be one request per letter.
+  const wanted = asQuery({ q, from, to, location });
+  const current = asQuery({
+    q: initialQuery, from: initialFrom, to: initialTo, location: initialLocation,
+  });
+  useEffect(() => {
+    if (wanted === current) return;
+    const timer = setTimeout(() => {
+      router.replace(wanted ? `/stockbook?${wanted}` : "/stockbook", { scroll: false });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [wanted, current, router]);
 
+  // The page the server sent, taken up as the rows in hand. A filter change is
+  // a fresh page of the book, so what is held has to be replaced by it, and so
+  // does the refresh after a piece has been taken out.
+  useEffect(() => setRows(saved), [saved]);
+
+  // Dates are stored as yyyy-mm-dd, which compares correctly as text.
   const shown = useMemo(() => {
-    const needle = q.trim();
-    const lower = needle.toLowerCase();
-    return rows.filter((e) => {
+    // The same filtering as ever, over the rows this page was given. The server
+    // has already narrowed the book to those; this is what answers a keystroke
+    // before the round trip catches up, and the phrase goes through
+    // searchStock() on both sides so the two can never disagree about what it
+    // names.
+    const scoped = rows.filter((e) => {
       if (from && !(e.date && e.date >= from)) return false;
       if (to && !(e.date && e.date <= to)) return false;
       if (location && e.location !== location) return false;
-      if (!needle) return true;
-      // A design number names one piece, so it is matched the way the rest of
-      // the portal matches one: a piece of a run finds the run it came from.
-      if (e.designNo && matchDesign(e.designNo, needle)) return true;
-      return [e.stockNo, e.design, e.category, e.subCategory, e.subSubCategory,
-              e.location, e.goldDetails, e.partyName, e.comments,
-              ...e.lines.map((l) => `${l.shape} ${l.sieve} ${l.code}`)]
-        .join(" ").toLowerCase().includes(lower);
+      return true;
     });
+    return searchStock(scoped, q);
   }, [rows, q, from, to, location]);
 
   const valued = useMemo(
@@ -77,7 +125,7 @@ export default function StockBookClient({
     return { usd, inr, cts, pcs };
   }, [valued]);
 
-  async function del(e: StockEntry) {
+  async function del(e: StockRow) {
     if (!window.confirm(`Remove ${e.stockNo} — ${e.designNo || e.design} — from stock?`)) return;
     setError("");
     try {
@@ -115,7 +163,15 @@ export default function StockBookClient({
         <label className="field"><span>Location</span>
           <select value={location} onChange={(e) => setLocation(e.target.value)}>
             <option value="">Everywhere</option>
+            {/* Every place the book has ever held stock in, counted by the
+                database. The page's own rows would only ever list the ones it
+                happens to be showing. */}
             {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+            {/* A place set in the address bar that is not in the list any more
+                still shows what it is filtering by. */}
+            {location && !locations.includes(location) && (
+              <option value={location}>{location}</option>
+            )}
           </select></label>
         {(from || to || location) && (
           <button type="button" className="linkbtn"
@@ -125,16 +181,30 @@ export default function StockBookClient({
         )}
       </div>
 
+      {/* The book is thousands of pieces and a page may only carry so many, so
+          when it is cut short it says so and says what to do about it. Silence
+          here would read as a book that had lost entries. */}
+      {more && (
+        <p className="jg-focus">
+          {filtered
+            ? `More than ${plain(cap)} pieces match. Narrow the dates or the place to see the rest.`
+            : `Showing the latest ${plain(cap)} pieces. Use the dates, the place or the search box to find older ones.`}
+        </p>
+      )}
+
       {error && <p className="save-error" style={{ marginTop: 0 }}>{error}</p>}
 
       {shown.length === 0 ? (
         <div className="empty-state">
+          {/* An empty page under a filter is not an empty book, and must not
+              read as one: the dates or the search found nothing, which is a
+              different thing to say. */}
           <p>
-            {rows.length === 0
+            {rows.length === 0 && !filtered
               ? "Nothing in stock yet. Take a finished piece in to start the book."
               : "No pieces match that."}
           </p>
-          {rows.length === 0 && (
+          {rows.length === 0 && !filtered && (
             <Link href="/stockbook/new" className="btn btn-primary">Take into Stock</Link>
           )}
         </div>
@@ -262,11 +332,17 @@ export default function StockBookClient({
           </div>
 
           <div className="jg-foot">
-            <span>{shown.length} of {rows.length} pieces</span>
-            <span>Diamonds <b>{trim(totals.cts, 3)}</b> cts</span>
-            <span>Stones <b>{totals.pcs}</b></span>
-            <span>Value <b>${money(totals.usd)}</b></span>
-            <span>Value <b>₹{money(totals.inr)}</b></span>
+            {/* How many pieces are on screen, out of how many the book holds.
+                The four figures beside it are the totals of exactly the pieces
+                on screen, and they say so, because the page is no longer given
+                the whole book to add up. The book's own count is one question
+                asked of the database, and this is where the office reads how
+                big the book is, so it is worth asking. */}
+            <span>{plain(shown.length)} of {plain(total)} pieces</span>
+            <span>Diamonds shown <b>{trim(totals.cts, 3)}</b> cts</span>
+            <span>Stones shown <b>{totals.pcs}</b></span>
+            <span>Value shown <b>${money(totals.usd)}</b></span>
+            <span>Value shown <b>₹{money(totals.inr)}</b></span>
           </div>
           <p className="pieces-hint">
             Priced at today&rsquo;s rates. Change the gold, labour or diamond
@@ -277,4 +353,11 @@ export default function StockBookClient({
       )}
     </>
   );
+}
+
+// A figure as it is read out loud: 1000 is a thousand, written "1,000". The
+// locale is named rather than left to the browser, so the page the server sends
+// and the page the browser draws say the same thing.
+function plain(n: number): string {
+  return n.toLocaleString("en-US");
 }

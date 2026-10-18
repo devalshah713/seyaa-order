@@ -1,9 +1,9 @@
 // Copying records out of the R2 documents and into D1: the memo book first,
-// then the jangad register, the PD sheets and the demands, each at the foot of
-// the one before it.
+// then the jangad register, the PD sheets, the demands and the stock book,
+// each at the foot of the one before it.
 //
-// All four are separate moves with a Check and a Copy each, because they are
-// four decisions. The owner presses a pair when he is ready for that book to
+// All five are separate moves with a Check and a Copy each, because they are
+// five decisions. The owner presses a pair when he is ready for that book to
 // move, in any order, and none of them waits on another.
 //
 // The same shape as dbMigrate.ts, which moved every document out of the old
@@ -52,14 +52,19 @@ import {
   PD_COLUMNS,
   PD_FILLED,
   PD_TABLE,
+  STOCK_COLUMNS,
+  STOCK_FILLED,
+  STOCK_TABLE,
   applyDemandSchema,
   applyJangadSchema,
   applyMemoSchema,
   applyPdSchema,
+  applyStockSchema,
   demandsAreInSql,
   jangadIsInSql,
   memosAreInSql,
   pdIsInSql,
+  stockBookIsInSql,
   type SqlColumn,
 } from "./sqlSchema";
 import { insertRows, sqlExistingIds, sqlRecordCounts, sqlSetCounters, sqlSetFlag } from "./memoSql";
@@ -70,12 +75,15 @@ import {
 import {
   flatDemand, insertDemands, sqlDemandCount, sqlSetDemandCounters, sqlSetDemandFlag,
 } from "./demandSql";
+import { sqlSetStockCounter, sqlSetStockFlag, sqlStockCount } from "./stockBookSql";
 import { normalizeMemo, readMemoDoc, type DB, type Memo, type Order } from "./memoStore";
 import { readJangadDoc, type JangadDB } from "./jangadStore";
 import { readPdDoc, type PdDB, type PdSheet } from "./pdStore";
 import { readDemandDoc, type Demand, type DemandDB } from "./demandStore";
+import { readStockBookDoc, type StockBookDB } from "./stockBookStore";
 import { PARTY_KINDS, type Party, type PartyKind, type StockEvent } from "./memoFormat";
 import type { JangadRow } from "./jangadConfig";
+import type { StockEntry } from "./stockBookConfig";
 
 // How much record text one statement carries. Comfortably inside what D1
 // accepts for a single bound value, and small enough that a chunk that fails
@@ -701,6 +709,130 @@ export async function copyDemandsToSql(): Promise<DemandCopyReport> {
   report.finished = true;
   report.notes.push(
     `All ${inR2.demands.toLocaleString()} diamond demands are in the database, and the portal is now reading them from it. The receipt chase is unchanged and still kept in its own R2 file. The demand R2 file has not been touched and still holds everything as it was today.`
+  );
+  return report;
+}
+
+// --- The stock book ----------------------------------------------------------
+//
+// The last of the five, and the one that was over the allowance before it
+// moved: 3,429 entries is 2.5 MB, and reading the document, adding one entry
+// and writing it back measured 18 milliseconds against the 10 a request gets.
+//
+// Same rules as the four above: R2 is read and never written, nothing anywhere
+// is deleted, an entry already across is left exactly as it is, and the flag
+// that makes D1 the live store is set last and only when every entry is there.
+//
+// Every column of the stock table is a field of the entry, so the entries go in
+// whole and the database expands them, as the memo book's and the register's do.
+// Nothing is flattened here.
+
+export type StockCounts = { entries: number };
+
+export type StockCheck = {
+  hint: string;
+  r2: StockCounts;
+  sql: StockCounts;
+  live: boolean;
+};
+
+export type StockCopyReport = {
+  at: string;
+  copied: StockCounts;
+  skipped: StockCounts;
+  finished: boolean;
+  notes: string[];
+};
+
+// The same reckoning as the PD budget above, and the same worst case: asking
+// whether the schema is there (1), making it (4), counting before and after
+// (2), finding out what is already across (1), the running number (1) and the
+// flag at the end (1).
+const STOCK_QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 12;
+
+function stockCountOf(doc: Partial<StockBookDB>): StockCounts {
+  return { entries: (doc.entries || []).length };
+}
+
+export async function checkStockStores(): Promise<StockCheck> {
+  const hint = sqlMigrationHint();
+  const empty: StockCounts = { entries: 0 };
+  if (hint) return { hint, r2: empty, sql: empty, live: false };
+
+  const doc = await readStockBookDoc();
+  // The table has to exist before it can be counted, and making it is safe to
+  // repeat.
+  await applyStockSchema();
+  return {
+    hint: "",
+    r2: stockCountOf(doc),
+    sql: { entries: await sqlStockCount() },
+    live: await stockBookIsInSql(),
+  };
+}
+
+export async function copyStockToSql(): Promise<StockCopyReport> {
+  const hint = sqlMigrationHint();
+  if (hint) throw new Error(hint);
+
+  const report: StockCopyReport = {
+    at: new Date().toISOString(),
+    copied: { entries: 0 },
+    skipped: { entries: 0 },
+    finished: false,
+    notes: [],
+  };
+
+  await applyStockSchema();
+
+  const doc = await readStockBookDoc();
+  const inR2 = stockCountOf(doc);
+  const before = await sqlStockCount();
+
+  const entries = (doc.entries || []) as StockEntry[];
+  const budget = { left: STOCK_QUERY_BUDGET };
+  const result = await copyKind(STOCK_TABLE, STOCK_COLUMNS, entries, before, budget);
+
+  // The book's running number. Without it the next piece taken into stock in D1
+  // would start the book again at S0001, writing a second entry under a number
+  // that is already on a piece. A number already in D1 that has gone further is
+  // left where it is.
+  //
+  // It goes across on every press, not only the last one, because the number
+  // belongs with the entries and a copy that stops half way should not leave
+  // the database counting from nowhere.
+  await sqlSetStockCounter(doc.seq || 0);
+
+  // What actually went in, counted from the rows that appeared rather than from
+  // what the statements were handed: an entry already there is ignored, not
+  // written, and saying otherwise would make the second run look like work.
+  const after = await sqlStockCount();
+  report.copied = { entries: Math.max(0, after - before) };
+  report.skipped = {
+    entries: result.skipped + Math.max(0, result.copied - report.copied.entries),
+  };
+
+  if (result.remaining > 0) {
+    report.notes.push(
+      `There are more entries than one run may copy, so ${result.remaining.toLocaleString()} are still to go. Press the button again to carry on. Nothing already copied is copied twice.`
+    );
+    return report;
+  }
+
+  // Every entry is across only if the database now holds at least as many as
+  // the R2 document does. Anything less and the flag stays off, because the
+  // flag is what sends the office to D1.
+  if (after < inR2.entries) {
+    report.notes.push(
+      "The copy ran, but the database does not hold as many entries as the R2 file does, so the portal is still reading the stock book from R2. Press Check to see the two side by side."
+    );
+    return report;
+  }
+
+  await sqlSetStockFlag(STOCK_FILLED);
+  report.finished = true;
+  report.notes.push(
+    `All ${inR2.entries.toLocaleString()} stock entries are in the database, and the portal is now reading the book from it. Taking a piece into stock is one line from here on. The R2 file has not been touched and still holds everything as it was today.`
   );
   return report;
 }

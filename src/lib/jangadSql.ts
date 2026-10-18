@@ -29,8 +29,15 @@ import {
   columnNames,
   type SqlColumn,
 } from "./sqlSchema";
+import {
+  contains,
+  designHead,
+  flatColumn,
+  flatText,
+  numberTemplate,
+  startsWith,
+} from "./sqlRecords";
 import { JANGAD_FIELDS, type JangadField, type JangadRow } from "./jangadConfig";
-import { parseDesignNo } from "./designNo";
 
 // --- Reading -----------------------------------------------------------------
 //
@@ -160,45 +167,11 @@ const SEARCHED_COLUMNS = [
   "mfg_name", "memo_no", "stock_code", "certi_no", "run_no",
 ];
 
-// What a design number is compared without. matchDesign() ignores every
-// separator, so "snbramf" finds "SN-BR-AMF-…" and a piece written with slashes
-// finds one written with dashes.
-//
-// The two sides are stripped differently, and that is deliberate. A phrase that
-// was typed is stripped of everything matchDesign() would strip, because that
-// is what it will be compared against. A column can only be stripped of a list
-// of characters, since SQLite has no pattern replace, so it loses the
-// separators design numbers are actually written with. Stripping the typed
-// phrase harder than the column can only widen what comes back, never narrow
-// it, and a number written with some other punctuation is still found by the
-// plain-text clauses, which compare it exactly as typed.
-const SEPARATORS = ["-", " ", "/", "_", "+", "#", "&", ",", "(", ")"];
-
-const flatColumn = (expr: string): string =>
-  SEPARATORS.reduce((sql, ch) => `replace(${sql}, '${ch}', '')`, `upper(${expr})`);
-
-// The same rule as flat() in designNo.ts: a separator is anything that is not a
-// letter, a digit or a decimal point.
-const flatText = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9.]/g, "");
-
-// A LIKE pattern for a typed phrase. The two wildcards and the escape itself
-// are escaped, so a stock code with an underscore in it searches for that
-// underscore rather than for any character.
-const forLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
-const contains = (s: string): string => `%${forLike(s)}%`;
-const startsWith = (s: string): string => `${forLike(s)}%`;
-
-// The codes a search writes before the piece number: "SN-BR-AMF-10CT" out of
-// "SN-BR-AMF-10CT-46". A piece match needs those codes to be exactly the ones
-// the row carries, so every row that could be the piece being asked for has a
-// design number starting with them. That is a prefix, which the database can
-// answer, and it is how a piece inside a run is still found when the run is
-// written into the design number itself.
-function headOf(needle: string): string {
-  const asked = parseDesignNo(needle);
-  if (asked.spanned || asked.at <= 0) return "";
-  return flatText(asked.segs.slice(0, asked.at).join(""));
-}
+// How a typed phrase and a stored column are made comparable lives in
+// sqlRecords.ts, with the rest of the plumbing two list pages share. The stock
+// book narrows itself the same way, and a phrase stripped one way here and
+// another way there would show up as a row the search used to find and no
+// longer does.
 
 export async function sqlListJangadPage(
   query: JangadQuery,
@@ -233,7 +206,7 @@ export async function sqlListJangadPage(
     // the design.
     ors.push(`${flatColumn("design_no || sub_design_no")} LIKE ? ESCAPE '\\'`);
     params.push(contains(flatText(needle)));
-    const head = headOf(needle);
+    const head = designHead(needle);
     if (head) {
       ors.push(`${flatColumn("design_no")} LIKE ? ESCAPE '\\'`);
       params.push(startsWith(head));
@@ -353,20 +326,12 @@ export async function sqlJangadCount(): Promise<number> {
 // first's numbers committed and carries on from them. No serial is shared and
 // none is skipped.
 
-// A serial no register will ever reach. jangadIdFor() is asked to print it, and
-// the printed sentinel is swapped for SQLite's own placeholder, so the format of
-// an id is written down once, in the store, and this follows it. The width is
-// taken from what the formatter does to a real serial rather than assumed.
-const SENTINEL = 7777777;
-
-export function jangadIdTemplate(format: (seq: number) => string): string {
-  const printed = format(SENTINEL);
-  // Everything in a printed id that is not the number itself, so a one-digit
-  // serial's padding can be measured.
-  const fixed = printed.length - String(SENTINEL).length;
-  const width = format(1).length - fixed;
-  return printed.replace(String(SENTINEL), `%0${width}d`);
-}
+// jangadIdFor() is asked to print a serial no register will ever reach, and the
+// printed sentinel is swapped for SQLite's own placeholder, so the format of an
+// id is written down once, in the store, and this follows it. The measuring is
+// numberTemplate()'s, in sqlRecords.ts, where every book's numbering lives; the
+// name is kept because the store asks for it by name.
+export const jangadIdTemplate = numberTemplate;
 
 // Where a value comes from when the database is expanding records itself: the
 // field inside the JSON in hand, or the column's blank if the record has not got

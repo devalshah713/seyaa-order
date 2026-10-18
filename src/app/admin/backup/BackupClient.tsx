@@ -51,12 +51,13 @@ type JangadCopyReport = {
   notes: string[];
 };
 
-// And again for the PD sheets and the demands. Four books, four moves, and the
-// shape of the answer is the same every time: how many in each store, and what
-// the last copy did. Only the word for a record differs, so each card names its
-// own and the rest of the card is the same card.
+// And again for the PD sheets, the demands and the stock book. Five books, five
+// moves, and the shape of the answer is the same every time: how many in each
+// store, and what the last copy did. Only the word for a record differs, so
+// each card names its own and the rest of the card is the same card.
 type PdCounts = { sheets: number };
 type DemandCounts = { demands: number };
+type StockCounts = { entries: number };
 
 type OneCheck<C> = { hint: string; r2: C; sql: C; live: boolean };
 type OneReport<C> = {
@@ -126,6 +127,12 @@ export default function BackupClient({
   const [ddError, setDdError] = useState("");
   const [ddCheck, setDdCheck] = useState<OneCheck<DemandCounts> | null>(null);
   const [ddReport, setDdReport] = useState<OneReport<DemandCounts> | null>(null);
+
+  // And the stock book, the last of the five.
+  const [sbBusy, setSbBusy] = useState(false);
+  const [sbError, setSbError] = useState("");
+  const [sbCheck, setSbCheck] = useState<OneCheck<StockCounts> | null>(null);
+  const [sbReport, setSbReport] = useState<OneReport<StockCounts> | null>(null);
 
   async function sync() {
     setBusy(true); setError(""); setTabs(null);
@@ -286,6 +293,34 @@ export default function BackupClient({
       setDdError(err instanceof Error ? err.message : "The copy failed.");
     } finally {
       setDdBusy(false);
+    }
+  }
+
+  async function checkStockD1() {
+    setSbBusy(true); setSbError(""); setSbCheck(null); setSbReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/stockbook");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setSbCheck(d as OneCheck<StockCounts>);
+    } catch (err) {
+      setSbError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setSbBusy(false);
+    }
+  }
+
+  async function copyStockToD1() {
+    setSbBusy(true); setSbError(""); setSbCheck(null); setSbReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/stockbook", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setSbReport(d as OneReport<StockCounts>);
+    } catch (err) {
+      setSbError(err instanceof Error ? err.message : "The copy failed.");
+    } finally {
+      setSbBusy(false);
     }
   }
 
@@ -466,8 +501,8 @@ export default function BackupClient({
         </p>
         <p className="bk-lede">
           This card moves memos, stock entries, orders and the controlled lists
-          only. The jangad register, the PD sheets and the diamond demands have
-          a card each below it. The stock book, QC, prices, the receipt chase
+          only. The jangad register, the PD sheets, the diamond demands and the
+          stock book have a card each below it. QC, prices, the receipt chase
           and the sign-in list all stay exactly where they are and are not
           touched.
         </p>
@@ -751,11 +786,11 @@ export default function BackupClient({
       <div className="bk-card">
         <h2>The diamond demands into the Cloudflare database</h2>
         <p className="bk-lede">
-          The smallest of the four books, and the last to move. It was not the
-          one in trouble, but it sits beside the PD sheets in the same screens
-          and the same trace, and leaving it behind would mean two places to
-          look every time somebody follows a design from its sheet to its
-          diamonds. Here too a save becomes one line instead of the whole book.
+          The smallest of the five books, and not the one in trouble. It sits
+          beside the PD sheets in the same screens and the same trace, and
+          leaving it behind would mean two places to look every time somebody
+          follows a design from its sheet to its diamonds. Here too a save
+          becomes one line instead of the whole book.
         </p>
         <p className="bk-lede">
           This card moves the demands only. <b>The receipt chase is not part of
@@ -835,6 +870,102 @@ export default function BackupClient({
             </table>
             {ddReport.notes.map((note, i) => (
               <p key={i} className={ddReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="bk-card">
+        <h2>The stock book into the Cloudflare database</h2>
+        <p className="bk-lede">
+          The last book still kept as one file, and the second one that was
+          already over budget. Taking one piece into stock rewrites every entry
+          in the book: measured on the 3,429 entries it holds today, that is 2.5
+          megabytes read and written and about 18 thousandths of a second of
+          computing time, against the 10 this free plan allows. The same file was
+          also being handed whole to the Stock Book page. Cloudflare&rsquo;s own
+          database writes one entry as one line, and stays the same speed at six
+          thousand entries as at five hundred.
+        </p>
+        <p className="bk-lede">
+          This card moves the stock book only. The stock numbers go across with
+          it, so S0411 still follows S0410 afterwards. The price list is not part
+          of it and is not touched: the gold, labour and diamond rates keep their
+          own file, and every figure on the Stock Book page is still worked out
+          from them as it is read.
+        </p>
+        {sqlHint ? (
+          <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The database is attached. The entries are copied into it, and the
+            portal only starts reading the book from it once every entry is
+            across. Before that moment nothing changes for anybody.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> counts what is in each store and says nothing else.{" "}
+          <b>Copy the stock book across</b> reads the R2 file and writes what the
+          database has not got yet. Neither one writes to R2, neither one
+          deletes anything, and both are safe to press more than once. If there
+          are more entries than one press can carry, it says so and the next
+          press carries on from there.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkStockD1} disabled={sbBusy}>
+            {sbBusy ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyStockToD1}
+            disabled={sbBusy || !sqlAttached || !r2Configured}
+          >
+            Copy the stock book across
+          </button>
+        </div>
+        {sbError && <p className="party-warn">{sbError}</p>}
+
+        {sbCheck && !sbCheck.hint && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>In the R2 file</th><th>In the database</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Stock entries</td>
+                  <td>{sbCheck.r2.entries.toLocaleString()}</td>
+                  <td className={sbCheck.sql.entries >= sbCheck.r2.entries ? "bk-ok" : ""}>
+                    {sbCheck.sql.entries.toLocaleString()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="bk-lede">
+              {sbCheck.live
+                ? "The portal is reading the stock book from the database now. The R2 file is left as it was on the day of the move."
+                : "The portal is still reading the stock book from the R2 file."}
+            </p>
+          </>
+        )}
+        {sbCheck?.hint && <p className="party-warn">{sbCheck.hint}</p>}
+
+        {sbReport && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>Copied in</th><th>Already there</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Stock entries</td>
+                  <td className="bk-ok">{sbReport.copied.entries.toLocaleString()}</td>
+                  <td>{sbReport.skipped.entries.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+            {sbReport.notes.map((note, i) => (
+              <p key={i} className={sbReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
             ))}
           </>
         )}

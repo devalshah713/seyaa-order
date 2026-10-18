@@ -28,6 +28,7 @@ import type { Memo, Order } from "./memoStore";
 import type { JangadRow } from "./jangadConfig";
 import type { PdSheet } from "./pdStore";
 import type { Demand } from "./demandStore";
+import type { StockEntry } from "./stockBookConfig";
 import { piecesInStock, stockedPieces } from "./designNo";
 import { demandDesigns, demandSearchRest, totalPcs } from "./demandConfig";
 
@@ -720,6 +721,157 @@ export async function demandsAreInSql(): Promise<boolean> {
     );
     demandsFilled = !!row && Number(row.value) === 1;
     return demandsFilled;
+  } catch (err) {
+    if (isMissingTable(err)) return false;
+    throw err;
+  }
+}
+
+// --- The stock book ----------------------------------------------------------
+//
+// The last module kept as one document, and the one whose save had already gone
+// over the allowance: 3,429 entries is 2.5 MB of JSON, and reading it, adding
+// one entry and writing it back measured 18 milliseconds against the 10 a
+// request gets. Taking a piece into stock was over budget before the request
+// did anything else, and the same document was handed whole to /stockbook.
+//
+// Why each real column is real:
+//
+//   id             the row's identity, and the address of its page
+//                  (/stockbook/SB-00412).
+//   stock_no       the first column of the book, the link in it, and searched.
+//                  It is not the identity: a piece coming in from elsewhere
+//                  carries a number already, so two entries can read S0410.
+//   stock_date     the Date column and the From / Until filters. Named the long
+//                  way for the same reason memo_date and jangad_date are:
+//                  date() is one of SQLite's own functions, and a column of
+//                  that name reads as a call to it.
+//   design         the description, shown and searched.
+//   design_no      shown, and matched as a design number rather than as text,
+//                  so the list has to be able to read it without the record.
+//   category       shown and searched.
+//   sub_category,
+//   sub_sub_category  searched, though only the category is shown.
+//   location       shown, its own filter dropdown, and the list of places that
+//                  fills that dropdown.
+//   gold_details   shown and searched, and the purity written into it is what
+//                  picks the gold rate, so a row cannot be priced without it.
+//   gross_wt,
+//   net_wt         both shown. Gold and labour are charged on the net weight,
+//                  so that one is also what a row is priced on. Text, because
+//                  every weight in this portal is kept as it was typed.
+//   party_name     searched, not shown.
+//   comments       searched, not shown.
+//   polki_labour   neither shown nor searched. It decides which of the two
+//                  labour rates the row is priced at, and a row priced at the
+//                  wrong one is wrong by a few hundred dollars, so it comes out
+//                  with the row rather than being read off the record.
+//   lines          the diamond sizes. Wanted three times over: every shown row
+//                  is priced from them, a MIX row opens onto them, and the
+//                  shape, the sieve and the product code inside them are
+//                  searched. Their own column so the list never reads `doc`.
+//   created_at     the sort order of the book, newest first. Indexed.
+//
+// What is deliberately not a column: inchSize, mfgName and the links back to
+// where the piece came from (jangadIds, pdId, pdNo, demandNos, memoNos). None
+// of them is shown, sorted, filtered or searched; they are in `doc` and are
+// read when one entry is opened.
+export const STOCK_COLUMNS: SqlColumn<StockEntry>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (e) => e.id, blank: "", primaryKey: true },
+  { name: "stock_no", type: "TEXT", path: "$.stockNo", get: (e) => text(e.stockNo), blank: "" },
+  { name: "stock_date", type: "TEXT", path: "$.date", get: (e) => text(e.date), blank: "" },
+  { name: "design", type: "TEXT", path: "$.design", get: (e) => text(e.design), blank: "" },
+  { name: "design_no", type: "TEXT", path: "$.designNo", get: (e) => text(e.designNo), blank: "" },
+  { name: "category", type: "TEXT", path: "$.category", get: (e) => text(e.category), blank: "" },
+  { name: "sub_category", type: "TEXT", path: "$.subCategory", get: (e) => text(e.subCategory), blank: "" },
+  { name: "sub_sub_category", type: "TEXT", path: "$.subSubCategory", get: (e) => text(e.subSubCategory), blank: "" },
+  { name: "location", type: "TEXT", path: "$.location", get: (e) => text(e.location), blank: "" },
+  { name: "gold_details", type: "TEXT", path: "$.goldDetails", get: (e) => text(e.goldDetails), blank: "" },
+  { name: "gross_wt", type: "TEXT", path: "$.grossWt", get: (e) => text(e.grossWt), blank: "" },
+  { name: "net_wt", type: "TEXT", path: "$.netWt", get: (e) => text(e.netWt), blank: "" },
+  { name: "party_name", type: "TEXT", path: "$.partyName", get: (e) => text(e.partyName), blank: "" },
+  { name: "comments", type: "TEXT", path: "$.comments", get: (e) => text(e.comments), blank: "" },
+  // SQLite reads a JSON true as 1 and a false as 0, and an entry written before
+  // the polki rate existed has neither, which is the same as not polki.
+  { name: "polki_labour", type: "INTEGER", path: "$.polkiLabour", get: (e) => (e.polkiLabour ? 1 : 0), blank: 0 },
+  { name: "lines", type: "TEXT", path: "$.lines", get: (e) => json(e.lines), blank: "[]" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (e) => text(e.createdAt), blank: "" },
+];
+
+export const STOCK_TABLE = "stock_entries";
+export const STOCK_COUNTER_TABLE = "stock_counters";
+export const STOCK_FLAG_TABLE = "stock_flags";
+
+// The book's one running number, under this key. S0410 is the 410th piece ever
+// taken in and SB-00410 is its row, and the next piece must be S0411 whichever
+// store it is written to. The same key/value shape the other books' counters
+// use, because this is the same kind of fact; the register's JANGAD_SEQ is its
+// closest relative, the book being counted straight through rather than per
+// financial year.
+export const STOCK_SEQ = "stockbook";
+
+// Set to 1 by the copy, and only once every entry is across. Until then the
+// portal reads the book from R2 exactly as it always has.
+export const STOCK_FILLED = "stockbook:filled";
+
+export const STOCK_SCHEMA: string[] = [
+  createTable(STOCK_TABLE, STOCK_COLUMNS),
+
+  `CREATE TABLE IF NOT EXISTS ${STOCK_COUNTER_TABLE} (
+  counter_key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  `CREATE TABLE IF NOT EXISTS ${STOCK_FLAG_TABLE} (
+  flag TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  // The book's own order: newest piece first. It is the only sort the book has
+  // ever had, and it is also what the opening page's cap is taken off, so it is
+  // the one index the page cannot do without. The date filters have no index of
+  // their own: a filtered page is still read newest first and still stops at
+  // its cap, so it walks this same index either way.
+  `CREATE INDEX IF NOT EXISTS idx_stock_created_at ON ${STOCK_TABLE} (created_at DESC)`,
+];
+
+const STOCK_OBJECTS = [
+  STOCK_TABLE, STOCK_COUNTER_TABLE, STOCK_FLAG_TABLE, "idx_stock_created_at",
+];
+
+// Create what is missing, exactly as the four above do and for the same
+// reasons: one query to ask whether there is anything to do, because the rest
+// of this request's fifty are wanted for copying entries, and then one
+// statement at a time because every one of them is IF NOT EXISTS and a run that
+// stopped half way is finished by pressing the button again.
+export async function applyStockSchema(): Promise<number> {
+  const marks = STOCK_OBJECTS.map(() => "?").join(", ");
+  const row = await sqlFirst<{ found: number }>(
+    `SELECT COUNT(*) AS found FROM sqlite_master WHERE name IN (${marks})`,
+    STOCK_OBJECTS
+  );
+  if (row && Number(row.found) === STOCK_OBJECTS.length) return 0;
+
+  for (const statement of STOCK_SCHEMA) await sqlRun(statement);
+  return STOCK_SCHEMA.length;
+}
+
+// Is the stock book in D1? The same reasoning, and the same reading of a table
+// that is not there against a database that will not answer, as the four
+// modules above. It matters here as much as anywhere: the R2 path reads the
+// book whole and writes it whole, so a book misread as empty would put a blank
+// document over every entry in it on the next save.
+let stockFilled = false;
+
+export async function stockBookIsInSql(): Promise<boolean> {
+  if (stockFilled) return true;
+  try {
+    const row = await sqlFirst<{ value: number }>(
+      `SELECT value FROM ${STOCK_FLAG_TABLE} WHERE flag = ?`,
+      [STOCK_FILLED]
+    );
+    stockFilled = !!row && Number(row.value) === 1;
+    return stockFilled;
   } catch (err) {
     if (isMissingTable(err)) return false;
     throw err;

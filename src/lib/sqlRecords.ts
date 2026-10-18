@@ -23,6 +23,7 @@
 import "server-only";
 import { sqlAll, sqlBatch, sqlFirst, sqlRun } from "./sql";
 import { columnNames, columnValues, type SqlColumn } from "./sqlSchema";
+import { parseDesignNo } from "./designNo";
 
 // --- Writing records ---------------------------------------------------------
 
@@ -165,11 +166,21 @@ SELECT ${picks.join(", ")} FROM json_each(?) AS r`,
 // A number no book will ever reach, used to find out how a number is printed
 // without writing that format down a second time. The module's own formatter is
 // asked to format the sentinel, and the sentinel is swapped for SQLite's own
-// three-digit placeholder. If the formats ever change, this changes with them.
+// placeholder. If the formats ever change, this changes with them.
 const SENTINEL = 7777777;
 
+// How wide the padding is comes out of the formatter too, rather than being
+// assumed: PD/26-27/012 pads to three, JG-04910 to five and SB-00412 to five,
+// and a template that said three for all of them would write SB-412.
+//
+// Measured by asking the formatter for a one-digit serial as well: everything
+// in a printed number that is not the number itself is the same length in both,
+// so what is left over is the width the padding reaches.
 export function numberTemplate(format: (seq: number) => string): string {
-  return format(SENTINEL).replace(String(SENTINEL), "%03d");
+  const printed = format(SENTINEL);
+  const fixed = printed.length - String(SENTINEL).length;
+  const width = format(1).length - fixed;
+  return printed.replace(String(SENTINEL), `%0${width}d`);
 }
 
 // Where a record's own number lives: which column holds it, and where it sits
@@ -323,6 +334,60 @@ export async function sqlSetFlagValue(
 ON CONFLICT(flag) DO UPDATE SET value = excluded.value`,
     [flag, value]
   );
+}
+
+// --- Narrowing a list page ---------------------------------------------------
+//
+// Two pages are now too long to hand the browser whole, the jangad register and
+// the stock book, so both ask the database for the entries they are showing.
+// Neither asks it to decide what a phrase names: a design number is matched by
+// matchDesign(), which is arithmetic on the parts of a number rather than
+// anything LIKE can express. The database narrows generously and hands back
+// candidates, and the page's own matcher picks the answers out of them.
+//
+// What the two share is how a typed phrase and a stored column are made
+// comparable, and it is written once here because getting it wrong in one of
+// them and right in the other would show up as a row the search used to find
+// and no longer does.
+
+// What a design number is compared without. matchDesign() ignores every
+// separator, so "snbramf" finds "SN-BR-AMF-…" and a piece written with slashes
+// finds one written with dashes.
+//
+// The two sides are stripped differently, and that is deliberate. A phrase that
+// was typed is stripped of everything matchDesign() would strip, because that
+// is what it will be compared against. A column can only be stripped of a list
+// of characters, since SQLite has no pattern replace, so it loses the
+// separators design numbers are actually written with. Stripping the typed
+// phrase harder than the column can only widen what comes back, never narrow
+// it, and a number written with some other punctuation is still found by the
+// plain-text clauses, which compare it exactly as typed.
+const SEPARATORS = ["-", " ", "/", "_", "+", "#", "&", ",", "(", ")"];
+
+export const flatColumn = (expr: string): string =>
+  SEPARATORS.reduce((sql, ch) => `replace(${sql}, '${ch}', '')`, `upper(${expr})`);
+
+// The same rule as flat() in designNo.ts: a separator is anything that is not a
+// letter, a digit or a decimal point.
+export const flatText = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9.]/g, "");
+
+// A LIKE pattern for a typed phrase. The two wildcards and the escape itself
+// are escaped, so a stock code with an underscore in it searches for that
+// underscore rather than for any character.
+const forLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+export const contains = (s: string): string => `%${forLike(s)}%`;
+export const startsWith = (s: string): string => `${forLike(s)}%`;
+
+// The codes a search writes before the piece number: "SN-BR-AMF-10CT" out of
+// "SN-BR-AMF-10CT-46". A piece match needs those codes to be exactly the ones
+// the row carries, so every row that could be the piece being asked for has a
+// design number starting with them. That is a prefix, which the database can
+// answer, and it is how a piece inside a run is still found when the run is
+// written into the design number itself.
+export function designHead(needle: string): string {
+  const asked = parseDesignNo(needle);
+  if (asked.spanned || asked.at <= 0) return "";
+  return flatText(asked.segs.slice(0, asked.at).join(""));
 }
 
 // --- Counting, for the admin screen ------------------------------------------
