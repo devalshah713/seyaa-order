@@ -93,16 +93,32 @@ export async function startReceiptChasesQuietly(demand: Demand, by: string): Pro
 export async function finishReceiptChasesQuietly(rows: JangadRow[]): Promise<void> {
   try {
     if (!rows.length) return;
-    const open = (await listReceiptChases()).filter(isOpen);
-    for (const chase of open) {
-      const hit = findJangadIssue(chase, rows);
-      if (!hit) continue;
-      await closeReceiptChase(
-        chase.id, "done", "the jangad register",
-        `Diamonds issued on the jangad for ${chase.designNumber}.`,
-        refFor(hit)
-      );
-    }
+
+    // One pass, whatever the visit covered.
+    //
+    // This used to read and write the whole chase book once per design closed,
+    // and the diamond team rarely brings back one design at a time. Six closed
+    // in a press measured between 49 and 237 milliseconds depending on how much
+    // history the chases carried, against the ten a request is allowed.
+    //
+    // Running out there was worse than a slow save. The register rows have
+    // already been written by the time this is reached, so the Worker was being
+    // killed after the issue was safely recorded. Staff saw a failure, believed
+    // nothing had saved, and issued the same diamonds again, which is how a
+    // visit ends up in the register twice.
+    const at = new Date();
+    await mutateReceiptChases((db) => {
+      for (const chase of db.chases) {
+        if (!isOpen(chase)) continue;
+        const hit = findJangadIssue(chase, rows);
+        if (!hit) continue;
+        applyClose(
+          chase, "done", "the jangad register",
+          `Diamonds issued on the jangad for ${chase.designNumber}.`,
+          refFor(hit), at
+        );
+      }
+    });
   } catch {
     // The register must save whether the chase list is reachable or not.
   }
