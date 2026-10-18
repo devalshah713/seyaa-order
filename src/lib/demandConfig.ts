@@ -92,3 +92,39 @@ export function totalPcs(rows: DemandRow[]): number {
 export function totalBags(rows: DemandRow[]): number {
   return rows.reduce((n, r) => n + (parseInt(r.bags, 10) || 0), 0);
 }
+
+// --- What the demand list says about a demand --------------------------------
+//
+// The list shows the design numbers on a demand and the stones it counts out,
+// and searches a line of text built from both the demand and its rows. All
+// three are worked out from `rows`, and two places now need the same answers:
+// the list itself, and the columns the database keeps so the list never has to
+// read the rows at all.
+//
+// Taking a demand-shaped thing rather than a Demand keeps this file where it
+// is, knowing nothing about storage, as everything else in it does.
+export type DemandSummary = {
+  demandNo: string;
+  issuedTo: string;
+  pdNo?: string;
+  rows: DemandRow[];
+};
+
+// The distinct design numbers, in the order they appear on the demand.
+export function demandDesigns(d: DemandSummary): string[] {
+  const designs: string[] = [];
+  for (const r of d.rows) {
+    if (r.designNo && !designs.includes(r.designNo)) designs.push(r.designNo);
+  }
+  return designs;
+}
+
+// Everything the search can match on, joined exactly as the browser used to
+// join it and lower-cased once instead of once per keystroke.
+export function demandSearchText(d: DemandSummary): string {
+  const text: string[] = [d.demandNo, d.issuedTo, d.pdNo || ""];
+  for (const r of d.rows) {
+    text.push(`${r.designNo} ${r.shape} ${r.pointers} ${r.growth}`);
+  }
+  return text.join(" ").toLowerCase();
+}

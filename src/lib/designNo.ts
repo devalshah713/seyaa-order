@@ -271,6 +271,33 @@ export function reconcilePieces(sku: string, saved: PdPiece[] | undefined): PdPi
   });
 }
 
+// The two things the PD list says about a sheet's pieces, worked out here
+// because two places now need the same answer: the list itself, and the column
+// the database keeps so the list does not have to read the pieces at all.
+//
+// A sheet with a four hundred piece run carries four hundred of these objects,
+// and the list shows a count and the few that reached the stock book. Reading
+// all of them on every page load was what the list's own row shape was invented
+// to avoid, so the answers are worked out once when the sheet is saved and the
+// list reads the answers.
+
+// How many pieces have reached the stock book.
+export function piecesInStock(pieces: PdPiece[] | undefined): number {
+  let n = 0;
+  for (const p of pieces || []) if (p && p.status === "stock") n++;
+  return n;
+}
+
+// Only the pieces carrying a stock number, so a stock number still finds its
+// design. A piece nobody has touched says nothing and is left out.
+export function stockedPieces(
+  pieces: PdPiece[] | undefined
+): { no: string; stockNo: string }[] {
+  const out: { no: string; stockNo: string }[] = [];
+  for (const p of pieces || []) if (p && p.stockNo) out.push({ no: p.no, stockNo: p.stockNo });
+  return out;
+}
+
 export type PieceSummary = { total: number; inStock: number; started: number; open: number };
 
 export function summarisePieces(pieces: PdPiece[] | undefined): PieceSummary {

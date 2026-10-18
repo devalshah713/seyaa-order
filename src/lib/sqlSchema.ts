@@ -26,6 +26,10 @@ import { isMissingTable, sqlFirst, sqlRun } from "./sql";
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, Order } from "./memoStore";
 import type { JangadRow } from "./jangadConfig";
+import type { PdSheet } from "./pdStore";
+import type { Demand } from "./demandStore";
+import { piecesInStock, stockedPieces } from "./designNo";
+import { demandDesigns, demandSearchText, totalPcs } from "./demandConfig";
 
 // One real column: its name, its type, where to find its value in a record in
 // hand, and where to find it inside a stored JSON record.
@@ -35,7 +39,13 @@ export type SqlColumn<T> = {
   // The field's SQLite JSON path inside the stored record. Used by the copy,
   // which expands whole records inside the database rather than one query per
   // record.
-  path: string;
+  //
+  // Left out by a column that holds something worked out from a record rather
+  // than a field of it: the demand list's prepared search text, the count of a
+  // PD sheet's pieces that reached the stock book. There is no path to those,
+  // so the copy for those two tables works every column out here and hands the
+  // database a flattened record. See insertFlatRows() in sqlRecords.ts.
+  path?: string;
   // The same value taken from a record already in memory. Used by every save.
   get: (record: T) => unknown;
   // What a record that has not got this field at all becomes. Older memos have
@@ -453,6 +463,256 @@ export async function jangadIsInSql(): Promise<boolean> {
     );
     jangadFilled = !!row && Number(row.value) === 1;
     return jangadFilled;
+  } catch (err) {
+    if (isMissingTable(err)) return false;
+    throw err;
+  }
+}
+
+// --- PD sheets ---------------------------------------------------------------
+//
+// The design sheets, and the heaviest remaining write in the portal. A sheet is
+// a page of fields with a photo and a run of pieces on it, and every one of the
+// twenty-odd saves a sheet sees in its life rewrote every sheet in the book.
+// Marking one piece as being made cost the whole book; so did pointing a photo
+// somewhere else.
+//
+// Why each real column is real:
+//
+//   id             the row's identity, and the address of its page (/pd/PD-26-27-001).
+//   pd_no          the first column of the list, and searched.
+//   fy, seq        the number the sheet was issued under. Separate columns
+//                  because the book is counted per financial year, and because
+//                  the number is taken by the database inside the transaction
+//                  that writes the sheet.
+//   sku            the design number: shown, searched, and the one field the
+//                  design lookup reads. See sqlPdDesigns().
+//   product,
+//   assigned_to,
+//   delivery_date,
+//   quantity       the columns of the list.
+//   created_by,
+//   updated_by     shown beside them: who wrote the sheet and who last touched it.
+//   category,
+//   sub_category,
+//   pd_merchandiser,
+//   zone,
+//   order_type,
+//   dia_quality    searched by the box above the list, though not shown in it.
+//   in_stock,
+//   stocked        what the list says about the pieces. Worked out when the
+//                  sheet is saved rather than stored as a field of it, because
+//                  the pieces themselves are not what the list wants: a four
+//                  hundred piece run is four hundred objects and the list shows
+//                  a count and the few that carry a stock number. These two
+//                  columns are what keeps the list from reading the pieces at
+//                  all. The count is left as it was recorded and clamped to the
+//                  run's length on the way out, exactly as the list has always
+//                  clamped it.
+//   created_at     the sort order of the list, newest first. Indexed.
+//
+// What is deliberately not a column: `pieces`. It is not stored authority. It
+// is rebuilt from `sku` on every read by reconcilePieces(), so a column holding
+// it could disagree with the design number it is supposed to follow. `doc`
+// holds the sheet as stored and the rebuild happens on the way out, which is
+// what the R2 path has always done.
+export const PD_COLUMNS: SqlColumn<PdSheet>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (s) => s.id, blank: "", primaryKey: true },
+  { name: "pd_no", type: "TEXT", path: "$.pdNo", get: (s) => text(s.pdNo), blank: "" },
+  { name: "fy", type: "TEXT", path: "$.fy", get: (s) => text(s.fy), blank: "" },
+  { name: "seq", type: "INTEGER", path: "$.seq", get: (s) => num(s.seq), blank: 0 },
+  { name: "sku", type: "TEXT", path: "$.sku", get: (s) => text(s.sku), blank: "" },
+  { name: "product", type: "TEXT", path: "$.product", get: (s) => text(s.product), blank: "" },
+  { name: "assigned_to", type: "TEXT", path: "$.assignedTo", get: (s) => text(s.assignedTo), blank: "" },
+  { name: "delivery_date", type: "TEXT", path: "$.deliveryDate", get: (s) => text(s.deliveryDate), blank: "" },
+  { name: "quantity", type: "TEXT", path: "$.quantity", get: (s) => text(s.quantity), blank: "" },
+  { name: "created_by", type: "TEXT", path: "$.createdBy", get: (s) => text(s.createdBy), blank: "" },
+  { name: "updated_by", type: "TEXT", path: "$.updatedBy", get: (s) => text(s.updatedBy), blank: "" },
+  { name: "category", type: "TEXT", path: "$.category", get: (s) => text(s.category), blank: "" },
+  { name: "sub_category", type: "TEXT", path: "$.subCategory", get: (s) => text(s.subCategory), blank: "" },
+  { name: "pd_merchandiser", type: "TEXT", path: "$.pdMerchandiser", get: (s) => text(s.pdMerchandiser), blank: "" },
+  { name: "zone", type: "TEXT", path: "$.zone", get: (s) => text(s.zone), blank: "" },
+  { name: "order_type", type: "TEXT", path: "$.orderType", get: (s) => text(s.orderType), blank: "" },
+  { name: "dia_quality", type: "TEXT", path: "$.diaQuality", get: (s) => text(s.diaQuality), blank: "" },
+  // Worked out from the pieces, so no path: see the note on SqlColumn.path.
+  { name: "in_stock", type: "INTEGER", get: (s) => piecesInStock(s.pieces), blank: 0 },
+  { name: "stocked", type: "TEXT", get: (s) => json(stockedPieces(s.pieces)), blank: "[]" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (s) => text(s.createdAt), blank: "" },
+];
+
+export const PD_TABLE = "pd_sheets";
+export const PD_COUNTER_TABLE = "pd_counters";
+export const PD_FLAG_TABLE = "pd_flags";
+
+// Set to 1 by the copy, and only once every sheet is across. Until then the
+// portal reads the sheets from R2 exactly as it always has.
+export const PD_FILLED = "pd:filled";
+
+export const PD_SCHEMA: string[] = [
+  createTable(PD_TABLE, PD_COLUMNS),
+
+  // One row per financial year: "26-27" holds the serial PD/26-27/012 was the
+  // twelfth of. Exactly the key/value map the JSON document's `counters` holds
+  // today, which is what keeps PD/26-27/013 following it after the move.
+  `CREATE TABLE IF NOT EXISTS ${PD_COUNTER_TABLE} (
+  counter_key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  `CREATE TABLE IF NOT EXISTS ${PD_FLAG_TABLE} (
+  flag TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  // The list's own order: newest sheet first. It is the only sort the list has
+  // ever had and the one index it cannot do without.
+  `CREATE INDEX IF NOT EXISTS idx_pd_created_at ON ${PD_TABLE} (created_at DESC)`,
+];
+
+const PD_OBJECTS = [PD_TABLE, PD_COUNTER_TABLE, PD_FLAG_TABLE, "idx_pd_created_at"];
+
+// Create what is missing, exactly as the two above do and for the same reasons:
+// one query to ask whether there is anything to do, because the rest of this
+// request's fifty are wanted for copying sheets, and then one statement at a
+// time because every one of them is IF NOT EXISTS and a run that stopped half
+// way is finished by pressing the button again.
+export async function applyPdSchema(): Promise<number> {
+  const marks = PD_OBJECTS.map(() => "?").join(", ");
+  const row = await sqlFirst<{ found: number }>(
+    `SELECT COUNT(*) AS found FROM sqlite_master WHERE name IN (${marks})`,
+    PD_OBJECTS
+  );
+  if (row && Number(row.found) === PD_OBJECTS.length) return 0;
+
+  for (const statement of PD_SCHEMA) await sqlRun(statement);
+  return PD_SCHEMA.length;
+}
+
+// Are the PD sheets in D1, and is D1 therefore where a sheet is saved?
+//
+// The same reasoning as memosAreInSql() and jangadIsInSql(). Counting rows
+// would not answer it: a database with the table made and the sheets not yet
+// copied holds none, and so does a book nobody has written in. Only the flag
+// says the copy finished.
+//
+// A table that is not there yet means the move has not started, which is an
+// ordinary answer. Anything else is thrown, because reading a database that is
+// refusing as "not moved yet" would send the next save to R2 while the office
+// reads D1, and the book would quietly split in two.
+let pdFilled = false;
+
+export async function pdIsInSql(): Promise<boolean> {
+  if (pdFilled) return true;
+  try {
+    const row = await sqlFirst<{ value: number }>(
+      `SELECT value FROM ${PD_FLAG_TABLE} WHERE flag = ?`,
+      [PD_FILLED]
+    );
+    pdFilled = !!row && Number(row.value) === 1;
+    return pdFilled;
+  } catch (err) {
+    if (isMissingTable(err)) return false;
+    throw err;
+  }
+}
+
+// --- Diamond demands ---------------------------------------------------------
+//
+// The smallest of the four and the simplest. A demand is a short header and one
+// row per diamond size, and saving one rewrote every demand in the book.
+//
+// Why each real column is real:
+//
+//   id             the row's identity, and the address of its page.
+//   demand_no      the first column of the list, and searched.
+//   fy, seq        the number the demand was issued under, for the same two
+//                  reasons the PD sheet keeps them.
+//   demand_date    the Date column. Named the long way because date() is one of
+//                  SQLite's own functions and a column of that name reads as a
+//                  call to it, which is why memo_date and jangad_date are
+//                  named as they are.
+//   designs,
+//   pcs,
+//   search         the rest of what the list shows and searches on. All three
+//                  are worked out from `rows` when the demand is saved rather
+//                  than stored as fields of it, and that is the whole point of
+//                  them: `rows` is nearly the entire demand, so a list that
+//                  read the rows to work these out would be reading the demands
+//                  whole. These three columns are a few dozen bytes each and
+//                  they are everything the list wants.
+//   created_at     the sort order of the list, newest first. Indexed.
+//
+// Everything else a demand carries, the notes, who it went to, its PD link and
+// the rows themselves with their comments and bag counts, is in `doc` and is
+// read only when one demand is opened.
+export const DEMAND_COLUMNS: SqlColumn<Demand>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (d) => d.id, blank: "", primaryKey: true },
+  { name: "demand_no", type: "TEXT", path: "$.demandNo", get: (d) => text(d.demandNo), blank: "" },
+  { name: "fy", type: "TEXT", path: "$.fy", get: (d) => text(d.fy), blank: "" },
+  { name: "seq", type: "INTEGER", path: "$.seq", get: (d) => num(d.seq), blank: 0 },
+  { name: "demand_date", type: "TEXT", path: "$.date", get: (d) => text(d.date), blank: "" },
+  // The three worked-out columns, so no path: see the note on SqlColumn.path.
+  { name: "designs", type: "TEXT", get: (d) => json(demandDesigns(d)), blank: "[]" },
+  { name: "pcs", type: "INTEGER", get: (d) => num(totalPcs(d.rows || [])), blank: 0 },
+  { name: "search", type: "TEXT", get: (d) => text(demandSearchText(d)), blank: "" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (d) => text(d.createdAt), blank: "" },
+];
+
+export const DEMAND_TABLE = "demands";
+export const DEMAND_COUNTER_TABLE = "demand_counters";
+export const DEMAND_FLAG_TABLE = "demand_flags";
+
+// Set to 1 by the copy, and only once every demand is across.
+export const DEMANDS_FILLED = "demands:filled";
+
+export const DEMAND_SCHEMA: string[] = [
+  createTable(DEMAND_TABLE, DEMAND_COLUMNS),
+
+  // One row per financial year, as the PD counters are, holding the serial
+  // DD/26-27/004 was the fourth of.
+  `CREATE TABLE IF NOT EXISTS ${DEMAND_COUNTER_TABLE} (
+  counter_key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  `CREATE TABLE IF NOT EXISTS ${DEMAND_FLAG_TABLE} (
+  flag TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+)`,
+
+  `CREATE INDEX IF NOT EXISTS idx_demands_created_at ON ${DEMAND_TABLE} (created_at DESC)`,
+];
+
+const DEMAND_OBJECTS = [
+  DEMAND_TABLE, DEMAND_COUNTER_TABLE, DEMAND_FLAG_TABLE, "idx_demands_created_at",
+];
+
+export async function applyDemandSchema(): Promise<number> {
+  const marks = DEMAND_OBJECTS.map(() => "?").join(", ");
+  const row = await sqlFirst<{ found: number }>(
+    `SELECT COUNT(*) AS found FROM sqlite_master WHERE name IN (${marks})`,
+    DEMAND_OBJECTS
+  );
+  if (row && Number(row.found) === DEMAND_OBJECTS.length) return 0;
+
+  for (const statement of DEMAND_SCHEMA) await sqlRun(statement);
+  return DEMAND_SCHEMA.length;
+}
+
+// Are the demands in D1? The same reasoning, and the same reading of a table
+// that is not there against a database that will not answer, as the three
+// modules above.
+let demandsFilled = false;
+
+export async function demandsAreInSql(): Promise<boolean> {
+  if (demandsFilled) return true;
+  try {
+    const row = await sqlFirst<{ value: number }>(
+      `SELECT value FROM ${DEMAND_FLAG_TABLE} WHERE flag = ?`,
+      [DEMANDS_FILLED]
+    );
+    demandsFilled = !!row && Number(row.value) === 1;
+    return demandsFilled;
   } catch (err) {
     if (isMissingTable(err)) return false;
     throw err;

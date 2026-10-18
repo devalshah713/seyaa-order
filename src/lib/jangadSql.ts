@@ -179,7 +179,7 @@ export function jangadIdTemplate(format: (seq: number) => string): string {
 // field inside the JSON in hand, or the column's blank if the record has not got
 // that field. Every column is NOT NULL and carries a blank rather than a null,
 // so a record written before a column existed still goes in.
-function pickFrom<T>(column: SqlColumn<T>, element: string, path = column.path): string {
+function pickFrom<T>(column: SqlColumn<T>, element: string, path = column.path || ""): string {
   const blank = typeof column.blank === "string" ? `'${column.blank}'` : String(column.blank);
   return `COALESCE(json_extract(${element}, '${path}'), ${blank})`;
 }
@@ -253,11 +253,17 @@ RETURNING doc`,
 // added there is covered here without anybody remembering to. id, run_no and
 // created_at are facts about the entry rather than cells in it, and a save does
 // not touch them.
+// The record field a column follows, taken off its JSON path: "$.certiNo" is
+// certiNo. Every register column has a path, because every one of them is a
+// cell of the workbook or a fact about the entry rather than something worked
+// out from it.
+const fieldOf = <T,>(column: SqlColumn<T>): string => (column.path || "").slice(2);
+
 const PATCH_COLUMNS = JANGAD_ROW_COLUMNS.filter(
-  (column) => (JANGAD_FIELDS as string[]).includes(column.path.slice(2))
+  (column) => (JANGAD_FIELDS as string[]).includes(fieldOf(column))
 );
 
-const PATCH_FIELDS = PATCH_COLUMNS.map((column) => column.path.slice(2) as JangadField);
+const PATCH_FIELDS = PATCH_COLUMNS.map((column) => fieldOf(column) as JangadField);
 
 type Patch = Partial<Record<JangadField, string>>;
 
@@ -310,7 +316,7 @@ export async function sqlUpdateJangadRows(
 
   // Each patch is {id, row}, so a cell of it is reached one step further in.
   const sets = PATCH_COLUMNS.map(
-    (column) => `${column.name} = ${pickFrom(column, "p.value", `$.row${column.path.slice(1)}`)}`
+    (column) => `${column.name} = ${pickFrom(column, "p.value", `$.row.${fieldOf(column)}`)}`
   );
 
   const { rows } = await sqlRun(

@@ -1,11 +1,71 @@
 // Product Development (PD) sheet store — same shared-storage pattern as
-// memoStore, in its own JSON document so the two modules stay independent.
+// memoStore, in its own JSON document, and now also in Cloudflare D1.
+//
+// --- Why there is a second store ------------------------------------------
+//
+// Because of what a save cost. Every PD sheet in the book sat in one JSON
+// document, read whole and written whole, so marking one piece of one design as
+// being made wrote every sheet in the book; so did pointing a photo somewhere
+// else, and so did the diamonds going out on the jangad, which moves the sheet
+// on by itself. On Cloudflare's free plan a request may use ten thousandths of a
+// second of computing time, and this was the heaviest write left in the portal
+// once the memo book and the jangad register had moved. Nothing was being
+// wasted. The cost was the document.
+//
+// In D1 a save is one row, and a row costs the same at four thousand sheets as
+// at four.
+//
+// --- Which store is used ---------------------------------------------------
+//
+// D1, if and only if the database is attached to the Worker AND the sheets have
+// been copied into it. Otherwise the JSON document in R2, exactly as before,
+// every line of which is still here and untouched.
+//
+// There is no half-way: the copy sets one flag when every sheet is across, and
+// that flag is the switch. So this can be deployed before the database exists,
+// and the database can be filled before or after the deploy, and neither order
+// leaves a window where the book reads as empty. That matters: the R2 path
+// reads, changes and writes whole, so a book misread as empty would put a blank
+// document over the real one on the next save.
+//
+// Nothing is ever deleted from R2. After the switch the document stays as it was
+// on the day of the move, a complete readable copy of every sheet up to that
+// moment.
+//
+// --- What the pieces are ---------------------------------------------------
+//
+// One thing about this module is worth saying twice, because it decides the
+// shape of the table. A sheet's `pieces` are not stored authority: they are
+// rebuilt from the design number by reconcilePieces() on the way in and on the
+// way out, so a corrected design number can never leave the number and the
+// pieces disagreeing. That is still exactly what happens here. `doc` holds the
+// sheet as stored and the rebuild happens on the way out, in hydrate(), as it
+// always has. No column holds the piece list.
 import "server-only";
 import { isDbConfigured, readDoc, writeDoc } from "./db";
 import { fyFromInput, pad, todayInput } from "./memoFormat";
+import { hasSql } from "./sql";
+import { pdIsInSql } from "./sqlSchema";
+import { numberTemplate } from "./sqlRecords";
+import {
+  sqlCreatePdSheet,
+  sqlDeletePdSheet,
+  sqlGetPdSheet,
+  sqlListPdSheets,
+  sqlPdCounter,
+  sqlPdCounters,
+  sqlPdDesigns,
+  sqlPdRows,
+  sqlPdSheetsByIds,
+  sqlPdSku,
+  sqlPutPdSheet,
+  sqlSetPdPhoto,
+  sqlSetPdPieces,
+} from "./pdSql";
 import type { DiaLine } from "./pdConfig";
 import {
-  isPieceStatus, matchDesign, parseDesignNo, pieceTotal, reconcilePieces,
+  isPieceStatus, matchDesign, parseDesignNo, pieceTotal, piecesInStock,
+  reconcilePieces, stockedPieces,
   type DesignHit, type PdPiece,
 } from "./designNo";
 
@@ -141,9 +201,36 @@ function normalizeDiaLines(input: unknown): DiaLine[] {
     .filter((l) => l.shape || l.size || l.mm || l.pointer || l.pcs);
 }
 
+// Is D1 where the sheets live?
+//
+// Both halves have to be true: the database has to be attached, and the sheets
+// have to be in it. Asked on every call rather than worked out once, because the
+// day the copy runs is a day when the answer changes without a deploy.
+async function useSql(): Promise<boolean> {
+  return hasSql() && (await pdIsInSql());
+}
+
+// How a sheet's number is printed, written down here only. The D1 half is
+// handed these same two functions to learn the formats from, so there is no
+// second copy of them to drift.
+export function pdIdFor(fy: string, seq: number): string {
+  return `PD-${fy}-${pad(seq)}`;
+}
+
+export function pdNoFor(fy: string, seq: number): string {
+  return `PD/${fy}/${pad(seq)}`;
+}
+
 async function readDB(): Promise<PdDB> {
   const db = await readDoc<Partial<PdDB>>(DB_PATH, {});
   return { counters: db.counters || {}, sheets: db.sheets || [] };
+}
+
+// The document as it really is, for the copy into D1. readDB() fills in the
+// defaults, which is right everywhere it is used and would quietly invent an
+// empty book out of a document that could not be read.
+export async function readPdDoc(): Promise<Partial<PdDB>> {
+  return readDoc<Partial<PdDB>>(DB_PATH, {});
 }
 
 async function writeDB(db: PdDB): Promise<void> {
@@ -151,26 +238,47 @@ async function writeDB(db: PdDB): Promise<void> {
 }
 
 export async function createPdSheet(input: NewPdSheet, by = ""): Promise<PdSheet> {
-  const db = await readDB();
-
   const date = input.assignedDate || todayInput();
   const fy = fyFromInput(date);
-  const seq = (db.counters[fy] || 0) + 1;
-  db.counters[fy] = seq;
-
   const now = new Date().toISOString();
-  const sheet: PdSheet = {
+
+  // The sheet as it will be stored, bar its number: whichever store takes it is
+  // the one that decides that, because the number has to be taken and used
+  // without anything in between reading it.
+  const draft: PdSheet = {
     ...input,
-    id: `PD-${fy}-${pad(seq)}`,
-    pdNo: `PD/${fy}/${pad(seq)}`,
+    id: "",
+    pdNo: "",
     fy,
-    seq,
+    seq: 0,
     pieces: reconcilePieces(input.sku, []),
     createdBy: by || undefined,
     updatedBy: by || undefined,
     createdAt: now,
     updatedAt: now,
   };
+
+  // In the database the number is raised and used inside one transaction, so
+  // two sheets saved in the same moment take 012 and 013 and never both 012.
+  // Against the document it still is what it always was: the whole book read
+  // in, the counter raised, the whole book written back.
+  if (await useSql()) {
+    return sqlCreatePdSheet(draft, fy, {
+      id: numberTemplate((seq) => pdIdFor(fy, seq)),
+      no: numberTemplate((seq) => pdNoFor(fy, seq)),
+    });
+  }
+  return createInDoc(draft, fy);
+}
+
+// The sheet into the JSON document, which is what runs until the book has been
+// copied across. Unchanged: the book is read, the next number comes off the
+// document's own counter, and the book is written back.
+async function createInDoc(draft: PdSheet, fy: string): Promise<PdSheet> {
+  const db = await readDB();
+  const seq = (db.counters[fy] || 0) + 1;
+  db.counters[fy] = seq;
+  const sheet: PdSheet = { ...draft, id: pdIdFor(fy, seq), pdNo: pdNoFor(fy, seq), seq };
   db.sheets.push(sheet);
   await writeDB(db);
   return sheet;
@@ -184,6 +292,9 @@ function hydrate(sheet: PdSheet): PdSheet {
 }
 
 export async function listPdSheets(): Promise<PdSheet[]> {
+  // The database sorts it, by the same key and to the same order.
+  if (await useSql()) return (await sqlListPdSheets()).map(hydrate);
+
   const db = await readDB();
   return db.sheets
     .slice()
@@ -201,6 +312,8 @@ export async function listPdSheets(): Promise<PdSheet[]> {
 // such a reader: it takes the design and gold fields off the sheet and never
 // touches the piece list, so it reads the sheets through here instead.
 export async function listPdSheetsRaw(): Promise<PdSheet[]> {
+  if (await useSql()) return sqlListPdSheets();
+
   const db = await readDB();
   return db.sheets.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
