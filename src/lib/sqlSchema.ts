@@ -29,7 +29,7 @@ import type { JangadRow } from "./jangadConfig";
 import type { PdSheet } from "./pdStore";
 import type { Demand } from "./demandStore";
 import { piecesInStock, stockedPieces } from "./designNo";
-import { demandDesigns, demandSearchText, totalPcs } from "./demandConfig";
+import { demandDesigns, demandSearchRest, totalPcs } from "./demandConfig";
 
 // One real column: its name, its type, where to find its value in a record in
 // hand, and where to find it inside a stored JSON record.
@@ -640,6 +640,13 @@ export async function pdIsInSql(): Promise<boolean> {
 //                  read the rows to work these out would be reading the demands
 //                  whole. These three columns are a few dozen bytes each and
 //                  they are everything the list wants.
+//
+//                  `search` holds everything searchable except the demand's own
+//                  number, because when a demand is saved here the number is
+//                  issued by the database inside the transaction that writes
+//                  the row, so there is no number yet to put in it. The list
+//                  puts it back from demand_no, which it is reading anyway. See
+//                  demandSearchRest() and sqlDemandRows().
 //   created_at     the sort order of the list, newest first. Indexed.
 //
 // Everything else a demand carries, the notes, who it went to, its PD link and
@@ -654,7 +661,7 @@ export const DEMAND_COLUMNS: SqlColumn<Demand>[] = [
   // The three worked-out columns, so no path: see the note on SqlColumn.path.
   { name: "designs", type: "TEXT", get: (d) => json(demandDesigns(d)), blank: "[]" },
   { name: "pcs", type: "INTEGER", get: (d) => num(totalPcs(d.rows || [])), blank: 0 },
-  { name: "search", type: "TEXT", get: (d) => text(demandSearchText(d)), blank: "" },
+  { name: "search", type: "TEXT", get: (d) => text(demandSearchRest(d)), blank: "" },
   { name: "created_at", type: "TEXT", path: "$.createdAt", get: (d) => text(d.createdAt), blank: "" },
 ];
 

@@ -30,6 +30,7 @@ import {
   type SqlColumn,
 } from "./sqlSchema";
 import { JANGAD_FIELDS, type JangadField, type JangadRow } from "./jangadConfig";
+import { parseDesignNo } from "./designNo";
 
 // --- Reading -----------------------------------------------------------------
 //
@@ -124,6 +125,190 @@ FROM ${JANGAD_TABLE} ORDER BY created_at, length(id), id`
     shape: str(row.shape),
     size: str(row.size),
     pcs: str(row.pcs),
+  }));
+}
+
+// --- One page of the register ------------------------------------------------
+//
+// The register page used to hand the browser every row it held. At 4,900 rows
+// that is three megabytes of page payload, and merely writing it out costs
+// around 10 milliseconds of processor time — the whole allowance a request gets
+// on this plan, spent before the page has done anything else. That is the 1102
+// the office was seeing on /jangad. So the page asks for what it is showing.
+//
+// The narrowing the database can do is the cheap part: a date range, a factory,
+// and a LIKE over the searched columns. What it must not try to do is design
+// numbers. "SN-BR-AMF-10CT-46" names one piece of a sheet written
+// "SN-BR-AMF-10CT-45-49", and deciding that is matchDesign()'s job, which is
+// arithmetic on the parts of a number rather than anything LIKE can express.
+//
+// So this returns candidates, not answers: every row that could match, in the
+// register's own order, and the store applies matchDesign() to them. The LIKE
+// clauses are therefore deliberately generous — a candidate too many costs one
+// record parsed, a candidate too few loses a row the register used to find.
+export type JangadQuery = {
+  q: string;
+  from: string;
+  to: string;
+  mfg: string;
+};
+
+// The columns the box above the register searches as plain text, which is what
+// JangadClient does with them.
+const SEARCHED_COLUMNS = [
+  "design_no", "sub_design_no", "product", "shape", "size", "status",
+  "mfg_name", "memo_no", "stock_code", "certi_no", "run_no",
+];
+
+// What a design number is compared without. matchDesign() ignores every
+// separator, so "snbramf" finds "SN-BR-AMF-…" and a piece written with slashes
+// finds one written with dashes. Both sides of the comparison are stripped with
+// this same list, so they always agree about what a separator is; a design
+// number using some other punctuation is still found by the plain-text clauses.
+const SEPARATORS = ["-", " ", "/", "_", "+", "#", "&", ",", "(", ")"];
+
+const flatColumn = (expr: string): string =>
+  SEPARATORS.reduce((sql, ch) => `replace(${sql}, '${ch}', '')`, `upper(${expr})`);
+
+const flatText = (s: string): string =>
+  SEPARATORS.reduce((t, ch) => t.split(ch).join(""), s.toUpperCase());
+
+// A LIKE pattern for a typed phrase. The two wildcards and the escape itself
+// are escaped, so a stock code with an underscore in it searches for that
+// underscore rather than for any character.
+const forLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+const contains = (s: string): string => `%${forLike(s)}%`;
+const startsWith = (s: string): string => `${forLike(s)}%`;
+
+// The codes a search writes before the piece number: "SN-BR-AMF-10CT" out of
+// "SN-BR-AMF-10CT-46". A piece match needs those codes to be exactly the ones
+// the row carries, so every row that could be the piece being asked for has a
+// design number starting with them. That is a prefix, which the database can
+// answer, and it is how a piece inside a run is still found when the run is
+// written into the design number itself.
+function headOf(needle: string): string {
+  const asked = parseDesignNo(needle);
+  if (asked.spanned || asked.at <= 0) return "";
+  return flatText(asked.segs.slice(0, asked.at).join(""));
+}
+
+export async function sqlListJangadPage(
+  query: JangadQuery,
+  limit: number
+): Promise<JangadRow[]> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  // Dates are stored as yyyy-mm-dd, which compares correctly as text. An entry
+  // with no date at all is outside every range rather than inside the open end
+  // of one, which is how the register has always read it.
+  if (query.from) {
+    where.push(`jangad_date <> '' AND jangad_date >= ?`);
+    params.push(query.from);
+  }
+  if (query.to) {
+    where.push(`jangad_date <> '' AND jangad_date <= ?`);
+    params.push(query.to);
+  }
+  if (query.mfg) {
+    where.push(`mfg_name = ?`);
+    params.push(query.mfg);
+  }
+
+  const needle = query.q.trim();
+  if (needle) {
+    const ors = SEARCHED_COLUMNS.map((name) => `${name} LIKE ? ESCAPE '\\'`);
+    for (let i = 0; i < SEARCHED_COLUMNS.length; i++) params.push(contains(needle));
+    // The piece's whole number, which no column holds: the design and the piece
+    // are separate columns and the search puts them back together. Stripped of
+    // separators, this one clause also covers a search that names only part of
+    // the design.
+    ors.push(`${flatColumn("design_no || sub_design_no")} LIKE ? ESCAPE '\\'`);
+    params.push(contains(flatText(needle)));
+    const head = headOf(needle);
+    if (head) {
+      ors.push(`${flatColumn("design_no")} LIKE ? ESCAPE '\\'`);
+      params.push(startsWith(head));
+    }
+    where.push(`(${ors.join(" OR ")})`);
+  }
+
+  params.push(limit);
+  const rows = await sqlAll<{ doc: string }>(
+    `SELECT doc FROM ${JANGAD_TABLE}${where.length ? ` WHERE ${where.join(" AND ")}` : ""}
+ORDER BY created_at DESC, length(id), id LIMIT ?`,
+    params
+  );
+  return rows.map(parseDoc);
+}
+
+// Every factory the register has ever been issued to, for the filter dropdown.
+//
+// It used to be gathered out of the rows the page was given, which worked only
+// while the page was given all of them. A factory the current page happens not
+// to mention is still a factory somebody wants to filter by.
+export async function sqlJangadFactories(): Promise<string[]> {
+  const rows = await sqlAll<{ mfg_name: string }>(
+    `SELECT DISTINCT mfg_name FROM ${JANGAD_TABLE} WHERE mfg_name <> '' ORDER BY mfg_name`
+  );
+  return rows.map((row) => String(row.mfg_name));
+}
+
+// What the stock book needs off every piece the register knows about.
+//
+// Fourteen fields of every row ever entered, where the stock book's own list
+// used to read the whole record and throw most of it away: one JSON.parse per
+// register row on a page that only lists pieces. Nine of the fourteen are real
+// columns; the other five are read out of the record by the database, which
+// costs the portal nothing.
+//
+// Newest batch first, the same order listJangad() gives, because the list it
+// feeds takes the first thing it sees about a piece — the product, the factory,
+// the stock code — and showing a different row's answer would change the page.
+export type JangadStockLine = {
+  id: string;
+  designNo: string;
+  subDesignNo: string;
+  product: string;
+  mfgName: string;
+  stockCode: string;
+  pdId: string;
+  pdNo: string;
+  shape: string;
+  size: string;
+  carats: string;
+  ctsUsed: string;
+  pcs: string;
+  pcsUsed: string;
+};
+
+export async function sqlJangadStockLines(): Promise<JangadStockLine[]> {
+  const rows = await sqlAll<Record<string, unknown>>(
+    `SELECT id, design_no, sub_design_no, product, mfg_name, stock_code, shape, size, pcs,
+  json_extract(doc, '$.pdId') AS pd_id,
+  json_extract(doc, '$.pdNo') AS pd_no,
+  json_extract(doc, '$.carats') AS carats,
+  json_extract(doc, '$.ctsUsed') AS cts_used,
+  json_extract(doc, '$.pcsUsed') AS pcs_used
+FROM ${JANGAD_TABLE} ORDER BY created_at DESC, length(id), id`
+  );
+  const str = (value: unknown): string =>
+    value === null || value === undefined ? "" : String(value);
+  return rows.map((row) => ({
+    id: str(row.id),
+    designNo: str(row.design_no),
+    subDesignNo: str(row.sub_design_no),
+    product: str(row.product),
+    mfgName: str(row.mfg_name),
+    stockCode: str(row.stock_code),
+    pdId: str(row.pd_id),
+    pdNo: str(row.pd_no),
+    shape: str(row.shape),
+    size: str(row.size),
+    carats: str(row.carats),
+    ctsUsed: str(row.cts_used),
+    pcs: str(row.pcs),
+    pcsUsed: str(row.pcs_used),
   }));
 }
 

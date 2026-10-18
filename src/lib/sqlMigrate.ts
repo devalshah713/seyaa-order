@@ -1,10 +1,10 @@
-// Copying records out of the R2 documents and into D1: the memo book first, and
-// the jangad register at the foot of this file.
+// Copying records out of the R2 documents and into D1: the memo book first,
+// then the jangad register, the PD sheets and the demands, each at the foot of
+// the one before it.
 //
-// The two are separate moves with a Check and a Copy each, because they are two
-// decisions. The owner presses the memo pair when he is ready for the memo book
-// to move and the jangad pair when he is ready for the register, in either
-// order, and neither waits on the other.
+// All four are separate moves with a Check and a Copy each, because they are
+// four decisions. The owner presses a pair when he is ready for that book to
+// move, in any order, and none of them waits on another.
 //
 // The same shape as dbMigrate.ts, which moved every document out of the old
 // Vercel store: look first, copy second, and never anything else.
@@ -36,6 +36,9 @@ import { hasSql, MAX_QUERIES_PER_REQUEST } from "./sql";
 import {
   EVENT_COLUMNS,
   EVENT_TABLE,
+  DEMANDS_FILLED,
+  DEMAND_COLUMNS,
+  DEMAND_TABLE,
   JANGAD_FILLED,
   JANGAD_ROW_COLUMNS,
   JANGAD_TABLE,
@@ -46,16 +49,31 @@ import {
   ORDER_TABLE,
   PARTY_COLUMNS,
   PARTY_TABLE,
+  PD_COLUMNS,
+  PD_FILLED,
+  PD_TABLE,
+  applyDemandSchema,
   applyJangadSchema,
   applyMemoSchema,
+  applyPdSchema,
+  demandsAreInSql,
   jangadIsInSql,
   memosAreInSql,
+  pdIsInSql,
   type SqlColumn,
 } from "./sqlSchema";
 import { insertRows, sqlExistingIds, sqlRecordCounts, sqlSetCounters, sqlSetFlag } from "./memoSql";
 import { sqlJangadCount, sqlSetJangadFlag, sqlSetJangadSeq } from "./jangadSql";
+import {
+  flatPdSheet, insertPdSheets, sqlPdCount, sqlSetPdCounters, sqlSetPdFlag,
+} from "./pdSql";
+import {
+  flatDemand, insertDemands, sqlDemandCount, sqlSetDemandCounters, sqlSetDemandFlag,
+} from "./demandSql";
 import { normalizeMemo, readMemoDoc, type DB, type Memo, type Order } from "./memoStore";
 import { readJangadDoc, type JangadDB } from "./jangadStore";
+import { readPdDoc, type PdDB, type PdSheet } from "./pdStore";
+import { readDemandDoc, type Demand, type DemandDB } from "./demandStore";
 import { PARTY_KINDS, type Party, type PartyKind, type StockEvent } from "./memoFormat";
 import type { JangadRow } from "./jangadConfig";
 
@@ -63,6 +81,11 @@ import type { JangadRow } from "./jangadConfig";
 // accepts for a single bound value, and small enough that a chunk that fails
 // has not taken much with it.
 const CHUNK_BYTES = 48_000;
+
+// And how much a statement carries when the portal has flattened the records
+// first. Half, because a flattened record is the record plus every column taken
+// off it, which is a little over twice the text. See insertFlatRows().
+const FLAT_CHUNK_BYTES = CHUNK_BYTES / 2;
 
 // How many of the fifty statements a request is allowed may go on copying
 // records. The rest of the run needs the others, and the worst case is the
@@ -140,7 +163,7 @@ export async function checkMemoStores(): Promise<SqlCheck> {
 }
 
 // Records split into chunks small enough for one statement each.
-function chunked<T>(records: T[]): T[][] {
+function chunked<T>(records: T[], limit = CHUNK_BYTES): T[][] {
   const chunks: T[][] = [];
   let chunk: T[] = [];
   let bytes = 0;
@@ -148,7 +171,7 @@ function chunked<T>(records: T[]): T[][] {
     const size = JSON.stringify(record).length;
     // A single record larger than a whole chunk still goes, on its own: better
     // one oversized statement than a record left behind.
-    if (chunk.length && bytes + size > CHUNK_BYTES) {
+    if (chunk.length && bytes + size > limit) {
       chunks.push(chunk);
       chunk = [];
       bytes = 0;
@@ -166,12 +189,20 @@ function chunked<T>(records: T[]): T[][] {
 // than ignored on arrival. The database would ignore it either way, but a
 // second run that offered the first run's work again would spend its whole
 // allowance on records already across and never reach the ones that are not.
+//
+// How the records are written is the one thing a module may change. The default
+// hands whole records to the database and lets it expand them, which is what the
+// memo book and the register do. A table with a column worked out from a record
+// rather than read off it cannot be written that way, because there is no JSON
+// path to such a column, so the PD sheets and the demands pass a writer that
+// flattens each record here first. Either way it is one statement per chunk.
 async function copyKind<T extends { id: string }>(
   table: string,
   columns: SqlColumn<T>[],
   records: T[],
   alreadyThere: number,
-  budget: { left: number }
+  budget: { left: number },
+  write?: { put: (chunk: T[]) => Promise<void>; chunkBytes: number }
 ): Promise<{ copied: number; remaining: number; skipped: number }> {
   let todo = records;
   let skipped = 0;
@@ -183,9 +214,10 @@ async function copyKind<T extends { id: string }>(
   }
 
   let copied = 0;
-  for (const chunk of chunked(todo)) {
+  for (const chunk of chunked(todo, write ? write.chunkBytes : CHUNK_BYTES)) {
     if (budget.left <= 0) break;
-    await insertRows(table, columns, chunk);
+    if (write) await write.put(chunk);
+    else await insertRows(table, columns, chunk);
     budget.left--;
     copied += chunk.length;
   }
@@ -418,6 +450,257 @@ export async function copyJangadToSql(): Promise<JangadCopyReport> {
   report.finished = true;
   report.notes.push(
     `All ${inR2.rows.toLocaleString()} register entries are in the database, and the portal is now reading the register from it. Saving one entry is one line from here on. The R2 file has not been touched and still holds everything as it was today.`
+  );
+  return report;
+}
+
+// --- The PD sheets -----------------------------------------------------------
+//
+// The same move, for the design sheets, and under the same rules: R2 is read and
+// never written, nothing anywhere is deleted, a sheet already across is left
+// exactly as it is, and the flag that makes D1 the live store is set last and
+// only when every sheet is there.
+//
+// Its own pair of buttons and its own flag, so it can be done before or after
+// any of the others. A portal with the memos in one store, the register in the
+// other and the sheets still in R2 is a perfectly ordinary state for it to be
+// in while the owner works through the cards.
+//
+// One thing is particular to this book. Two of the sheet table's columns hold
+// something worked out from a sheet rather than a field of it: how many of its
+// pieces reached the stock book, and which of them carry a stock number. There
+// is no JSON path to those, so the sheets are flattened here before they are
+// sent rather than expanded inside the database. Still one statement per chunk.
+
+export type PdCounts = { sheets: number };
+
+export type PdCheck = {
+  hint: string;
+  r2: PdCounts;
+  sql: PdCounts;
+  // Is D1 the live store for the sheets yet?
+  live: boolean;
+};
+
+export type PdCopyReport = {
+  at: string;
+  copied: PdCounts;
+  skipped: PdCounts;
+  finished: boolean;
+  notes: string[];
+};
+
+// How many of the fifty a request is allowed may go on carrying sheets. The
+// rest of the run needs the others, and the worst case is the first press, which
+// also makes the tables: asking whether the schema is there (1), making it (4),
+// counting before and after (2), finding out what is already across (1), the
+// running numbers (1) and the flag at the end (1). That is 10, and two are left
+// spare for the asking.
+const PD_QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 12;
+
+function pdCountOf(doc: Partial<PdDB>): PdCounts {
+  return { sheets: (doc.sheets || []).length };
+}
+
+// What is where, without changing anything.
+export async function checkPdStores(): Promise<PdCheck> {
+  const hint = sqlMigrationHint();
+  const empty: PdCounts = { sheets: 0 };
+  if (hint) return { hint, r2: empty, sql: empty, live: false };
+
+  const doc = await readPdDoc();
+  // The table has to exist before it can be counted, and making it is safe to
+  // repeat.
+  await applyPdSchema();
+  return {
+    hint: "",
+    r2: pdCountOf(doc),
+    sql: { sheets: await sqlPdCount() },
+    live: await pdIsInSql(),
+  };
+}
+
+// Copy the PD sheets across.
+//
+// Reads the R2 document, puts every sheet it holds into D1, carries each
+// financial year's running number over, and sets the flag that makes D1 the
+// live store once the two agree. Safe to run again at any point.
+export async function copyPdToSql(): Promise<PdCopyReport> {
+  const hint = sqlMigrationHint();
+  if (hint) throw new Error(hint);
+
+  const report: PdCopyReport = {
+    at: new Date().toISOString(),
+    copied: { sheets: 0 },
+    skipped: { sheets: 0 },
+    finished: false,
+    notes: [],
+  };
+
+  await applyPdSchema();
+
+  const doc = await readPdDoc();
+  const inR2 = pdCountOf(doc);
+  const before = await sqlPdCount();
+
+  const sheets = (doc.sheets || []) as PdSheet[];
+  const budget = { left: PD_QUERY_BUDGET };
+  const result = await copyKind(PD_TABLE, PD_COLUMNS, sheets, before, budget, {
+    put: (chunk) => insertPdSheets(chunk.map(flatPdSheet)),
+    chunkBytes: FLAT_CHUNK_BYTES,
+  });
+
+  // The running numbers, one per financial year. Without them the next sheet
+  // saved in D1 would start that year's book again at 001, writing a second
+  // sheet under a number that is already on the books. A number already in D1
+  // that has gone further is left where it is.
+  //
+  // They go across on every press, not only the last one, because the numbers
+  // belong with the sheets and a copy that stops half way should not leave the
+  // database counting from nowhere.
+  await sqlSetPdCounters(doc.counters || {});
+
+  // What actually went in, counted from the rows that appeared rather than from
+  // what the statements were handed: a sheet already there is ignored, not
+  // written, and saying otherwise would make the second run look like work.
+  const after = await sqlPdCount();
+  report.copied = { sheets: Math.max(0, after - before) };
+  report.skipped = {
+    sheets: result.skipped + Math.max(0, result.copied - report.copied.sheets),
+  };
+
+  if (result.remaining > 0) {
+    report.notes.push(
+      `There are more sheets than one run may copy, so ${result.remaining.toLocaleString()} are still to go. Press the button again to carry on. Nothing already copied is copied twice.`
+    );
+    return report;
+  }
+
+  // Every sheet is across only if the database now holds at least as many as the
+  // R2 document does. Anything less and the flag stays off, because the flag is
+  // what sends the office to D1.
+  if (after < inR2.sheets) {
+    report.notes.push(
+      "The copy ran, but the database does not hold as many sheets as the R2 file does, so the portal is still reading the sheets from R2. Press Check to see the two side by side."
+    );
+    return report;
+  }
+
+  await sqlSetPdFlag(PD_FILLED);
+  report.finished = true;
+  report.notes.push(
+    `All ${inR2.sheets.toLocaleString()} PD sheets are in the database, and the portal is now reading them from it. Saving one sheet is one line from here on. The R2 file has not been touched and still holds everything as it was today.`
+  );
+  return report;
+}
+
+// --- The diamond demands -----------------------------------------------------
+//
+// The same move again, for the demands, and the smallest of the four. Same
+// rules: R2 is read and never written, nothing is deleted, a demand already
+// across is left as it is, and the flag goes on last.
+//
+// Three of the demand table's columns hold something worked out from a demand
+// rather than a field of it, namely the design numbers on it, the stones it
+// counts out and the line of text the list searches, so the demands are
+// flattened here before they are sent, as the sheets above are.
+//
+// The receipt chase is not part of this and is not touched. It keeps its own R2
+// document and goes on being read and written there.
+
+export type DemandCounts = { demands: number };
+
+export type DemandCheck = {
+  hint: string;
+  r2: DemandCounts;
+  sql: DemandCounts;
+  live: boolean;
+};
+
+export type DemandCopyReport = {
+  at: string;
+  copied: DemandCounts;
+  skipped: DemandCounts;
+  finished: boolean;
+  notes: string[];
+};
+
+// The same reckoning as the PD budget above, and the same worst case.
+const DEMAND_QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 12;
+
+function demandCountOf(doc: Partial<DemandDB>): DemandCounts {
+  return { demands: (doc.demands || []).length };
+}
+
+export async function checkDemandStores(): Promise<DemandCheck> {
+  const hint = sqlMigrationHint();
+  const empty: DemandCounts = { demands: 0 };
+  if (hint) return { hint, r2: empty, sql: empty, live: false };
+
+  const doc = await readDemandDoc();
+  await applyDemandSchema();
+  return {
+    hint: "",
+    r2: demandCountOf(doc),
+    sql: { demands: await sqlDemandCount() },
+    live: await demandsAreInSql(),
+  };
+}
+
+export async function copyDemandsToSql(): Promise<DemandCopyReport> {
+  const hint = sqlMigrationHint();
+  if (hint) throw new Error(hint);
+
+  const report: DemandCopyReport = {
+    at: new Date().toISOString(),
+    copied: { demands: 0 },
+    skipped: { demands: 0 },
+    finished: false,
+    notes: [],
+  };
+
+  await applyDemandSchema();
+
+  const doc = await readDemandDoc();
+  const inR2 = demandCountOf(doc);
+  const before = await sqlDemandCount();
+
+  const demands = (doc.demands || []) as Demand[];
+  const budget = { left: DEMAND_QUERY_BUDGET };
+  const result = await copyKind(DEMAND_TABLE, DEMAND_COLUMNS, demands, before, budget, {
+    put: (chunk) => insertDemands(chunk.map(flatDemand)),
+    chunkBytes: FLAT_CHUNK_BYTES,
+  });
+
+  // The running numbers, one per financial year, for the same reason as the
+  // sheets above: without them the next demand saved in D1 would start that
+  // year's book again at 001.
+  await sqlSetDemandCounters(doc.counters || {});
+
+  const after = await sqlDemandCount();
+  report.copied = { demands: Math.max(0, after - before) };
+  report.skipped = {
+    demands: result.skipped + Math.max(0, result.copied - report.copied.demands),
+  };
+
+  if (result.remaining > 0) {
+    report.notes.push(
+      `There are more demands than one run may copy, so ${result.remaining.toLocaleString()} are still to go. Press the button again to carry on. Nothing already copied is copied twice.`
+    );
+    return report;
+  }
+
+  if (after < inR2.demands) {
+    report.notes.push(
+      "The copy ran, but the database does not hold as many demands as the R2 file does, so the portal is still reading the demands from R2. Press Check to see the two side by side."
+    );
+    return report;
+  }
+
+  await sqlSetDemandFlag(DEMANDS_FILLED);
+  report.finished = true;
+  report.notes.push(
+    `All ${inR2.demands.toLocaleString()} diamond demands are in the database, and the portal is now reading them from it. The receipt chase is unchanged and still kept in its own R2 file. The demand R2 file has not been touched and still holds everything as it was today.`
   );
   return report;
 }

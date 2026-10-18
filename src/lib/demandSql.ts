@@ -34,6 +34,7 @@ import {
   takeNextNumber,
   type FlatRow,
 } from "./sqlRecords";
+import { joinDemandSearch } from "./demandConfig";
 import type { Demand, DemandListRow } from "./demandStore";
 
 function parseDoc(row: { doc: string }): Demand {
@@ -87,7 +88,10 @@ FROM ${DEMAND_TABLE} ORDER BY created_at DESC`
     date: str(row.demand_date),
     designs: parseDesigns(row.designs),
     pcs: numOf(row.pcs),
-    search: str(row.search),
+    // The number goes back on the front of the searchable line here, because
+    // the row was written before the database had issued it. The result is the
+    // same line the R2 path builds. See demandSearchRest().
+    search: joinDemandSearch(str(row.demand_no), str(row.search)),
   }));
 }
 

@@ -119,12 +119,31 @@ export function demandDesigns(d: DemandSummary): string[] {
   return designs;
 }
 
-// Everything the search can match on, joined exactly as the browser used to
-// join it and lower-cased once instead of once per keystroke.
-export function demandSearchText(d: DemandSummary): string {
-  const text: string[] = [d.demandNo, d.issuedTo, d.pdNo || ""];
+// Everything the search can match on except the demand's own number, joined
+// exactly as the browser used to join it and lower-cased once instead of once
+// per keystroke.
+//
+// The number is left out of this half on purpose, and it is worth saying why.
+// When a demand is saved into the database the number is issued by the database
+// inside the transaction that writes the row, so at the moment this is worked
+// out there is no number yet. Building the searchable line without it, and
+// putting the number back on the way out, is what keeps the number searchable
+// without the portal having to know it in advance.
+export function demandSearchRest(d: DemandSummary): string {
+  const text: string[] = [d.issuedTo, d.pdNo || ""];
   for (const r of d.rows) {
     text.push(`${r.designNo} ${r.shape} ${r.pointers} ${r.growth}`);
   }
   return text.join(" ").toLowerCase();
+}
+
+// The number put back on the front of it. The result is the same line, to the
+// character, that the browser used to build for itself.
+export function joinDemandSearch(demandNo: string, rest: string): string {
+  return `${(demandNo || "").toLowerCase()} ${rest}`;
+}
+
+// The whole searchable line, for a demand that already has its number.
+export function demandSearchText(d: DemandSummary): string {
+  return joinDemandSearch(d.demandNo, demandSearchRest(d));
 }

@@ -359,21 +359,34 @@ export type PdRow = {
   stocked: PdRowPiece[];
 };
 
+// The row, from the fields the list was given, whichever store they came from.
+//
+// Only two things are worked out here rather than taken as they stand, and both
+// have to be worked out on the way out rather than stored: the piece count
+// follows the design number, and the design number can be corrected after
+// pieces have been recorded. So the count is read off the number every time,
+// and the number in stock is held to it.
+type PdRowFields = Omit<PdRow, "total" | "inStock"> & { inStock: number };
+
+function rowFrom(f: PdRowFields): PdRow {
+  const total = pieceTotal(parseDesignNo(f.sku));
+  return {
+    ...f,
+    total,
+    // A sheet shortened after pieces were recorded could otherwise read as more
+    // in stock than it has pieces.
+    inStock: Math.min(f.inStock, total),
+  };
+}
+
 function toRow(s: PdSheet): PdRow {
   // Stored pieces are always already reconciled against the stored design
   // number — every write goes through reconcilePieces — so they can be counted
-  // as they stand, without rebuilding the run to check them.
+  // as they stand, without rebuilding the run to check them. The database keeps
+  // the same two answers as columns, worked out by these same two functions
+  // when the sheet was saved.
   const saved = s.pieces || [];
-  const stocked: PdRowPiece[] = [];
-  let inStock = 0;
-  for (const p of saved) {
-    if (!p) continue;
-    if (p.status === "stock") inStock++;
-    if (p.stockNo) stocked.push({ no: p.no, stockNo: p.stockNo });
-  }
-
-  const total = pieceTotal(parseDesignNo(s.sku));
-  return {
+  return rowFrom({
     id: s.id,
     pdNo: s.pdNo,
     sku: s.sku,
@@ -389,15 +402,16 @@ function toRow(s: PdSheet): PdRow {
     zone: s.zone,
     orderType: s.orderType,
     diaQuality: s.diaQuality,
-    total,
-    // A sheet shortened after pieces were recorded could otherwise read as more
-    // in stock than it has pieces.
-    inStock: Math.min(inStock, total),
-    stocked,
-  };
+    inStock: piecesInStock(saved),
+    stocked: stockedPieces(saved),
+  });
 }
 
 export async function listPdRows(): Promise<PdRow[]> {
+  // From the database this is the list's own columns and no sheet read whole.
+  // See sqlPdRows().
+  if (await useSql()) return (await sqlPdRows()).map(rowFrom);
+
   const db = await readDB();
   return db.sheets
     .slice()
@@ -406,37 +420,69 @@ export async function listPdRows(): Promise<PdRow[]> {
 }
 
 export async function getPdSheet(id: string): Promise<PdSheet | null> {
+  if (await useSql()) {
+    const sheet = await sqlGetPdSheet(id);
+    return sheet ? hydrate(sheet) : null;
+  }
+
   const db = await readDB();
   const sheet = db.sheets.find((s) => s.id === id);
   return sheet ? hydrate(sheet) : null;
 }
 
-// Identity fields (id, pdNo, fy, seq, createdAt) are preserved on edit.
 export async function updatePdSheet(
   id: string, patch: NewPdSheet, by = ""
 ): Promise<PdSheet | null> {
+  // One sheet read and one sheet written, rather than the book twice. The read
+  // is needed and cannot be done in the database: an edit keeps the identity
+  // fields and re-cuts the run against whatever was already recorded on each
+  // piece, so the sheet as it stands has to be in hand to merge onto.
+  if (await useSql()) {
+    const current = await sqlGetPdSheet(id);
+    if (!current) return null;
+    const updated = merged(current, patch, by);
+    await sqlPutPdSheet(updated);
+    return updated;
+  }
+
   const db = await readDB();
   const idx = db.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return null;
-  const updated: PdSheet = {
-    ...db.sheets[idx],
-    ...patch,
-    // Correcting the design number re-cuts the run; anything already recorded
-    // against a piece that survives the change is kept.
-    pieces: reconcilePieces(patch.sku, db.sheets[idx].pieces),
-    // Who made it never changes; who last touched it does.
-    updatedBy: by || db.sheets[idx].updatedBy,
-    updatedAt: new Date().toISOString(),
-  };
+  const updated = merged(db.sheets[idx], patch, by);
   db.sheets[idx] = updated;
   await writeDB(db);
   return updated;
+}
+
+// An edit onto the sheet as it stands. Identity fields (id, pdNo, fy, seq,
+// createdAt) are preserved because the patch does not carry them.
+function merged(current: PdSheet, patch: NewPdSheet, by: string): PdSheet {
+  return {
+    ...current,
+    ...patch,
+    // Correcting the design number re-cuts the run; anything already recorded
+    // against a piece that survives the change is kept.
+    pieces: reconcilePieces(patch.sku, current.pieces),
+    // Who made it never changes; who last touched it does.
+    updatedBy: by || current.updatedBy,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 // Progress on the individual pieces, saved without touching the rest of the
 // sheet. What comes in is treated as values to overlay, not as the list itself:
 // the list is still derived from the design number.
 export async function setPdPieces(id: string, incoming: PdPiece[]): Promise<PdSheet | null> {
+
+  // One row written. The design number is the only thing that has to be read
+  // first, because the piece list is cut from it, and that is one column of one
+  // row rather than the book.
+  if (await useSql()) {
+    const sku = await sqlPdSku(id);
+    if (sku === null) return null;
+    return writePieces(id, reconcilePieces(sku, incoming));
+  }
+
   const db = await readDB();
   const idx = db.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return null;
@@ -451,6 +497,20 @@ export async function setPdPieces(id: string, incoming: PdPiece[]): Promise<PdSh
   return updated;
 }
 
+// The piece list onto one row, with the two columns the list reads written
+// beside it so they cannot fall behind the pieces they describe. Worked out by
+// the same two functions the list uses, so the figure on screen is the figure
+// the list would have reached from the pieces themselves.
+async function writePieces(id: string, pieces: PdPiece[]): Promise<PdSheet | null> {
+  return sqlSetPdPieces(
+    id,
+    pieces,
+    piecesInStock(pieces),
+    stockedPieces(pieces),
+    new Date().toISOString()
+  );
+}
+
 // Diamonds going out against a piece is the moment it starts being made, so
 // the jangad register moves the PD sheet on rather than leaving someone to
 // remember to. Only pieces still waiting are touched: one already ready, in
@@ -460,21 +520,26 @@ export async function markPiecesInProduction(
   pieceNos: string[]
 ): Promise<PdSheet | null> {
   if (!pieceNos.length) return null;
+
+  // One sheet read and one row written. The read cannot be avoided: which
+  // pieces move depends on which of them are still waiting, so what is recorded
+  // against each one has to be in hand. It is one row either way, not the book.
+  if (await useSql()) {
+    const current = await sqlGetPdSheet(id);
+    if (!current) return null;
+    const next = startPieces(current, pieceNos);
+    // Nothing waiting among the pieces named, so nothing is written and the
+    // sheet is handed back as it stands.
+    if (!next) return current;
+    return writePieces(id, next);
+  }
+
   const db = await readDB();
   const idx = db.sheets.findIndex((s) => s.id === id);
   if (idx === -1) return null;
 
-  const flat = (s: string) => (s || "").toUpperCase().replace(/[^A-Z0-9.]/g, "");
-  const wanted = new Set(pieceNos.map(flat));
-  const pieces = reconcilePieces(db.sheets[idx].sku, db.sheets[idx].pieces);
-
-  let changed = false;
-  const next = pieces.map((p) => {
-    if (p.status !== "pending" || !wanted.has(flat(p.no))) return p;
-    changed = true;
-    return { ...p, status: "production" as const };
-  });
-  if (!changed) return db.sheets[idx];
+  const next = startPieces(db.sheets[idx], pieceNos);
+  if (!next) return db.sheets[idx];
 
   const updated: PdSheet = {
     ...db.sheets[idx],
@@ -484,6 +549,22 @@ export async function markPiecesInProduction(
   db.sheets[idx] = updated;
   await writeDB(db);
   return updated;
+}
+
+// The sheet's pieces with the named ones moved on, or null when none of them
+// was waiting and there is nothing to write.
+function startPieces(sheet: PdSheet, pieceNos: string[]): PdPiece[] | null {
+  const flat = (s: string) => (s || "").toUpperCase().replace(/[^A-Z0-9.]/g, "");
+  const wanted = new Set(pieceNos.map(flat));
+  const pieces = reconcilePieces(sheet.sku, sheet.pieces);
+
+  let changed = false;
+  const next = pieces.map((p) => {
+    if (p.status !== "pending" || !wanted.has(flat(p.no))) return p;
+    changed = true;
+    return { ...p, status: "production" as const };
+  });
+  return changed ? next : null;
 }
 
 export function normalizePieceInput(input: unknown): PdPiece[] {
@@ -515,18 +596,49 @@ export async function findByDesignNo(query: string): Promise<DesignLookup[]> {
   // which on a book with bulk runs in it is thousands of objects built for
   // nothing. The few that did match are hydrated here instead, so a caller
   // still gets the same sheets with the same piece lists it always got.
+  //
+  // From the database that same reading becomes two queries: the design numbers
+  // and nothing else, and then the sheets that matched. The matching itself
+  // stays here, because it cannot be done in SQL. See sqlPdDesigns().
+  if (await useSql()) {
+    const designs = await sqlPdDesigns();
+    const matched: { id: string; hit: DesignHit }[] = [];
+    for (const design of designs) {
+      const hit = matchDesign(design.sku, query);
+      if (hit) matched.push({ id: design.id, hit });
+    }
+    if (!matched.length) return [];
+    const sheets = await sqlPdSheetsByIds(matched.map((m) => m.id));
+    const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
+    const found: DesignLookup[] = [];
+    for (const m of matched) {
+      const sheet = byId.get(m.id);
+      if (sheet) found.push({ sheet: hydrate(sheet), hit: m.hit });
+    }
+    return byKind(found);
+  }
+
   const sheets = await listPdSheetsRaw();
   const hits: DesignLookup[] = [];
   for (const sheet of sheets) {
     const hit = matchDesign(sheet.sku, query);
     if (hit) hits.push({ sheet: hydrate(sheet), hit });
   }
+  return byKind(hits);
+}
+
+// Exact piece hits first, which is what someone holding one unlabelled piece is
+// asking for. A stable sort, so inside each kind the newest sheet is still
+// first, which is the order both stores hand them over in.
+function byKind(hits: DesignLookup[]): DesignLookup[] {
   return hits.sort((a, b) =>
     a.hit.kind === b.hit.kind ? 0 : a.hit.kind === "piece" ? -1 : 1
   );
 }
 
 export async function deletePdSheet(id: string): Promise<boolean> {
+  if (await useSql()) return sqlDeletePdSheet(id);
+
   const db = await readDB();
   const before = db.sheets.length;
   db.sheets = db.sheets.filter((s) => s.id !== id);
@@ -536,9 +648,13 @@ export async function deletePdSheet(id: string): Promise<boolean> {
 }
 
 export async function nextPdNo(dateInput: string): Promise<string> {
-  const db = await readDB();
   const fy = fyFromInput(dateInput || todayInput());
-  return `PD/${fy}/${pad((db.counters[fy] || 0) + 1)}`;
+  // A preview, not a number taken. If somebody else saves first this was a
+  // guess, and the number on the saved sheet is the right one.
+  if (await useSql()) return pdNoFor(fy, (await sqlPdCounter(fy)) + 1);
+
+  const db = await readDB();
+  return pdNoFor(fy, (db.counters[fy] || 0) + 1);
 }
 
 // Point one sheet's photo somewhere else, and nothing else.
@@ -551,6 +667,12 @@ export async function setPdPhoto(
   photoPath: string,
   photoPublicId: string
 ): Promise<PdSheet | null> {
+  // One row written and nothing read first: no column holds the photo, so the
+  // database can change it where it sits.
+  if (await useSql()) {
+    return sqlSetPdPhoto(id, photoPath, photoPublicId, new Date().toISOString());
+  }
+
   const db = await readDB();
   const idx = db.sheets.findIndex((x) => x.id === id);
   if (idx === -1) return null;
@@ -565,6 +687,14 @@ export async function setPdPhoto(
 }
 
 // For the nightly backup.
+//
+// The running numbers go with the sheets, as they always have: a restore that
+// brought the sheets back without them would start the book again at 001 and
+// write second sheets under numbers that are already on the books.
 export async function exportPdDb(): Promise<PdDB> {
+  if (await useSql()) {
+    const [sheets, counters] = await Promise.all([sqlListPdSheets(), sqlPdCounters()]);
+    return { counters, sheets };
+  }
   return readDB();
 }

@@ -16,6 +16,7 @@
 // like "1." has to survive being typed, and the export converts on the way out.
 
 import { lineGoesTo } from "./pdConfig";
+import { joinDesignNo, matchDesign } from "./designNo";
 
 export type JangadStage = "issue" | "received" | "returned";
 
@@ -256,6 +257,39 @@ export function linesForPiece<T extends { pieces?: string }>(
   run: string[]
 ): T[] {
   return lines.filter((l) => lineGoesTo(l, piece, run));
+}
+
+// --- Searching the register --------------------------------------------------
+//
+// What the box above the register means by a phrase, in one place because two
+// callers now need the same answer and they must not drift apart: the register
+// page, which asks the database to narrow the rows and then applies this to
+// what came back, and JangadClient, which applies it again to the page it was
+// given.
+//
+// Naming one piece means that piece, not the whole design it came from, so a
+// piece-level hit wins outright when there is one. The register keeps the design
+// and the piece in separate columns, so the number being searched for has to be
+// put back together first.
+export function searchJangad(rows: JangadRow[], needle: string): JangadRow[] {
+  const phrase = (needle || "").trim();
+  if (!phrase) return rows;
+  const lower = phrase.toLowerCase();
+
+  const byPiece = rows.filter((r) =>
+    matchDesign(joinDesignNo(r.designNo, r.subDesignNo, ""), phrase)
+  );
+  if (byPiece.length) return byPiece;
+
+  return rows.filter((r) => {
+    if (r.designNo && matchDesign(r.designNo, phrase)) return true;
+    // runNo is the whole run off the PD sheet ("…-63-67"), which no column
+    // holds any more — matched as plain text so searching it still finds every
+    // piece that was issued under it.
+    return [r.runNo, r.memoNo, r.stockCode, r.certiNo, r.product,
+            r.shape, r.size, r.status, r.mfgName]
+      .join(" ").toLowerCase().includes(lower);
+  });
 }
 
 export const STATUSES = ["Issued", "Received", "Returned", "Closed", "Cancelled"];

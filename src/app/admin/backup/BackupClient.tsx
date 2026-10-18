@@ -51,6 +51,22 @@ type JangadCopyReport = {
   notes: string[];
 };
 
+// And again for the PD sheets and the demands. Four books, four moves, and the
+// shape of the answer is the same every time: how many in each store, and what
+// the last copy did. Only the word for a record differs, so each card names its
+// own and the rest of the card is the same card.
+type PdCounts = { sheets: number };
+type DemandCounts = { demands: number };
+
+type OneCheck<C> = { hint: string; r2: C; sql: C; live: boolean };
+type OneReport<C> = {
+  at: string;
+  copied: C;
+  skipped: C;
+  finished: boolean;
+  notes: string[];
+};
+
 export default function BackupClient({
   sheetConfigured,
   sheetHint,
@@ -98,6 +114,18 @@ export default function BackupClient({
   const [jgError, setJgError] = useState("");
   const [jgCheck, setJgCheck] = useState<JangadCheck | null>(null);
   const [jgReport, setJgReport] = useState<JangadCopyReport | null>(null);
+
+  // The PD sheet move, and the demand move. Each has its own two buttons and
+  // its own answers, so neither can be confused with the other.
+  const [pdBusy, setPdBusy] = useState(false);
+  const [pdError, setPdError] = useState("");
+  const [pdCheck, setPdCheck] = useState<OneCheck<PdCounts> | null>(null);
+  const [pdReport, setPdReport] = useState<OneReport<PdCounts> | null>(null);
+
+  const [ddBusy, setDdBusy] = useState(false);
+  const [ddError, setDdError] = useState("");
+  const [ddCheck, setDdCheck] = useState<OneCheck<DemandCounts> | null>(null);
+  const [ddReport, setDdReport] = useState<OneReport<DemandCounts> | null>(null);
 
   async function sync() {
     setBusy(true); setError(""); setTabs(null);
@@ -199,6 +227,65 @@ export default function BackupClient({
       setJgError(err instanceof Error ? err.message : "The copy failed.");
     } finally {
       setJgBusy(false);
+    }
+  }
+
+  // The PD sheets and the demands, asked the same two questions. One pair of
+  // functions each rather than one shared pair, so a press on one card can
+  // never clear the other card's answer.
+  async function checkPdD1() {
+    setPdBusy(true); setPdError(""); setPdCheck(null); setPdReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/pd");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setPdCheck(d as OneCheck<PdCounts>);
+    } catch (err) {
+      setPdError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setPdBusy(false);
+    }
+  }
+
+  async function copyPdToD1() {
+    setPdBusy(true); setPdError(""); setPdCheck(null); setPdReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/pd", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setPdReport(d as OneReport<PdCounts>);
+    } catch (err) {
+      setPdError(err instanceof Error ? err.message : "The copy failed.");
+    } finally {
+      setPdBusy(false);
+    }
+  }
+
+  async function checkDemandD1() {
+    setDdBusy(true); setDdError(""); setDdCheck(null); setDdReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/demand");
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not read the stores.");
+      setDdCheck(d as OneCheck<DemandCounts>);
+    } catch (err) {
+      setDdError(err instanceof Error ? err.message : "Could not read the stores.");
+    } finally {
+      setDdBusy(false);
+    }
+  }
+
+  async function copyDemandToD1() {
+    setDdBusy(true); setDdError(""); setDdCheck(null); setDdReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate-d1/demand", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "The copy failed.");
+      setDdReport(d as OneReport<DemandCounts>);
+    } catch (err) {
+      setDdError(err instanceof Error ? err.message : "The copy failed.");
+    } finally {
+      setDdBusy(false);
     }
   }
 
@@ -379,9 +466,10 @@ export default function BackupClient({
         </p>
         <p className="bk-lede">
           This card moves memos, stock entries, orders and the controlled lists
-          only. The jangad register has its own card below it. PD sheets,
-          demands, the stock book, QC, prices, the receipt chase and the
-          sign-in list all stay exactly where they are and are not touched.
+          only. The jangad register, the PD sheets and the diamond demands have
+          a card each below it. The stock book, QC, prices, the receipt chase
+          and the sign-in list all stay exactly where they are and are not
+          touched.
         </p>
         {sqlHint ? (
           <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
@@ -487,9 +575,8 @@ export default function BackupClient({
           four hundred.
         </p>
         <p className="bk-lede">
-          This card moves the register only. The memo card above it is a
-          separate move, and the two can be done in either order or one without
-          the other.
+          This card moves the register only. The other three cards are separate
+          moves, and they can be done in any order, or one without the others.
         </p>
         {sqlHint ? (
           <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
@@ -563,6 +650,191 @@ export default function BackupClient({
             </table>
             {jgReport.notes.map((note, i) => (
               <p key={i} className={jgReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="bk-card">
+        <h2>The PD sheets into the Cloudflare database</h2>
+        <p className="bk-lede">
+          The heaviest save left in the portal. Every design sheet sits in one
+          file, so ticking one piece of one design as being made rewrites every
+          sheet in the book, and so does changing a photo, and so do the
+          diamonds going out on the jangad, which moves the sheet on by itself.
+          Cloudflare&rsquo;s own database writes one sheet as one line, and
+          stays the same speed at four thousand sheets as at four hundred.
+        </p>
+        <p className="bk-lede">
+          This card moves the design sheets only. The other three cards are
+          separate moves, and they can be done in any order, or one without the
+          others. The design numbers and the pieces on each sheet go across with
+          it, because they are part of the sheet.
+        </p>
+        {sqlHint ? (
+          <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The database is attached. The sheets are copied into it, and the
+            portal only starts reading them from it once every sheet is across.
+            Before that moment nothing changes for anybody.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> counts what is in each store and says nothing else.{" "}
+          <b>Copy the sheets across</b> reads the R2 file and writes what the
+          database has not got yet. Neither one writes to R2, neither one
+          deletes anything, and both are safe to press more than once. If there
+          are more sheets than one press can carry, it says so and the next
+          press carries on from there.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkPdD1} disabled={pdBusy}>
+            {pdBusy ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyPdToD1}
+            disabled={pdBusy || !sqlAttached || !r2Configured}
+          >
+            Copy the sheets across
+          </button>
+        </div>
+        {pdError && <p className="party-warn">{pdError}</p>}
+
+        {pdCheck && !pdCheck.hint && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>In the R2 file</th><th>In the database</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>PD sheets</td>
+                  <td>{pdCheck.r2.sheets.toLocaleString()}</td>
+                  <td className={pdCheck.sql.sheets >= pdCheck.r2.sheets ? "bk-ok" : ""}>
+                    {pdCheck.sql.sheets.toLocaleString()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="bk-lede">
+              {pdCheck.live
+                ? "The portal is reading the PD sheets from the database now. The R2 file is left as it was on the day of the move."
+                : "The portal is still reading the PD sheets from the R2 file."}
+            </p>
+          </>
+        )}
+        {pdCheck?.hint && <p className="party-warn">{pdCheck.hint}</p>}
+
+        {pdReport && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>Copied in</th><th>Already there</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>PD sheets</td>
+                  <td className="bk-ok">{pdReport.copied.sheets.toLocaleString()}</td>
+                  <td>{pdReport.skipped.sheets.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+            {pdReport.notes.map((note, i) => (
+              <p key={i} className={pdReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="bk-card">
+        <h2>The diamond demands into the Cloudflare database</h2>
+        <p className="bk-lede">
+          The smallest of the four books, and the last to move. It was not the
+          one in trouble, but it sits beside the PD sheets in the same screens
+          and the same trace, and leaving it behind would mean two places to
+          look every time somebody follows a design from its sheet to its
+          diamonds. Here too a save becomes one line instead of the whole book.
+        </p>
+        <p className="bk-lede">
+          This card moves the demands only. <b>The receipt chase is not part of
+          it</b> and is not touched: the reminders about diamonds that have not
+          come back keep their own file and go on working exactly as they do
+          today, whichever store the demands are in.
+        </p>
+        {sqlHint ? (
+          <p className={sqlAttached ? "bk-lede" : "party-warn"}>{sqlHint}</p>
+        ) : (
+          <p className="bk-lede">
+            The database is attached. The demands are copied into it, and the
+            portal only starts reading them from it once every demand is across.
+            Before that moment nothing changes for anybody.
+          </p>
+        )}
+        <p className="bk-lede">
+          <b>Check</b> counts what is in each store and says nothing else.{" "}
+          <b>Copy the demands across</b> reads the R2 file and writes what the
+          database has not got yet. Neither one writes to R2, neither one
+          deletes anything, and both are safe to press more than once. If there
+          are more demands than one press can carry, it says so and the next
+          press carries on from there.
+        </p>
+        <div className="bk-actions">
+          <button className="btn" onClick={checkDemandD1} disabled={ddBusy}>
+            {ddBusy ? "Working…" : "Check"}
+          </button>
+          <button
+            className="btn primary"
+            onClick={copyDemandToD1}
+            disabled={ddBusy || !sqlAttached || !r2Configured}
+          >
+            Copy the demands across
+          </button>
+        </div>
+        {ddError && <p className="party-warn">{ddError}</p>}
+
+        {ddCheck && !ddCheck.hint && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>In the R2 file</th><th>In the database</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Diamond demands</td>
+                  <td>{ddCheck.r2.demands.toLocaleString()}</td>
+                  <td className={ddCheck.sql.demands >= ddCheck.r2.demands ? "bk-ok" : ""}>
+                    {ddCheck.sql.demands.toLocaleString()}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="bk-lede">
+              {ddCheck.live
+                ? "The portal is reading the demands from the database now. The R2 file is left as it was on the day of the move."
+                : "The portal is still reading the demands from the R2 file."}
+            </p>
+          </>
+        )}
+        {ddCheck?.hint && <p className="party-warn">{ddCheck.hint}</p>}
+
+        {ddReport && (
+          <>
+            <table className="bk-table">
+              <thead>
+                <tr><th>Records</th><th>Copied in</th><th>Already there</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Diamond demands</td>
+                  <td className="bk-ok">{ddReport.copied.demands.toLocaleString()}</td>
+                  <td>{ddReport.skipped.demands.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+            {ddReport.notes.map((note, i) => (
+              <p key={i} className={ddReport.finished ? "bk-lede" : "bk-more"}>{note}</p>
             ))}
           </>
         )}
