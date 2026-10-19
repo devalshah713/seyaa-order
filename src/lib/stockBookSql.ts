@@ -33,6 +33,7 @@ import {
   flatColumn,
   flatText,
   insertRows,
+  keyChunks,
   putRow,
   sqlCounterValue,
   sqlSetCounterValues,
@@ -40,6 +41,7 @@ import {
   sqlTableCount,
   sqlTableIds,
   startsWith,
+  stockKeyColumn,
 } from "./sqlRecords";
 import type { StockEntry, StockLine, StockRow } from "./stockBookConfig";
 
@@ -234,6 +236,34 @@ export async function sqlStockLocations(): Promise<string[]> {
     `SELECT DISTINCT location FROM ${STOCK_TABLE} WHERE location <> '' ORDER BY location`
   );
   return rows.map((row) => str(row.location));
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// The book's entry for each of these numbers, as the page's own columns.
+//
+// One statement for the whole list, not one per number, and the page's columns
+// rather than the stored records: the audit shows a piece's design, weights,
+// place, party and stone sizes and prices it at today's rates, all of which
+// these columns carry. The entry's inch size and its links back to the jangad
+// and the PD sheet are not shown here, so they are not read.
+//
+// The numbers are compared by the audit's own rule, which case alone would not
+// cover: a stock number typed by hand on the way in is kept as it was typed.
+export async function sqlStockByNos(keys: string[]): Promise<StockRow[]> {
+  if (keys.length === 0) return [];
+  const out: StockRow[] = [];
+  for (const chunk of keyChunks(keys)) {
+    const marks = chunk.map(() => "?").join(", ");
+    const rows = await sqlAll<Record<string, unknown>>(
+      `SELECT ${PAGE_COLUMNS}
+FROM ${STOCK_TABLE} WHERE ${stockKeyColumn("stock_no")} IN (${marks})
+ORDER BY ${BOOK_ORDER}`,
+      chunk
+    );
+    out.push(...rows.map(toRow));
+  }
+  return out;
 }
 
 // --- Writing ------------------------------------------------------------------

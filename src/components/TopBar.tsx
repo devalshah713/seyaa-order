@@ -70,6 +70,9 @@ export default function TopBar({ user }: Props) {
             <>
               <Link href="/stock/sheet" className={path === "/stock/sheet" ? "active" : ""}>Available</Link>
               <Link href="/stock" className={path === "/stock" ? "active" : ""}>Stock</Link>
+              {/* The one screen that answers across every module, so it is
+                  reached from the bar as well as from the ledger. */}
+              <Link href="/stock/audit" className={on("/stock/audit") ? "active" : ""}>Audit</Link>
             </>
           )}
           {can("pd") && (

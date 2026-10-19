@@ -27,6 +27,7 @@ import {
 import {
   insertFlatRows,
   flattenRow,
+  keyChunks,
   putRow,
   sqlAllCounters,
   sqlCounterValue,
@@ -34,6 +35,7 @@ import {
   sqlSetFlagValue,
   sqlTableCount,
   sqlTableIds,
+  stockKeyColumn,
   takeNextNumber,
   type FlatRow,
 } from "./sqlRecords";
@@ -205,6 +207,56 @@ export async function sqlPdSheetsByIds(ids: string[]): Promise<PdSheet[]> {
   // them in. A database is under no obligation to return rows in the order of
   // an IN list, and the caller sorts exact piece hits to the front of this.
   return ids.map((id) => found.get(id)).filter((s): s is PdSheet => !!s);
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// Which sheet and which piece of it a stock number was given to.
+export type PdStockHit = {
+  id: string;
+  pdNo: string;
+  sku: string;
+  product: string;
+  pieceNo: string;
+  // The stock number as the sheet spells it, so a finding is never passed off
+  // as having been written the way it was asked for.
+  stockNo: string;
+};
+
+// One statement for the whole list.
+//
+// The `stocked` column is exactly the right thing to ask: it holds the pieces
+// carrying a stock number and nothing else, worked out when the sheet was
+// saved, which is what keeps the list from reading four hundred pieces to find
+// the two that reached the book. json_each turns it into one row per piece, so
+// the answer comes back already in the shape the report shows.
+export async function sqlPdStockedByNos(keys: string[]): Promise<PdStockHit[]> {
+  if (keys.length === 0) return [];
+  const out: PdStockHit[] = [];
+  for (const chunk of keyChunks(keys)) {
+    const marks = chunk.map(() => "?").join(", ");
+    const rows = await sqlAll<Record<string, unknown>>(
+      `SELECT ${PD_TABLE}.id AS id, pd_no, sku, product,
+  json_extract(p.value, '$.no') AS piece_no,
+  json_extract(p.value, '$.stockNo') AS piece_stock_no
+FROM ${PD_TABLE},
+     json_each(CASE WHEN json_valid(stocked) THEN stocked ELSE '[]' END) AS p
+WHERE ${stockKeyColumn("json_extract(p.value, '$.stockNo')")} IN (${marks})
+ORDER BY created_at DESC`,
+      chunk
+    );
+    out.push(
+      ...rows.map((row) => ({
+        id: str(row.id),
+        pdNo: str(row.pd_no),
+        sku: str(row.sku),
+        product: str(row.product),
+        pieceNo: str(row.piece_no),
+        stockNo: str(row.piece_stock_no),
+      }))
+    );
+  }
+  return out;
 }
 
 // --- Writing ------------------------------------------------------------------

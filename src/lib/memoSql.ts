@@ -27,6 +27,7 @@ import "server-only";
 import { sqlAll, sqlFirst, sqlRun } from "./sql";
 import {
   insertRows,
+  keyChunks,
   numberTemplate,
   putRow,
   sqlAllCounters,
@@ -34,6 +35,7 @@ import {
   sqlSetCounterValues,
   sqlSetFlagValue,
   sqlTableIds,
+  stockKeyColumn,
   takeNextNumber,
 } from "./sqlRecords";
 import {
@@ -256,6 +258,91 @@ export async function sqlMemosWithItems(like?: string): Promise<StockMemoRow[]> 
     date: str(row.memo_date),
     items: parseArray<MemoItem>(row.items, "items"),
   }));
+}
+
+// --- Several stock numbers at once, for the audit ----------------------------
+
+// A memo as the audit reads it: the same columns the ledger asks for, plus the
+// purpose, because what a piece went out *for* is half the answer to where it
+// is. Its own type rather than StockMemoRow with a field added, so the ledger
+// keeps reading exactly what it always has.
+export type MemoStockRow = {
+  id: string;
+  memoNo: string;
+  kind: "jewellery" | "gold";
+  to: string;
+  date: string;
+  purpose: string;
+  items: MemoItem[];
+};
+
+function toMemoStockRow(row: MemoRow): MemoStockRow {
+  return {
+    id: str(row.id),
+    memoNo: str(row.memo_no),
+    kind: row.kind === "gold" ? "gold" : "jewellery",
+    to: str(row.to_party),
+    date: str(row.memo_date),
+    purpose: str(row.purpose),
+    items: parseArray<MemoItem>(row.items, "items"),
+  };
+}
+
+// Every memo that mentions any of these stock numbers, in one statement for
+// the whole list rather than one per number.
+//
+// The database takes each memo's stock rows apart with json_each and compares
+// each number by the audit's own rule, so a number written in lower case or
+// with a dash in it is still found. Matching the stored text instead — which is
+// what the single-number ledger does — would miss those, and here the question
+// is being asked of a list somebody typed.
+//
+// Which memos really match is still settled afterwards by linesFor(), over the
+// same items, exactly as the ledger settles it.
+export async function sqlMemosWithStockNos(keys: string[]): Promise<MemoStockRow[]> {
+  if (keys.length === 0) return [];
+  const found = new Map<string, MemoStockRow>();
+  for (const chunk of keyChunks(keys)) {
+    const marks = chunk.map(() => "?").join(", ");
+    const rows = await sqlAll<MemoRow>(
+      `SELECT id, memo_no, kind, to_party, memo_date, purpose, items
+FROM ${MEMO_TABLE}
+WHERE EXISTS (
+  SELECT 1
+  FROM json_each(CASE WHEN json_valid(items) THEN items ELSE '[]' END) AS it,
+       json_each(CASE WHEN json_valid(json_extract(it.value, '$.stockNos'))
+                      THEN json_extract(it.value, '$.stockNos') ELSE '[]' END) AS s
+  WHERE ${stockKeyColumn("s.value")} IN (${marks})
+)
+ORDER BY memo_date`,
+      chunk
+    );
+    for (const row of rows) {
+      const memo = toMemoStockRow(row);
+      found.set(memo.id, memo);
+    }
+  }
+  return [...found.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+// The outcomes recorded against any of these stock numbers.
+//
+// Only these numbers' own events are wanted: linesFor() looks up one stock
+// number at a time, so another piece's outcomes on the same memo change
+// nothing and are not worth reading.
+export async function sqlEventsForStockNos(keys: string[]): Promise<StockEvent[]> {
+  if (keys.length === 0) return [];
+  const out: StockEvent[] = [];
+  for (const chunk of keyChunks(keys)) {
+    const marks = chunk.map(() => "?").join(", ");
+    const rows = await sqlAll<{ doc: string }>(
+      `SELECT doc FROM ${EVENT_TABLE}
+WHERE ${stockKeyColumn("stock_no")} IN (${marks}) ORDER BY recorded_at`,
+      chunk
+    );
+    out.push(...rows.map(parseDoc<StockEvent>));
+  }
+  return out;
 }
 
 // --- Stock events ------------------------------------------------------------

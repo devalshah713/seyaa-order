@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { stockIndex } from "@/lib/memoStore";
 import StockClient from "./StockClient";
 
@@ -18,7 +19,13 @@ export default async function StockPage() {
       <div className="page-head">
         <h1>Stock Ledger</h1>
         <p>Every stock number that has been on a memo, and where it stands now.</p>
+        <Link href="/stock/audit" className="btn btn-primary">Audit stock numbers</Link>
       </div>
+      <p className="search-note">
+        This page is memos only. To see everything the portal knows about a
+        piece — the stock book, the jangad register, QC, its PD sheet and the
+        Google stock sheet — use <Link href="/stock/audit">Audit stock numbers</Link>.
+      </p>
       {error ? (
         <div className="notice">{error}</div>
       ) : rows.length === 0 ? (

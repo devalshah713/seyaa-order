@@ -54,6 +54,7 @@ import {
   sqlListStockEntries,
   sqlPutStockEntry,
   sqlStockCount,
+  sqlStockByNos,
   sqlStockCounter,
   sqlStockLocations,
   sqlStockPage,
@@ -64,7 +65,7 @@ import {
   traceDesign, type DesignTrace,
 } from "./designTrace";
 import { joinDesignNo } from "./designNo";
-import { todayInput } from "./memoFormat";
+import { stockKey, todayInput } from "./memoFormat";
 
 const DB_PATH = "stockbook/db.json";
 
@@ -262,6 +263,25 @@ export async function listStockPage(filters: StockFilters = {}): Promise<StockBo
     more: cut || matched.length > cap,
     filtered,
   };
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// The book's entry for each of these stock numbers, as the book's own page
+// reads one.
+//
+// A row rather than the whole entry because that is what the audit shows and
+// prices, and because on the database path it is the page's columns and no
+// record parsed. On the document path the book is read whole, as it always is
+// there, and narrowed here.
+export async function stockRowsForNos(keys: string[]): Promise<StockRow[]> {
+  if (keys.length === 0) return [];
+  if (await useSql()) return sqlStockByNos(keys);
+
+  const wanted = new Set(keys);
+  return (await listStockEntries())
+    .filter((e) => wanted.has(stockKey(e.stockNo)))
+    .map(stockRowOf);
 }
 
 export async function getStockEntry(id: string): Promise<StockEntry | null> {

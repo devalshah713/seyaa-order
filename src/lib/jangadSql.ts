@@ -34,8 +34,10 @@ import {
   designHead,
   flatColumn,
   flatText,
+  keyChunks,
   numberTemplate,
   startsWith,
+  stockKeyColumn,
 } from "./sqlRecords";
 import { JANGAD_FIELDS, type JangadField, type JangadRow } from "./jangadConfig";
 
@@ -291,6 +293,87 @@ FROM ${JANGAD_TABLE} ORDER BY created_at DESC, length(id), id`
     pcs: str(row.pcs),
     pcsUsed: str(row.pcs_used),
   }));
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// What the register holds against a finished piece: the diamonds issued under
+// its design, what came back studded, and what came back loose.
+//
+// Nineteen fields of a twenty-eight column row, which is what the audit shows.
+// Eleven are real columns; the rest are read out of the stored record by the
+// database, which costs the portal nothing and is what sqlJangadStockLines()
+// already does for the stock book's own list.
+export type JangadStockHit = {
+  id: string;
+  date: string;
+  designNo: string;
+  subDesignNo: string;
+  product: string;
+  mfgName: string;
+  memoNo: string;
+  shape: string;
+  size: string;
+  pcs: string;
+  carats: string;
+  pcsUsed: string;
+  ctsUsed: string;
+  pcsReturn: string;
+  ctsReturn: string;
+  receivedDate: string;
+  returnDate: string;
+  status: string;
+  // The Stock Code as the register spells it, so a finding is never passed off
+  // as having been written the way it was asked for.
+  stockCode: string;
+};
+
+export async function sqlJangadForStockNos(keys: string[]): Promise<JangadStockHit[]> {
+  if (keys.length === 0) return [];
+  const out: JangadStockHit[] = [];
+  for (const chunk of keyChunks(keys)) {
+    const marks = chunk.map(() => "?").join(", ");
+    const rows = await sqlAll<Record<string, unknown>>(
+      `SELECT id, jangad_date, design_no, sub_design_no, product, mfg_name, memo_no,
+  shape, size, pcs, status, stock_code,
+  json_extract(doc, '$.carats') AS carats,
+  json_extract(doc, '$.pcsUsed') AS pcs_used,
+  json_extract(doc, '$.ctsUsed') AS cts_used,
+  json_extract(doc, '$.pcsReturn') AS pcs_return,
+  json_extract(doc, '$.ctsReturn') AS cts_return,
+  json_extract(doc, '$.receivedDate') AS received_date,
+  json_extract(doc, '$.returnDate') AS return_date
+FROM ${JANGAD_TABLE} WHERE ${stockKeyColumn("stock_code")} IN (${marks})
+ORDER BY created_at, length(id), id`,
+      chunk
+    );
+    const str = (value: unknown): string =>
+      value === null || value === undefined ? "" : String(value);
+    out.push(
+      ...rows.map((row) => ({
+        id: str(row.id),
+        date: str(row.jangad_date),
+        designNo: str(row.design_no),
+        subDesignNo: str(row.sub_design_no),
+        product: str(row.product),
+        mfgName: str(row.mfg_name),
+        memoNo: str(row.memo_no),
+        shape: str(row.shape),
+        size: str(row.size),
+        pcs: str(row.pcs),
+        carats: str(row.carats),
+        pcsUsed: str(row.pcs_used),
+        ctsUsed: str(row.cts_used),
+        pcsReturn: str(row.pcs_return),
+        ctsReturn: str(row.cts_return),
+        receivedDate: str(row.received_date),
+        returnDate: str(row.return_date),
+        status: str(row.status),
+        stockCode: str(row.stock_code),
+      }))
+    );
+  }
+  return out;
 }
 
 export async function sqlJangadCount(): Promise<number> {

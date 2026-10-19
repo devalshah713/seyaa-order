@@ -55,6 +55,7 @@ import {
   sqlGetJangadRow,
   sqlGetJangadRows,
   sqlJangadFactories,
+  sqlJangadForStockNos,
   sqlJangadIssueLines,
   sqlJangadSeq,
   sqlJangadStockLines,
@@ -63,6 +64,7 @@ import {
   sqlUpdateJangadRow,
   sqlUpdateJangadRows,
   type JangadIssueLine,
+  type JangadStockHit,
   type JangadStockLine,
 } from "./jangadSql";
 import {
@@ -71,7 +73,7 @@ import {
 } from "./jangadConfig";
 import { getPdSheet, findByDesignNo, markPiecesInProduction } from "./pdStore";
 import { listDemands } from "./demandStore";
-import { todayInput } from "./memoFormat";
+import { stockKey, todayInput } from "./memoFormat";
 import {
   joinDesignNo, pieceNumbers, parseDesignNo, type PdPiece,
 } from "./designNo";
@@ -268,6 +270,50 @@ export async function jangadStockLines(): Promise<JangadStockLine[]> {
     pcs: r.pcs,
     pcsUsed: r.pcsUsed,
   }));
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// What the register holds against each of these finished pieces, oldest entry
+// first, so it reads as the register does.
+//
+// The Stock Code column is the link: the stock book writes the piece's number
+// back onto every jangad line of the piece it was taken in from. From the
+// database that is one statement for the whole list; from the document there is
+// only the whole register, as there always was.
+export async function jangadForStockNos(keys: string[]): Promise<JangadStockHit[]> {
+  if (keys.length === 0) return [];
+  if (await useSql()) return sqlJangadForStockNos(keys);
+
+  const wanted = new Set(keys);
+  return (await readDB()).rows
+    .filter((r) => wanted.has(stockKey(r.stockCode)))
+    .sort((a, b) =>
+      a.createdAt === b.createdAt
+        ? a.id.localeCompare(b.id, undefined, { numeric: true })
+        : a.createdAt < b.createdAt ? -1 : 1
+    )
+    .map((r) => ({
+      id: r.id,
+      date: r.date,
+      designNo: r.designNo,
+      subDesignNo: r.subDesignNo,
+      product: r.product,
+      mfgName: r.mfgName,
+      memoNo: r.memoNo,
+      shape: r.shape,
+      size: r.size,
+      pcs: r.pcs,
+      carats: r.carats,
+      pcsUsed: r.pcsUsed,
+      ctsUsed: r.ctsUsed,
+      pcsReturn: r.pcsReturn,
+      ctsReturn: r.ctsReturn,
+      receivedDate: r.receivedDate,
+      returnDate: r.returnDate,
+      status: r.status,
+      stockCode: r.stockCode,
+    }));
 }
 
 // The rows behind a print, in the order they were asked for — the slip should

@@ -488,3 +488,53 @@ export function parseCodes(raw: string): string[] {
     .map((c) => c.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 12))
     .filter((c) => c.length > 0);
 }
+
+// --- When two stock numbers are the same piece -------------------------------
+//
+// The audit asks seven modules the same question about the same number, so
+// there is one rule and every module uses it. An answer that depended on which
+// module was asked would be worse than no answer at all.
+//
+// The rule: take out every space and punctuation mark, put the rest in upper
+// case, and compare. So "s0053 c", "S0053-C" and "S0053C" are one piece.
+//
+// Nothing further is read into it, and in particular S0053C is not S0053. The
+// stock book hands its numbers out in order, S0053 then S0054, so a letter on
+// the end is a different piece and not a spelling of this one. Treating them as
+// one would put another piece's memos, weights and valuation under this number,
+// which is the one mistake an audit must not make. parseCodes carries the same
+// reasoning in its 12-character cap: that cap was raised the day A1405CZ was
+// quietly cut to A1405C and then reported as missing.
+//
+// The marks are a written-down list rather than "anything that is not a letter
+// or a digit", because the database has to strip the same ones off a stored
+// column and SQL can only be given a list. One list, two sides, no chance of
+// the screen and the database disagreeing about what was asked for. See
+// stockKeyColumn() in sqlRecords.ts.
+export const STOCK_MARKS = " -_/\\.,;:'\"()[]{}+*#&@|~";
+
+export function stockKey(raw: string): string {
+  let out = String(raw || "").toUpperCase();
+  for (const mark of STOCK_MARKS) out = out.split(mark).join("");
+  return out;
+}
+
+// A pasted list into the numbers it names, in the order they were written.
+//
+// A list typed by people arrives with stray spaces, blank lines, commas and
+// mixed case, and sometimes the same number twice. `asked` is kept as it was
+// written so the report can answer in his own words; `key` is what every module
+// is asked about. The same number twice is one question.
+export function parseStockList(raw: string): { asked: string; key: string }[] {
+  const out: { asked: string; key: string }[] = [];
+  const seen = new Set<string>();
+  for (const piece of String(raw || "").split(/[\s,;]+/)) {
+    const asked = piece.trim();
+    if (!asked) continue;
+    const key = stockKey(asked);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ asked, key });
+  }
+  return out;
+}

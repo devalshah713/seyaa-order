@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { visibleStock } from "@/lib/stockSheet";
 import SheetClient from "./SheetClient";
 
@@ -23,6 +24,9 @@ export default async function StockSheetPage() {
           Live from the stock sheets. Pieces held outside India are not listed.
           {!error && <> <strong>{ready}</strong> of {rows.length} can go out on a memo.</>}
         </p>
+        {/* A number missing from the sheet is what stops a memo being written,
+            and this is the screen somebody is on when that happens. */}
+        <Link href="/stock/audit" className="btn">Audit stock numbers</Link>
       </div>
       {error ? (
         <div className="notice">{error}</div>

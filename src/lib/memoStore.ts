@@ -56,6 +56,7 @@ import {
   sqlDeleteOrder,
   sqlDeleteParties,
   sqlEventsForStock,
+  sqlEventsForStockNos,
   sqlFlags,
   sqlGetMemo,
   sqlGetMemoWithEvents,
@@ -67,12 +68,14 @@ import {
   sqlListOrders,
   sqlMemoItems,
   sqlMemosWithItems,
+  sqlMemosWithStockNos,
   sqlPutMemo,
   sqlPutOrder,
   sqlPutParty,
   sqlRecipientCounts,
   sqlReplaceRecipient,
   sqlSetFlag,
+  type MemoStockRow,
 } from "./memoSql";
 import {
   counterKey,
@@ -83,6 +86,7 @@ import {
   orderIdFor,
   orderNoFor,
   partyKey,
+  stockKey,
   todayInput,
   type MemoKind,
   type OrderComment,
@@ -1118,6 +1122,83 @@ export async function stockHistory(stockNo: string): Promise<LedgerEntry[]> {
     });
   }
   return out.sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+// --- Several stock numbers at once, for the audit ----------------------------
+
+// One memo a piece went out on, and what became of it that time.
+export type MemoStockFinding = {
+  memoId: string;
+  memoNo: string;
+  kind: MemoKind;
+  to: string;
+  date: string;
+  purpose: string;
+  type: string; // the item type it was listed under
+  // The number as the memo spells it, so a finding is never passed off as
+  // having been written the way it was asked for.
+  storedNo: string;
+  outcome: StockOutcome | null;
+  event?: StockEvent;
+};
+
+// Every memo each of these stock numbers went out on, newest first.
+//
+// stockHistory() answers this for one number, and a report on fifty numbers
+// must not be fifty of those: the narrowing is done once for the whole list.
+// What is not done a second time is the reading — the standing of a piece on a
+// memo is linesFor()'s answer, latest event wins, which is what the ledger and
+// the memo page show.
+export async function memosForStockNos(
+  keys: string[]
+): Promise<Map<string, MemoStockFinding[]>> {
+  const out = new Map<string, MemoStockFinding[]>();
+  if (keys.length === 0) return out;
+  const wanted = new Set(keys);
+
+  const sql = await useSql();
+  // On D1 only the memos that can mention one of these pieces and only these
+  // pieces' outcomes. On the document there is nothing to narrow in the store:
+  // it is one read, and the narrowing happens here.
+  const db = sql ? null : await readDB();
+  const memos: MemoStockRow[] = sql
+    ? await sqlMemosWithStockNos(keys)
+    : db!.memos
+        .filter((m) =>
+          (m.items || []).some((it) =>
+            (it.stockNos || []).some((no) => wanted.has(stockKey(no)))
+          )
+        )
+        .map((m) => ({
+          id: m.id, memoNo: m.memoNo, kind: m.kind, to: m.to,
+          date: m.date, purpose: m.purpose, items: m.items,
+        }));
+  const events = sql ? await sqlEventsForStockNos(keys) : db!.events;
+
+  for (const m of memos) {
+    for (const line of linesFor(m.id, m.items, events)) {
+      const key = stockKey(line.stockNo);
+      if (!wanted.has(key)) continue;
+      const found = out.get(key) || [];
+      found.push({
+        memoId: m.id,
+        memoNo: m.memoNo,
+        kind: m.kind,
+        to: m.to,
+        date: m.date,
+        purpose: m.purpose,
+        type: line.type,
+        storedNo: line.stockNo,
+        outcome: line.outcome,
+        event: line.event,
+      });
+      out.set(key, found);
+    }
+  }
+
+  // Newest first, as the ledger shows a piece's history.
+  for (const found of out.values()) found.sort((a, b) => (a.date < b.date ? 1 : -1));
+  return out;
 }
 
 // Every stock number the business has ever put on a memo, with where it is now.

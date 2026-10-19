@@ -43,7 +43,7 @@
 // always has. No column holds the piece list.
 import "server-only";
 import { isDbConfigured, readDoc, writeDoc } from "./db";
-import { fyFromInput, pad, todayInput } from "./memoFormat";
+import { fyFromInput, pad, stockKey, todayInput } from "./memoFormat";
 import { hasSql } from "./sql";
 import { pdIsInSql } from "./sqlSchema";
 import { numberTemplate } from "./sqlRecords";
@@ -58,9 +58,11 @@ import {
   sqlPdRows,
   sqlPdSheetsByIds,
   sqlPdSku,
+  sqlPdStockedByNos,
   sqlPutPdSheet,
   sqlSetPdPhoto,
   sqlSetPdPieces,
+  type PdStockHit,
 } from "./pdSql";
 import type { DiaLine } from "./pdConfig";
 import {
@@ -582,6 +584,37 @@ export function normalizePieceInput(input: unknown): PdPiece[] {
       };
     })
     .filter((p) => p.no);
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// Which sheet and which piece of it each of these stock numbers was given to.
+//
+// Only the pieces carrying a stock number are looked at, which is what
+// stockedPieces() answers and what the `stocked` column holds. The sheets are
+// read as they are stored rather than hydrated: a stored piece list has always
+// been reconciled against the stored design number on the way in, which is why
+// the list page counts it as it stands too.
+export async function pdPiecesForStockNos(keys: string[]): Promise<PdStockHit[]> {
+  if (keys.length === 0) return [];
+  if (await useSql()) return sqlPdStockedByNos(keys);
+
+  const wanted = new Set(keys);
+  const out: PdStockHit[] = [];
+  for (const sheet of await listPdSheetsRaw()) {
+    for (const piece of stockedPieces(sheet.pieces)) {
+      if (!wanted.has(stockKey(piece.stockNo))) continue;
+      out.push({
+        id: sheet.id,
+        pdNo: sheet.pdNo,
+        sku: sheet.sku,
+        product: sheet.product,
+        pieceNo: piece.no,
+        stockNo: piece.stockNo,
+      });
+    }
+  }
+  return out;
 }
 
 export type DesignLookup = { sheet: PdSheet; hit: DesignHit };

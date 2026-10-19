@@ -5,7 +5,7 @@ import { listStockEntries } from "./stockBookStore";
 import { listPartyNames } from "./memoStore";
 import { priceOf, type StockEntry } from "./stockBookConfig";
 import { loadPrices } from "./priceStore";
-import { todayInput } from "./memoFormat";
+import { stockKey, todayInput } from "./memoFormat";
 import {
   failedChecks, qcResult,
   type NewQcRecord, type QcAnswer, type QcLine, type QcRecord, type QcResult,
@@ -130,6 +130,23 @@ export async function listQcRows(): Promise<QcRow[]> {
   return db.records
     .slice()
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map(toRow);
+}
+
+// Every check against each of these stock numbers, oldest first, so it reads
+// in the order the checking happened.
+//
+// One read of the document, which is the only store QC has: the records have
+// not been copied into the database yet, and this has to keep working until
+// they are. The lines themselves stay in storage — what the report shows is the
+// verdict and whatever failed by name, which is what a row carries.
+export async function qcRowsForStockNos(keys: string[]): Promise<QcRow[]> {
+  if (keys.length === 0) return [];
+  const wanted = new Set(keys);
+  const db = await readDB();
+  return db.records
+    .filter((r) => wanted.has(stockKey(r.stockNo)))
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
     .map(toRow);
 }
 

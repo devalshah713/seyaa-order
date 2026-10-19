@@ -24,6 +24,7 @@ import "server-only";
 import { sqlAll, sqlBatch, sqlFirst, sqlRun } from "./sql";
 import { columnNames, columnValues, type SqlColumn } from "./sqlSchema";
 import { parseDesignNo } from "./designNo";
+import { STOCK_MARKS } from "./memoFormat";
 
 // --- Writing records ---------------------------------------------------------
 
@@ -377,6 +378,38 @@ export const flatText = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9
 const forLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 export const contains = (s: string): string => `%${forLike(s)}%`;
 export const startsWith = (s: string): string => `${forLike(s)}%`;
+
+// --- Asking several modules about the same stock numbers ---------------------
+
+// A stored stock number, reduced to what it is compared as.
+//
+// The rule itself is stockKey() in memoFormat.ts, and this is built from the
+// very same list of marks rather than from a second list of its own: the
+// database narrows by exactly the rule the answer is then checked against, so
+// the screen and the database cannot disagree about which piece was asked for.
+//
+// A nest of replaces rather than anything cleverer because SQLite has no
+// pattern replace. It costs a scan of the column, which is what a question
+// about a stock number costs in any case: no table here is indexed on one.
+export const stockKeyColumn = (expr: string): string =>
+  [...STOCK_MARKS].reduce(
+    (sql, mark) => `replace(${sql}, '${mark.replace(/'/g, "''")}', '')`,
+    `upper(${expr})`
+  );
+
+// How many stock numbers one IN list carries. D1 allows a hundred bound values
+// in a statement, so fifty leaves room, and fifty is also the most the audit
+// takes in one run — so a full run is one statement per module and never one
+// per number.
+export const KEYS_PER_QUERY = 50;
+
+export function keyChunks(keys: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < keys.length; i += KEYS_PER_QUERY) {
+    chunks.push(keys.slice(i, i + KEYS_PER_QUERY));
+  }
+  return chunks;
+}
 
 // The codes a search writes before the piece number: "SN-BR-AMF-10CT" out of
 // "SN-BR-AMF-10CT-46". A piece match needs those codes to be exactly the ones

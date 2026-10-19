@@ -7,6 +7,7 @@
 // A piece may only go out on a memo if it is in INDIA. Everything else is
 // refused, with a reason the person filling the memo can act on.
 import "server-only";
+import { stockKey } from "./memoFormat";
 
 const SHEETS = [
   { name: "Sheet A", id: "1hXt65tYxq39Mh-LVHkKIc89FRWTAq5xG5fDIT8J7KzU" },
@@ -199,6 +200,44 @@ export async function assertMemoable(
     ok: false,
     error: `Only stock in INDIA can go out on a memo. ${detail}${more}`,
   };
+}
+
+// --- Several stock numbers at once, for the audit ------------------------------
+
+// What the master sheet says about each of these numbers, or why it could not
+// be asked.
+//
+// "Not in the sheet" and "the sheet could not be read" are kept apart on
+// purpose, and it is the most important thing in this function. A number
+// missing from that sheet is exactly what stops a memo being written, so a
+// report that read a connection failure as "absent" would send somebody looking
+// for a piece that is sitting there. checkOne() cannot answer this: it is given
+// a map, so by the time it runs the question has already been answered.
+export type SheetLookup =
+  | { reached: true; rows: Map<string, StockRow> }
+  | { reached: false; error: string };
+
+export async function sheetRowsForNos(keys: string[]): Promise<SheetLookup> {
+  if (keys.length === 0) return { reached: true, rows: new Map() };
+  try {
+    const map = await loadStock();
+    // Keyed by the audit's own rule rather than by the sheet's own spelling,
+    // because this is a sheet people type into: the same piece is written
+    // "A0232" in one row and "a 0232" in another.
+    const rows = new Map<string, StockRow>();
+    for (const row of map.values()) {
+      const key = stockKey(row.stockNo);
+      // The first spelling wins, which is what loadStock() does with a
+      // duplicate Sr. No. between the two sheets.
+      if (key && !rows.has(key)) rows.set(key, row);
+    }
+    return { reached: true, rows };
+  } catch (err) {
+    return {
+      reached: false,
+      error: err instanceof Error ? err.message : "The stock sheets could not be read.",
+    };
+  }
 }
 
 // Everything staff are allowed to see when browsing: in India, or in India but
