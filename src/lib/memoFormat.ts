@@ -1,5 +1,6 @@
 // Pure helpers shared by both client (form preview) and server (store, views).
 // No server-only imports here so it can be bundled either side.
+import { GOLD_PURITIES } from "./pdConfig";
 
 // The Type dropdown on a new memo. New entries go on the end: the order is what
 // staff reach for by position, so inserting in the middle moves every option
@@ -373,6 +374,43 @@ export const GOLD_COLORS = [
   "Two Tone",
   "Three Tone",
 ] as const;
+
+// What a seller picks in the one "Gold details" box on the order form.
+//
+// The office writes the purity and the colour together — "14KT YELLOW" — and
+// treats that as one fact about the piece, so it is one box here rather than
+// two. The options are built from the two lists the portal already keeps
+// rather than typed out again, so a purity added for the PD sheet shows up on
+// the order form with it.
+export const GOLD_DETAILS: string[] = GOLD_PURITIES.flatMap((purity) =>
+  GOLD_COLORS.map((colour) => `${purity} ${colour.toUpperCase()}`)
+);
+
+// --- Approval ---------------------------------------------------------------
+//
+// Deliberately separate from the production status. An order waiting for its
+// manager is not "In Production" — it is not anything yet — and folding the
+// two together would make the board lie about what the factory is working on.
+//
+// An order from a seller with no manager is approved the moment it is entered,
+// which is how every order worked before this existed.
+export type OrderApproval = "approved" | "waiting" | "sent_back";
+
+export const APPROVAL_LABELS: Record<OrderApproval, string> = {
+  approved: "Approved",
+  waiting: "Waiting for approval",
+  sent_back: "Sent back",
+};
+
+// An order saved before approvals existed has no mark and is approved: it was
+// already going ahead, and stopping it now would be the portal inventing work.
+export function approvalOf(o: { approval?: OrderApproval }): OrderApproval {
+  return o.approval === "waiting" || o.approval === "sent_back" ? o.approval : "approved";
+}
+
+export function approvalLabel(o: { approval?: OrderApproval }): string {
+  return APPROVAL_LABELS[approvalOf(o)];
+}
 
 // A note against an order — "customer wants 18 inch", "delayed, stones short".
 // Append-only, like the stock trail: a later note supersedes an earlier one in

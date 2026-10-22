@@ -1,7 +1,7 @@
 // Admin-only: change an account's role / feature access, or remove it.
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/currentUser";
-import { deleteUser, updateUserAccess } from "@/lib/userStore";
+import { deleteUser, setUserManager, updateUserAccess } from "@/lib/userStore";
 import type { Role } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,15 @@ export async function PATCH(
 
   let role: Role = "user";
   let modules: unknown = [];
+  // Sent as "" to clear the manager, left out entirely to leave it alone.
+  let managerId: string | undefined;
   try {
-    const body = (await req.json()) as { role?: string; modules?: unknown };
+    const body = (await req.json()) as {
+      role?: string; modules?: unknown; managerId?: unknown;
+    };
     role = body.role === "admin" ? "admin" : "user";
     modules = body.modules;
+    if (typeof body.managerId === "string") managerId = body.managerId.trim();
   } catch {
     return NextResponse.json({ error: "Bad request." }, { status: 400 });
   }
@@ -36,6 +41,14 @@ export async function PATCH(
 
   const result = await updateUserAccess(params.id, role, modules);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+
+  // The manager is set after the access, and its own refusal is reported on
+  // its own, so a bad manager choice does not silently discard the access
+  // change that already went through.
+  if (managerId !== undefined) {
+    const chain = await setUserManager(params.id, managerId);
+    if (!chain.ok) return NextResponse.json({ error: chain.error }, { status: 400 });
+  }
   return NextResponse.json({ ok: true });
 }
 

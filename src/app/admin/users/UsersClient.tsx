@@ -14,7 +14,9 @@ export default function UsersClient({ meId }: { meId: string }) {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   // The row being edited, with its pending changes.
-  const [editing, setEditing] = useState<{ id: string; role: "user" | "admin"; mods: ModuleKey[] } | null>(null);
+  const [editing, setEditing] = useState<
+    { id: string; role: "user" | "admin"; mods: ModuleKey[]; managerId: string } | null
+  >(null);
 
   async function load() {
     try {
@@ -58,7 +60,9 @@ export default function UsersClient({ meId }: { meId: string }) {
       const res = await fetch(`/api/users/${editing.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ role: editing.role, modules: editing.mods }),
+        body: JSON.stringify({
+          role: editing.role, modules: editing.mods, managerId: editing.managerId,
+        }),
       });
       await readReply(res, "Could not save access.");
       setNotice("Access updated. It applies the next time they sign in.");
@@ -82,6 +86,14 @@ export default function UsersClient({ meId }: { meId: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete the user.");
     }
+  }
+
+  // Who approves this account's orders, by name. Held on the account as an
+  // id, so the name is looked up here rather than stored twice.
+  function managerName(u: PublicUser): string {
+    if (!u.managerId) return "Nobody — their orders go ahead at once";
+    const boss = (users || []).find((x) => x.id === u.managerId);
+    return boss ? boss.username : "An account that no longer exists";
   }
 
   function accessLabel(u: PublicUser): string {
@@ -158,7 +170,10 @@ export default function UsersClient({ meId }: { meId: string }) {
       ) : (
         <table className="user-table">
           <thead>
-            <tr><th>Username</th><th>Role</th><th>Features</th><th>Created</th><th /></tr>
+            <tr>
+              <th>Username</th><th>Role</th><th>Features</th>
+              <th>Orders approved by</th><th>Created</th><th />
+            </tr>
           </thead>
           <tbody>
             {users.map((u) => (
@@ -204,6 +219,23 @@ export default function UsersClient({ meId }: { meId: string }) {
                     accessLabel(u)
                   )}
                 </td>
+                <td>
+                  {editing?.id === u.id ? (
+                    <select
+                      value={editing.managerId}
+                      onChange={(e) => setEditing({ ...editing, managerId: e.target.value })}
+                    >
+                      <option value="">Nobody</option>
+                      {(users || [])
+                        .filter((x) => x.id !== u.id)
+                        .map((x) => (
+                          <option key={x.id} value={x.id}>{x.username}</option>
+                        ))}
+                    </select>
+                  ) : (
+                    managerName(u)
+                  )}
+                </td>
                 <td>{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td className="user-actions">
                   {editing?.id !== u.id && (
@@ -215,6 +247,7 @@ export default function UsersClient({ meId }: { meId: string }) {
                           id: u.id,
                           role: u.role === "admin" ? "admin" : "user",
                           mods: u.role === "admin" ? [] : allowedModules(u),
+                          managerId: u.managerId || "",
                         })
                       }
                     >

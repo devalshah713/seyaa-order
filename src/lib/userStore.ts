@@ -29,6 +29,11 @@ export type User = {
   // per-feature access existed — those keep full access until an admin sets a
   // list, so adding this never locked anyone out.
   modules?: ModuleKey[];
+  // Who signs this account's orders off before they go ahead. Held as the
+  // manager's id, not their name, so renaming an account does not break the
+  // chain. Absent means nobody: that account's orders are approved the moment
+  // they are entered, which is how every account worked before this existed.
+  managerId?: string;
   passwordHash: string; // scrypt$<salt-b64>$<hash-b64>
   createdAt: string;
 };
@@ -140,6 +145,63 @@ export async function updateUserAccess(
   target.modules = role === "admin" ? undefined : sanitizeModules(modules);
   await writeUsers(users);
   return { ok: true };
+}
+
+// Set, or clear, who approves this account's orders.
+//
+// Two things are refused rather than stored. An account cannot be its own
+// manager, because its orders would then wait on itself forever. And a chain
+// cannot close on itself — if Rahul already reports to Dhruval, Dhruval cannot
+// be made to report to Rahul, because an approval would then have nowhere to
+// land. The walk up the chain is bounded by the number of accounts, so a loop
+// already in the stored data cannot hang this.
+export async function setUserManager(
+  id: string,
+  managerId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const users = await readUsers();
+  const target = users.find((u) => u.id === id);
+  if (!target) return { ok: false, error: "User not found." };
+
+  const wanted = (managerId || "").trim();
+  if (!wanted) {
+    delete target.managerId;
+    await writeUsers(users);
+    return { ok: true };
+  }
+
+  if (wanted === id) {
+    return { ok: false, error: "An account cannot approve its own orders." };
+  }
+  const manager = users.find((u) => u.id === wanted);
+  if (!manager) return { ok: false, error: "That manager is not an account here." };
+
+  let walk: User | undefined = manager;
+  for (let steps = 0; walk && steps <= users.length; steps++) {
+    if (walk.id === id) {
+      return {
+        ok: false,
+        error: `${manager.username} already reports to ${target.username}. Two accounts cannot approve each other.`,
+      };
+    }
+    walk = walk.managerId ? users.find((u) => u.id === walk!.managerId) : undefined;
+  }
+
+  target.managerId = wanted;
+  await writeUsers(users);
+  return { ok: true };
+}
+
+// The account that approves this one's orders, or null. Used on the way in
+// when an order is saved, so the order carries who it is waiting for.
+export async function managerOf(
+  id: string
+): Promise<{ id: string; username: string } | null> {
+  const users = await readUsers();
+  const me = users.find((u) => u.id === id);
+  if (!me?.managerId || me.managerId === id) return null;
+  const manager = users.find((u) => u.id === me.managerId);
+  return manager ? { id: manager.id, username: manager.username } : null;
 }
 
 export async function deleteUser(id: string): Promise<{ ok: boolean; error?: string }> {

@@ -1,9 +1,12 @@
 "use client";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   GOLD_COLORS,
   ORDER_STATUSES,
+  approvalLabel,
+  approvalOf,
   formatDate,
   type OrderStatus,
 } from "@/lib/memoFormat";
@@ -17,8 +20,10 @@ type Draft = {
   diamondCts: string;
   pcs: string;
   stockNo: string;
+  size: string;
+  instructions: string;
   status: OrderStatus;
-  comment: string; // only used by the add form — becomes the order's first note
+  comment: string;
 };
 
 const empty: Draft = {
@@ -28,6 +33,8 @@ const empty: Draft = {
   diamondCts: "",
   pcs: "1",
   stockNo: "",
+  size: "",
+  instructions: "",
   status: "in_production",
   comment: "",
 };
@@ -39,15 +46,24 @@ const draftOf = (o: Order): Draft => ({
   diamondCts: o.diamondCts ? String(o.diamondCts) : "",
   pcs: String(o.pcs || 1),
   stockNo: o.stockNo || "",
+  size: o.size || "",
+  instructions: o.instructions || "",
   status: o.status,
   comment: "", // notes are added from the log, never rewritten by an edit
 });
 
-export default function OrdersClient({ orders }: { orders: Order[] }) {
+export type Viewer = { uid: string; username: string; isAdmin: boolean };
+
+const COLUMNS = 9;
+
+// When an order was entered, to the minute. The minute matters here: two
+// orders taken in the same morning are told apart by it.
+const stampOf = (o: Order) =>
+  `${formatDate(o.createdAt.slice(0, 10))} ${o.createdAt.slice(11, 16)}`;
+
+export default function OrdersClient({ orders, me }: { orders: Order[]; me: Viewer }) {
   const router = useRouter();
-  const [form, setForm] = useState<Draft>(empty);
   const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showDelivered, setShowDelivered] = useState(false);
 
@@ -62,39 +78,49 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
   const [note, setNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
 
+  // Sending one back: the reason is typed on the row it belongs to.
+  const [backId, setBackId] = useState("");
+  const [reason, setReason] = useState("");
+  const [busyApproval, setBusyApproval] = useState("");
+
+  // Nobody approves their own order, whatever the account says. An admin
+  // stands in for any manager.
+  const canApprove = (o: Order) =>
+    approvalOf(o) === "waiting" &&
+    o.enteredBy !== me.username &&
+    (me.isAdmin || o.approverId === me.uid);
+
+  // What the owner needs: everything waiting, under every manager. What a
+  // manager needs: the ones waiting on them.
+  const waiting = useMemo(
+    () =>
+      orders.filter(
+        (o) => approvalOf(o) === "waiting" && (me.isAdmin || o.approverId === me.uid)
+      ),
+    [orders, me]
+  );
+
+  // Orders of mine that came back, with the reason, so the correction starts
+  // from the page I was already on.
+  const mine = useMemo(
+    () => orders.filter((o) => approvalOf(o) === "sent_back" && o.enteredBy === me.username),
+    [orders, me]
+  );
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return orders.filter((o) => {
       if (!showDelivered && o.status === "delivered") return false;
       if (!needle) return true;
-      return [o.orderNo, o.customer, o.productName, o.goldColor, o.stockNo || ""]
-        .join(" ").toLowerCase().includes(needle);
+      return [
+        o.orderNo, o.customer, o.productName, o.goldColor, o.stockNo || "",
+        o.category || "", o.subCategory || "", o.size || "", o.diaShape || "",
+        o.designNo || "", o.mfg || "", o.enteredBy || "", approvalLabel(o),
+      ].join(" ").toLowerCase().includes(needle);
     });
   }, [orders, q, showDelivered]);
 
-  const set = (patch: Partial<Draft>) => setForm((f) => ({ ...f, ...patch }));
   const setD = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    if (!form.productName.trim()) { setError("Give the order a product name."); return; }
-    setBusy(true);
-    try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      await readReply(res, "Could not add the order.");
-      setForm(empty);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add the order.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function patch(id: string, body: Record<string, unknown>) {
     const res = await fetch(`/api/orders/${id}`, {
@@ -108,6 +134,26 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
     }
   }
 
+  async function approval(id: string, action: string, why?: string) {
+    setError("");
+    setBusyApproval(id);
+    try {
+      const res = await fetch(`/api/orders/${id}/approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, reason: why || "" }),
+      });
+      await readReply(res, "Could not save that.");
+      setBackId("");
+      setReason("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that.");
+    } finally {
+      setBusyApproval("");
+    }
+  }
+
   function startEdit(o: Order) {
     setError("");
     setEditingId(o.id);
@@ -116,7 +162,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
 
   async function saveEdit(id: string) {
     setError("");
-    if (!draft.productName.trim()) { setError("Give the order a product name."); return; }
+    if (!draft.productName.trim()) { setError("Write what is being made."); return; }
     setSavingEdit(true);
     try {
       await patch(id, draft);
@@ -169,41 +215,120 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
 
   return (
     <>
-      <form className="order-add" onSubmit={add}>
-        <label className="field"><span>Product name</span>
-          <input value={form.productName} onChange={(e) => set({ productName: e.target.value })}
-            placeholder="Tennis bracelet" required /></label>
-        <label className="field"><span>Customer</span>
-          <input value={form.customer} onChange={(e) => set({ customer: e.target.value })}
-            placeholder="Party name" /></label>
-        <label className="field"><span>Gold colour</span>
-          <input list="gold-colors" value={form.goldColor}
-            onChange={(e) => set({ goldColor: e.target.value })} placeholder="Yellow" /></label>
-        <datalist id="gold-colors">
-          {GOLD_COLORS.map((c) => <option key={c} value={c} />)}
-        </datalist>
-        <label className="field"><span>Diamond cts</span>
-          <input value={form.diamondCts} inputMode="decimal"
-            onChange={(e) => set({ diamondCts: e.target.value })} placeholder="3.01" /></label>
-        <label className="field"><span>Pcs</span>
-          <input value={form.pcs} inputMode="numeric"
-            onChange={(e) => set({ pcs: e.target.value })} /></label>
-        <label className="field"><span>Stock No. <em>(remake)</em></span>
-          <input value={form.stockNo} onChange={(e) => set({ stockNo: e.target.value })}
-            placeholder="optional" /></label>
-        <label className="field oa-comment"><span>Comment <em>(optional)</em></span>
-          <input value={form.comment} onChange={(e) => set({ comment: e.target.value })}
-            placeholder="e.g. wants it by Friday — saved as the first note" /></label>
-        <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? "Adding…" : "Add order"}
-        </button>
-      </form>
+      <datalist id="gold-colors">
+        {GOLD_COLORS.map((c) => <option key={c} value={c} />)}
+      </datalist>
+
+      {waiting.length > 0 && (
+        <div className="ord-queue">
+          <h2>
+            {me.isAdmin ? "Waiting for approval" : "Waiting for your approval"}
+            <span className="q-count">{waiting.length}</span>
+          </h2>
+          {waiting.map((o) => (
+            <div key={o.id} className="ord-q-row">
+              <div>
+                <Link href={`/orders/${o.id}`} className="q-no">{o.orderNo}</Link>
+                <strong>{o.productName}</strong>
+                <span className="ev-meta">
+                  {o.pcs} pcs · {o.goldColor || "gold not set"}
+                  {o.size ? ` · ${o.size}` : ""} · entered by {o.enteredBy || "unknown"} on{" "}
+                  {stampOf(o)}
+                </span>
+                {me.isAdmin && o.approverName && (
+                  <span className="ev-meta">Waiting for {o.approverName}</span>
+                )}
+              </div>
+              <div className="q-actions">
+                {canApprove(o) ? (
+                  <>
+                    <button
+                      className="btn btn-primary"
+                      disabled={busyApproval === o.id}
+                      onClick={() => approval(o.id, "approve")}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={busyApproval === o.id}
+                      onClick={() => { setBackId(backId === o.id ? "" : o.id); setReason(""); }}
+                    >
+                      Send back
+                    </button>
+                  </>
+                ) : (
+                  <span className="hint">
+                    {o.enteredBy === me.username
+                      ? "You entered this one, so somebody else approves it."
+                      : `Waiting for ${o.approverName || "a manager"}.`}
+                  </span>
+                )}
+              </div>
+              {backId === o.id && (
+                <div className="q-back">
+                  <input
+                    autoFocus
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Why is it going back? One line."
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && reason.trim()) {
+                        e.preventDefault();
+                        void approval(o.id, "send_back", reason);
+                      }
+                      if (e.key === "Escape") { setBackId(""); setReason(""); }
+                    }}
+                  />
+                  <button
+                    className="btn btn-primary"
+                    disabled={!reason.trim() || busyApproval === o.id}
+                    onClick={() => approval(o.id, "send_back", reason)}
+                  >
+                    Send it back
+                  </button>
+                  <button className="btn" onClick={() => { setBackId(""); setReason(""); }}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mine.length > 0 && (
+        <div className="ord-queue ord-back">
+          <h2>Sent back to you<span className="q-count">{mine.length}</span></h2>
+          {mine.map((o) => (
+            <div key={o.id} className="ord-q-row">
+              <div>
+                <Link href={`/orders/${o.id}`} className="q-no">{o.orderNo}</Link>
+                <strong>{o.productName}</strong>
+                <span className="ev-meta">
+                  {o.sentBackReason || "No reason was written."}
+                </span>
+              </div>
+              <div className="q-actions">
+                <Link href={`/orders/${o.id}`} className="btn">Open it</Link>
+                <button
+                  className="btn btn-primary"
+                  disabled={busyApproval === o.id}
+                  onClick={() => approval(o.id, "resubmit")}
+                >
+                  Send in again
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <p className="save-error">{error}</p>}
 
       <div className="sheet-controls">
         <input className="search" value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="Search order no., customer, product…" />
+          placeholder="Search order no., product, category, size, who entered it…" />
         <label className="sheet-toggle">
           <input type="checkbox" checked={showDelivered}
             onChange={(e) => setShowDelivered(e.target.checked)} />
@@ -217,34 +342,43 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
         <table className="history orders-table">
           <thead>
             <tr>
-              <th>Order</th><th>Product</th><th>Gold</th>
+              <th>Order</th><th>What is being made</th><th>Gold</th><th>Size &amp; shape</th>
               <th className="num">Cts</th><th className="num">Pcs</th>
-              <th>Status</th><th className="actions-col">Actions</th>
+              <th>Approval</th><th>Status</th><th className="actions-col">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((o) => {
               const editing = editingId === o.id;
+              const mark = approvalOf(o);
               return (
                 <tr key={o.id} className={editing ? "editing" : ""}>
                   <td className="memono">
-                    {o.orderNo}
-                    <div className="ev-meta">{formatDate(o.createdAt.slice(0, 10))}</div>
+                    <Link href={`/orders/${o.id}`}>{o.orderNo}</Link>
+                    <div className="ev-meta">{stampOf(o)}</div>
+                    <div className="ev-meta">by {o.enteredBy || "not recorded"}</div>
                   </td>
 
                   {editing ? (
                     <>
                       <td>
                         <input className="ed" value={draft.productName}
-                          onChange={(e) => setD({ productName: e.target.value })} placeholder="Product" />
+                          onChange={(e) => setD({ productName: e.target.value })} placeholder="What is being made" />
                         <input className="ed" value={draft.customer}
-                          onChange={(e) => setD({ customer: e.target.value })} placeholder="Customer" />
+                          onChange={(e) => setD({ customer: e.target.value })} placeholder="Party" />
                         <input className="ed" value={draft.stockNo}
                           onChange={(e) => setD({ stockNo: e.target.value })} placeholder="Stock No. (remake)" />
+                        <input className="ed" value={draft.instructions}
+                          onChange={(e) => setD({ instructions: e.target.value })} placeholder="Special instructions" />
                       </td>
                       <td>
                         <input className="ed" list="gold-colors" value={draft.goldColor}
                           onChange={(e) => setD({ goldColor: e.target.value })} placeholder="Gold" />
+                      </td>
+                      <td>
+                        <input className="ed" value={draft.size}
+                          onChange={(e) => setD({ size: e.target.value })} placeholder="Size" />
+                        <div className="ev-meta">{o.diaShape || "shape not set"}</div>
                       </td>
                       <td className="num">
                         <input className="ed num" value={draft.diamondCts} inputMode="decimal"
@@ -254,6 +388,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                         <input className="ed num" value={draft.pcs} inputMode="numeric"
                           onChange={(e) => setD({ pcs: e.target.value })} />
                       </td>
+                      <td className={`ord-mark m-${mark}`}>{approvalLabel(o)}</td>
                       <td>
                         <select value={draft.status}
                           onChange={(e) => setD({ status: e.target.value as OrderStatus })}>
@@ -275,6 +410,13 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                     <>
                       <td>
                         <strong>{o.productName}</strong>
+                        {(o.category || o.subCategory) && (
+                          <div className="ev-meta">
+                            {[o.category, o.subCategory, o.subSubCategory].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                        {o.designNo && <div className="ev-meta">design {o.designNo}</div>}
+                        {o.mfg && <div className="ev-meta">making: {o.mfg}</div>}
                         {o.customer && <div className="ev-meta">{o.customer}</div>}
                         {o.stockNo && <div className="ev-meta">remake of {o.stockNo}</div>}
                         {/* Notes read in the row itself — the point of a note is
@@ -287,8 +429,15 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
                         ))}
                       </td>
                       <td>{o.goldColor || "—"}</td>
+                      <td>{[o.size, o.diaShape].filter(Boolean).join(" · ") || "—"}</td>
                       <td className="num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>
                       <td className="num">{o.pcs}</td>
+                      <td className={`ord-mark m-${mark}`}>
+                        {approvalLabel(o)}
+                        {mark === "waiting" && o.approverName && (
+                          <div className="ev-meta">from {o.approverName}</div>
+                        )}
+                      </td>
                       <td>
                         <select value={o.status}
                           onChange={(e) => setStatus(o, e.target.value as OrderStatus)}>
@@ -319,7 +468,7 @@ export default function OrdersClient({ orders }: { orders: Order[] }) {
               return [
                 rowEl,
                 <tr key={`${o.id}-add`} className="notes-row">
-                  <td colSpan={7}>
+                  <td colSpan={COLUMNS}>
                     <div className="note-add">
                       <input
                         autoFocus

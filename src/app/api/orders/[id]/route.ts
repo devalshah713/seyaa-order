@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteOrder, updateOrder } from "@/lib/memoStore";
+import { deleteOrder, listPartyNames, updateOrder } from "@/lib/memoStore";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/memoFormat";
+import { requireAdmin } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,11 +38,54 @@ export async function PATCH(
   if (body.diamondCts !== undefined) patch.diamondCts = num(body.diamondCts) ?? 0;
   if (body.pcs !== undefined) patch.pcs = Math.round(num(body.pcs) ?? 1) || 1;
   if (body.stockNo !== undefined) patch.stockNo = (str(body.stockNo, 20) || "").toUpperCase();
+  // The seller's own fields, edited from the order's page.
+  if (body.size !== undefined) patch.size = str(body.size, 60);
+  if (body.sieveSize !== undefined) patch.sieveSize = str(body.sieveSize, 60);
+  if (body.instructions !== undefined) patch.instructions = str(body.instructions, 1000);
   if (body.status !== undefined) {
     if (!VALID.has(String(body.status))) {
       return NextResponse.json({ error: "Unknown status." }, { status: 400 });
     }
     patch.status = body.status as OrderStatus;
+  }
+
+  // The manufacturer and the design number are the owner's to set, so the
+  // check is here and not only in the page that hides the boxes. Asked only
+  // when one of the two is actually being sent, so the status dropdown that
+  // everyone uses is not turned into an admin action.
+  if (body.mfg !== undefined || body.designNo !== undefined) {
+    const admin = await requireAdmin();
+    if (!admin) {
+      return NextResponse.json(
+        { error: "Only an admin can set the manufacturer or the design number." },
+        { status: 403 }
+      );
+    }
+    if (body.mfg !== undefined) {
+      const mfg = str(body.mfg, 80) || "";
+      if (mfg) {
+        // A manufacturer is a controlled list everywhere else in the portal,
+        // and an order that names one nobody can find is an order nobody can
+        // chase.
+        try {
+          const lists = await listPartyNames(["mfg"]);
+          const names = (lists.mfg || []).map((e) => e.name);
+          if (!names.includes(mfg)) {
+            return NextResponse.json(
+              { error: "Choose a manufacturer from the list." },
+              { status: 400 }
+            );
+          }
+        } catch (err) {
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : "Could not read the list." },
+            { status: 503 }
+          );
+        }
+      }
+      patch.mfg = mfg;
+    }
+    if (body.designNo !== undefined) patch.designNo = (str(body.designNo, 60) || "").toUpperCase();
   }
 
   try {

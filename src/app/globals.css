@@ -2182,3 +2182,71 @@ table.ch-table tbody tr { cursor: default; }
   .audit-facts { font-size: 10.5px; }
   @page { size: A4; margin: 10mm; }
 }
+
+/* ---------- The order form, the order's own page, and approvals ---------- */
+
+/* The seller's form is one column on purpose. A grid of boxes is quicker to
+   look at and slower to fill, and this is a page somebody fills in front of a
+   customer on the phone. */
+.ord-form { max-width: 640px; }
+.ord-form label.field em { font-style: normal; opacity: .65; }
+.ord-form textarea { min-height: 70px; }
+.ord-drop { padding: 26px 12px; font-size: 13.5px; }
+
+.ord-view { display: grid; grid-template-columns: 220px 1fr; gap: 22px; align-items: start; }
+.ord-pic img { width: 100%; border-radius: 10px; border: 1px solid var(--panel-line); }
+.ord-facts h2 { margin: 0 0 12px; font-size: 19px; }
+.ord-row { display: grid; grid-template-columns: 170px 1fr; gap: 10px; padding: 5px 0;
+  border-bottom: 1px solid var(--panel-line); }
+.ord-row span { font-size: 11px; color: var(--panel-muted); text-transform: uppercase;
+  letter-spacing: .6px; align-self: center; }
+.ord-row strong { font-weight: 600; }
+.ord-stamp { margin-top: 14px; opacity: .85; }
+@media (max-width: 720px) { .ord-view { grid-template-columns: 1fr; } }
+
+.ord-assign, .ord-approval, .ord-notes {
+  margin-top: 22px; padding: 16px 18px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+}
+.ord-assign h2, .ord-approval h2, .ord-notes h2, .ord-queue h2 {
+  margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--gold);
+}
+.ord-approval.a-waiting { border-left: 4px solid #C98A1E; }
+.ord-approval.a-sent_back { border-left: 4px solid #B23A3A; }
+.ord-approval.a-approved { border-left: 4px solid #3C8A52; }
+
+/* The approval queue, at the top of the orders list. */
+.ord-queue {
+  margin-bottom: 20px; padding: 14px 16px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+  border-left: 4px solid #C98A1E;
+}
+.ord-queue.ord-back { border-left-color: #B23A3A; }
+.ord-queue .q-count {
+  margin-left: 8px; font-size: 11px; border-radius: 999px; padding: 2px 8px;
+  background: color-mix(in srgb, var(--gold) 15%, transparent);
+}
+.ord-q-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+  padding: 9px 0; border-top: 1px solid var(--panel-line);
+}
+.ord-q-row .q-no { font-weight: 700; color: var(--gold); margin-right: 8px; }
+.ord-q-row .ev-meta { display: block; }
+.q-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q-back { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q-back input { flex: 1; min-width: 220px; }
+@media (max-width: 680px) { .ord-q-row { grid-template-columns: 1fr; } }
+
+/* The approval mark in the orders table, kept apart from the status column so
+   the two are never read as one thing. */
+.ord-mark { font-size: 12px; font-weight: 600; }
+.ord-mark.m-waiting { color: #8A5B06; }
+.ord-mark.m-sent_back { color: #B23A3A; }
+.ord-mark.m-approved { color: #3C8A52; }
+
+/* On the WhatsApp board. */
+.b-wait {
+  display: block; margin-top: 3px; font-size: 13px; font-weight: 700;
+  color: #8A4B06;
+}

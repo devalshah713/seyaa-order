@@ -89,6 +89,7 @@ import {
   stockKey,
   todayInput,
   type MemoKind,
+  type OrderApproval,
   type OrderComment,
   type OrderStatus,
   type Party,
@@ -164,6 +165,52 @@ export type Order = {
   comments: OrderComment[];
   createdAt: string;
   updatedAt?: string;
+
+  // --- What the seller writes on /orders/new -------------------------------
+  //
+  // Every one of these is optional on the type and required by the form,
+  // because orders taken before the form existed have none of them and must
+  // still read, list and go on the board. `productName` is still the one and
+  // only "what is being made": the form calls it that, and nothing was added
+  // beside it that means the same thing.
+  category?: string; // from the category list
+  // Deliberately free text, not the controlled lists the PD sheet uses. A
+  // seller is describing what the customer asked for, not filing it.
+  subCategory?: string;
+  subSubCategory?: string;
+  size?: string; // ring or inch size, "7 INCH", "US7"
+  diaShape?: string;
+  sieveSize?: string; // sieve or stone size, when they know it
+  stonePcs?: number; // approximate number of stones
+  instructions?: string;
+  // The reference picture. Either an uploaded image, held exactly as a PD
+  // sheet holds one, or a Drive link pasted instead — one of the two.
+  photoPath?: string;
+  photoPublicId?: string;
+  driveLink?: string;
+
+  // --- Stamped by the portal, never editable -------------------------------
+  // The account that entered the order. Taken from the session on the way in
+  // and never read from a request body.
+  enteredBy?: string;
+
+  // --- Approval ------------------------------------------------------------
+  //
+  // A separate fact from `status`, on purpose: an order waiting for its
+  // manager is not in production. Absent means approved, which is what every
+  // order saved before this existed already was.
+  approval?: OrderApproval;
+  // The manager the order is waiting on, taken from the seller's account when
+  // the order was entered. Held by id so renaming the account keeps the
+  // chain; the name is kept beside it so the screen can say who without
+  // reading the user list to draw a row.
+  approverId?: string;
+  approverName?: string;
+  sentBackReason?: string;
+
+  // --- Assigned by the owner afterwards, admin only ------------------------
+  mfg?: string;
+  designNo?: string;
 };
 
 export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt" | "comments">;
@@ -885,6 +932,16 @@ export async function listOrders(): Promise<Order[]> {
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
+// One order, for its own page. Reads the same way the list does, so an order
+// saved before notes or before the seller's fields existed opens rather than
+// breaking on a field it has not got.
+export async function getOrder(id: string): Promise<Order | null> {
+  const order = (await useSql())
+    ? await sqlGetOrder(id)
+    : (await readDB()).orders.find((o) => o.id === id) || null;
+  return order ? { ...order, comments: order.comments || [] } : null;
+}
+
 // Notes are only ever added. Editing an order does not touch them, so the
 // history of what was said about a piece survives any later correction.
 export async function addOrderComment(
@@ -913,6 +970,59 @@ export async function addOrderComment(
   return db.orders[i];
 }
 
+// Move an order along the approval chain, and write the trail in the same
+// save.
+//
+// The trail goes into the order's own notes rather than a second list of its
+// own: a note already carries who wrote it and the minute, it already reads
+// on the row, on the board and on the order's page, and the people who need
+// to see "sent back by Rahul: wrong size" are exactly the people already
+// reading the notes. Nothing had to be invented for it.
+export async function setOrderApproval(
+  id: string,
+  change: {
+    approval: OrderApproval;
+    approverId?: string;
+    approverName?: string;
+    sentBackReason?: string;
+  },
+  note: { text: string; by: string }
+): Promise<Order | null> {
+  const stamp: OrderComment = {
+    id: randomUUID(),
+    text: note.text,
+    at: new Date().toISOString(),
+    by: note.by,
+  };
+
+  const apply = (order: Order): Order => ({
+    ...order,
+    approval: change.approval,
+    approverId: change.approverId ?? order.approverId,
+    approverName: change.approverName ?? order.approverName,
+    // Cleared whenever the order is not sitting in "sent back", so a stale
+    // reason cannot read as the current one after it has been fixed.
+    sentBackReason: change.approval === "sent_back" ? change.sentBackReason || "" : "",
+    comments: [...(order.comments || []), stamp],
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (await useSql()) {
+    const order = await sqlGetOrder(id);
+    if (!order) return null;
+    const updated = apply(order);
+    await sqlPutOrder(updated);
+    return updated;
+  }
+
+  const db = await readDB();
+  const i = db.orders.findIndex((o) => o.id === id);
+  if (i === -1) return null;
+  db.orders[i] = apply(db.orders[i]);
+  await writeDB(db);
+  return db.orders[i];
+}
+
 // `firstNote` lets an order be created with its opening comment in one write,
 // so a note typed on the add form is saved atomically with the order itself
 // rather than as a second call that could fail on its own.
@@ -924,18 +1034,16 @@ export async function createOrder(
   const key = `O:${fy}`;
   const now = new Date().toISOString();
 
+  // The caller's fields first, then the ones the portal stamps — so a field
+  // added to an order next year arrives here without being listed again, and
+  // so nothing a caller passes can set the number, the moment or the notes.
   const build = (seq: number): Order => ({
+    ...input,
     id: orderIdFor(fy, seq),
     orderNo: orderNoFor(fy, seq),
     fy,
     seq,
-    customer: input.customer,
-    productName: input.productName,
-    goldColor: input.goldColor,
-    diamondCts: input.diamondCts,
-    pcs: input.pcs,
     stockNo: input.stockNo || undefined,
-    status: input.status,
     comments: firstNote?.text
       ? [{ id: randomUUID(), text: firstNote.text, at: now, by: firstNote.by }]
       : [],
@@ -968,6 +1076,16 @@ function orderWith(order: Order, patch: Partial<NewOrder>): Order {
     stockNo: (patch.stockNo ?? order.stockNo) || undefined,
     // An edit changes the order's details, never its notes.
     comments: order.comments || [],
+    // The number, the moment it was entered and who entered it are put back
+    // after the patch, not before it. The routes above already refuse to pass
+    // them, and this is the second lock: an edit cannot rewrite them however
+    // it is called.
+    id: order.id,
+    orderNo: order.orderNo,
+    fy: order.fy,
+    seq: order.seq,
+    createdAt: order.createdAt,
+    enteredBy: order.enteredBy,
     updatedAt: new Date().toISOString(),
   };
 }

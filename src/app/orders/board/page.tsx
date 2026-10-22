@@ -8,6 +8,7 @@ import { listOrders } from "@/lib/memoStore";
 import {
   COMPANY,
   OPEN_STATUSES,
+  approvalOf,
   ORDERS_PER_IMAGE,
   formatDate,
   imagePartCount,
@@ -83,6 +84,22 @@ export default async function BoardPage(props: {
                       <td className="bw-no">{o.orderNo.split("/").pop()}</td>
                       <td>
                         <strong>{o.productName}</strong>
+                        {/* An order still waiting on its manager is on the
+                            board, because the factory group should see it
+                            coming, but it is marked so nobody starts it. */}
+                        {approvalOf(o) === "waiting" && (
+                          <span className="b-wait">
+                            Waiting for approval{o.approverName ? ` from ${o.approverName}` : ""}
+                          </span>
+                        )}
+                        {approvalOf(o) === "sent_back" && (
+                          <span className="b-wait">Sent back, not approved</span>
+                        )}
+                        {(o.size || o.diaShape) && (
+                          <span className="b-cust">
+                            {[o.size, o.diaShape].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
                         {o.customer && <span className="b-cust">{o.customer}</span>}
                         {o.stockNo && <span className="b-stock">remake of {o.stockNo}</span>}
                         {/* Every note, newest first, so the current position
