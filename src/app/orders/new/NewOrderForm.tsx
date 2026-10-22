@@ -315,7 +315,9 @@ export default function NewOrderForm() {
         <fieldset className="group">
           <legend>Diamonds</legend>
           <div className="two">
-            <div className="field" id="o-shape">
+            {/* Focusable so the complaint can put the cursor on the ticks; not
+                in the tab order, because the ticks themselves are. */}
+            <div className="field" id="o-shape" tabIndex={-1}>
               <span>Diamond shape <em className="need">must be filled</em> <em>(tick every shape the design uses)</em></span>
               <div className="shape-grid">
                 {DIA_SHAPES.map((shape) => (

@@ -371,25 +371,25 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                         <input className="ed" value={draft.instructions}
                           onChange={(e) => setD({ instructions: e.target.value })} placeholder="Special instructions" />
                       </td>
-                      <td>
+                      <td data-label="Gold">
                         <input className="ed" list="gold-colors" value={draft.goldColor}
                           onChange={(e) => setD({ goldColor: e.target.value })} placeholder="Gold" />
                       </td>
-                      <td>
+                      <td data-label="Size and shape">
                         <input className="ed" value={draft.size}
                           onChange={(e) => setD({ size: e.target.value })} placeholder="Size" />
                         <div className="ev-meta">{o.diaShape || "shape not set"}</div>
                       </td>
-                      <td className="num">
+                      <td className="num" data-label="Cts">
                         <input className="ed num" value={draft.diamondCts} inputMode="decimal"
                           onChange={(e) => setD({ diamondCts: e.target.value })} />
                       </td>
-                      <td className="num">
+                      <td className="num" data-label="Pcs">
                         <input className="ed num" value={draft.pcs} inputMode="numeric"
                           onChange={(e) => setD({ pcs: e.target.value })} />
                       </td>
-                      <td className={`ord-mark m-${mark}`}>{approvalLabel(o)}</td>
-                      <td>
+                      <td className={`ord-mark m-${mark}`} data-label="Approval">{approvalLabel(o)}</td>
+                      <td data-label="Status">
                         <select value={draft.status}
                           onChange={(e) => setD({ status: e.target.value as OrderStatus })}>
                           {ORDER_STATUSES.map((s) => (
@@ -428,17 +428,21 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                           </div>
                         ))}
                       </td>
-                      <td>{o.goldColor || "—"}</td>
-                      <td>{[o.size, o.diaShape].filter(Boolean).join(" · ") || "—"}</td>
-                      <td className="num">{o.diamondCts ? o.diamondCts.toFixed(2) : "—"}</td>
-                      <td className="num">{o.pcs}</td>
-                      <td className={`ord-mark m-${mark}`}>
+                      <td className="c-detail" data-label="Gold">{o.goldColor || "—"}</td>
+                      <td className="c-detail" data-label="Size and shape">
+                        {[o.size, o.diaShape].filter(Boolean).join(" · ") || "—"}
+                      </td>
+                      <td className="num c-detail" data-label="Cts">
+                        {o.diamondCts ? o.diamondCts.toFixed(2) : "—"}
+                      </td>
+                      <td className="num c-detail" data-label="Pcs">{o.pcs}</td>
+                      <td className={`ord-mark m-${mark}`} data-label="Approval">
                         {approvalLabel(o)}
                         {mark === "waiting" && o.approverName && (
                           <div className="ev-meta">from {o.approverName}</div>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <select value={o.status}
                           onChange={(e) => setStatus(o, e.target.value as OrderStatus)}>
                           {ORDER_STATUSES.map((s) => (

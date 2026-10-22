@@ -41,6 +41,14 @@ export default function TopBar({ user }: Props) {
       <Link href="/" className="brand" style={{ textDecoration: "none" }}>
         {COMPANY.name}
       </Link>
+      {/* On a phone the menu holds fifteen links, and a seller only ever wants
+          one of them. This shortcut sits in the bar itself so Orders is one
+          tap away; on a wide screen it is hidden and the bar is as it was. */}
+      {user && can("orders") && (
+        <Link href="/orders" className={`nav-quick${on("/orders") ? " active" : ""}`}>
+          Orders
+        </Link>
+      )}
       {user && (
         <button
           type="button"

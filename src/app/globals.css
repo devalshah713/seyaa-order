@@ -918,8 +918,9 @@ table.pieces-table td:nth-child(2) { width: 170px; }
        that is not the one that prints.
    ========================================================================== */
 
-/* The menu button only exists on small screens. */
+/* The menu button, and the shortcut beside it, only exist on small screens. */
 .nav-toggle { display: none; }
+.nav-quick { display: none; }
 /* Wide screens lay the tail out as if the wrapper were not there at all. */
 .nav-tail { display: contents; }
 
@@ -2267,7 +2268,17 @@ table.ch-table tbody tr { cursor: default; }
   padding: 5px 2px;
   cursor: pointer;
 }
-.shape-opt input { cursor: pointer; }
+/* Checkboxes are caught by the width:100% every other box wants, which stretched
+   each tick across its column and pushed the shape's name to the far right. */
+.shape-opt input { cursor: pointer; width: auto; flex: none; }
+
+/* The shapes sit in a div rather than a label, because the ticks inside carry
+   their own labels. Its heading was therefore missing the one rule that makes
+   every other heading on the form small and grey. */
+.ord-form .field > span {
+  display: block; font-size: 11px; color: var(--panel-muted);
+  margin-bottom: 4px; letter-spacing: .3px;
+}
 
 /* What the form will refuse to save without. The optional boxes already said
    so; the compulsory ones said nothing at all, which read as if everything
@@ -2279,4 +2290,163 @@ table.ch-table tbody tr { cursor: default; }
   letter-spacing: .02em;
   color: var(--gold);
   opacity: .75;
+}
+
+/* The picture, once it is on. The confirmation beside the thumbnail is for the
+   phone, where a 72px square is easy to miss and the upload is compulsory. */
+.ord-prev { align-items: flex-start; }
+.ord-prev .prev-side { display: flex; flex-direction: column; gap: 8px; }
+.ord-prev .prev-btns { display: flex; gap: 8px; }
+.pic-done { margin: 0; font-size: 12.5px; font-weight: 600; color: #3C8A52; }
+.photo-drop.is-busy { cursor: default; opacity: .7; border-style: solid; }
+.photo-drop:focus-visible { outline: 2px solid var(--field-focus); outline-offset: 2px; }
+
+/* ============================================================================
+   The order screens on a phone
+   ----------------------------------------------------------------------------
+   Every seller takes orders standing up, on a phone, and nobody takes one on a
+   laptop. The office still runs the memo, PD, jangad, stock book and QC screens
+   on PCs, so all of this is inside the phone width and nothing above it moves.
+
+   Three things it fixes:
+
+     * the orders list stops being a nine-column table and reads as one card
+       per order, because the columns were sliding off the right-hand side;
+     * anything a thumb has to hit is at least 44px tall — the shape ticks, the
+       status dropdowns, the row buttons and the menu button were all under it;
+     * Approve and Send back, and the reason box that goes with them, run the
+       full width so they can be worked one-handed.
+   ========================================================================== */
+@media (max-width: 860px) {
+  /* ---- One tap to Orders, without opening the menu ---- */
+  .nav-quick {
+    display: inline-flex; align-items: center; margin-left: auto;
+    min-height: 44px; padding: 0 14px; border-radius: 9px;
+    border: 1px solid var(--panel-line); background: var(--panel);
+    color: var(--panel-ink); text-decoration: none; font-size: 14px; font-weight: 600;
+  }
+  .nav-quick.active { color: var(--gold); border-color: var(--gold-line); }
+  /* The menu button no longer pushes itself to the right: the shortcut does. */
+  .nav-quick + .nav-toggle { margin-left: 8px; width: 44px; height: 44px; }
+  .nav-toggle { width: 44px; height: 44px; }
+  /* A column means a column. Left to wrap, a long menu folded itself into two
+     and put Users and Backups halfway down beside QC. */
+  .topbar nav.open { flex-wrap: nowrap; }
+  .topbar nav.open a { min-height: 44px; display: flex; align-items: center; }
+  .signout { min-height: 44px; padding: 8px 14px; font-size: 14px; }
+
+  /* ---- The search strip above the list ---- */
+  .sheet-controls { gap: 10px; }
+  .sheet-controls .search { flex: 1 1 100%; margin-bottom: 0; }
+  .sheet-toggle { flex: 1 1 100%; min-height: 44px; font-size: 15px; gap: 10px; }
+  .sheet-toggle input { width: 22px; height: 22px; }
+
+  /* ---- The orders list, as cards ---- */
+  /* Undone first: the shared rule turns every history table into a sideways
+     scroller with its first column pinned. That is right for a report and
+     wrong here, where a row is a thing you act on. */
+  table.history.orders-table,
+  .orders-table thead, .orders-table tbody, .orders-table tr, .orders-table td {
+    display: block; width: auto; white-space: normal; overflow-x: visible;
+  }
+  .orders-table thead { display: none; }
+  .orders-table { border: 0; background: transparent; }
+  .orders-table tbody tr {
+    border: 1px solid var(--panel-line); border-radius: 10px;
+    background: var(--panel); padding: 12px 14px; margin-bottom: 10px;
+  }
+  .orders-table td {
+    border: 0; padding: 0 0 8px; position: static;
+    box-shadow: none; background: transparent;
+  }
+  .orders-table tbody tr td:last-child { padding-bottom: 0; }
+  .orders-table td[data-label]::before {
+    content: attr(data-label) ": ";
+    font-size: 11px; color: var(--panel-muted); letter-spacing: .3px;
+  }
+  /* The card leads with the order number, the stamp and who took it. */
+  .orders-table td.memono { padding-bottom: 6px; }
+  .orders-table td.memono a {
+    display: block; font-size: 16px; font-weight: 700; color: var(--gold);
+    min-height: 32px;
+  }
+  /* The stamp and the name run together on one line under it, rather than
+     taking two lines of a card that is already long. */
+  .orders-table td.memono .ev-meta { display: inline; margin-right: 8px; }
+  /* Gold, size, carats and pieces are on the order's own page, one tap away.
+     Shown here they are four more lines between the seller and the buttons. */
+  .orders-table tr:not(.editing) td.c-detail { display: none; }
+  .orders-table td.ord-mark { font-size: 13px; }
+  .orders-table td.ord-mark::before { font-weight: 400; }
+  .orders-table td.num { text-align: left; }
+  .orders-table select { min-height: 44px; }
+  .orders-table td.row-actions {
+    display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px;
+  }
+  .orders-table .rowbtn { flex: 1 1 auto; min-height: 44px; font-size: 14px; }
+  .orders-table input.ed { min-height: 44px; margin-bottom: 8px; }
+  .orders-table input.ed.num { text-align: left; }
+  /* The note strip spans the whole table on a wide screen; as a card it is
+     simply the last block of the order it belongs to. */
+  .orders-table tr.notes-row { padding: 12px 14px; }
+  .note-add { flex-direction: column; align-items: stretch; }
+  .note-add .btn { width: 100%; }
+
+  /* ---- The approval queue ---- */
+  .ord-queue { padding: 12px 14px; }
+  .ord-q-row .q-no { display: block; margin: 0 0 2px; font-size: 16px; }
+  .q-actions { gap: 10px; }
+  /* Approve and Send back side by side, each half the width, so either is
+     under the thumb without looking. */
+  .q-actions .btn { flex: 1 1 140px; min-height: 48px; }
+  .q-back { flex-direction: column; align-items: stretch; }
+  .q-back input { min-width: 0; min-height: 48px; }
+  .q-back .btn { width: 100%; min-height: 48px; }
+
+  /* ---- The order's own page ---- */
+  /* A 170px label column left about a hundred pixels for the answer, so the
+     special instructions came down in a ribbon three words wide. */
+  .ord-row { grid-template-columns: 1fr; gap: 2px; padding: 8px 0; }
+  .ord-row span { align-self: start; }
+  .ord-row strong { font-size: 15px; }
+  .ord-assign, .ord-approval, .ord-notes { padding: 14px 15px; }
+  .ord-assign .btn { width: 100%; min-height: 48px; }
+  .ord-assign input, .ord-assign select { min-height: 48px; }
+
+  /* ---- The order form ---- */
+  .ord-form { max-width: none; }
+  /* Clear of the bar that stays stuck to the top, so the box the complaint
+     names is never sitting underneath it. */
+  .ord-form .field, .ord-form input, .ord-form select, .ord-form textarea,
+  .ord-form .photo-drop { scroll-margin-top: 90px; scroll-margin-bottom: 90px; }
+  .ord-form input, .ord-form select, .ord-form textarea { min-height: 48px; }
+  .ord-form textarea { min-height: 96px; }
+  .ord-form .group > legend { font-size: 11.5px; }
+  .ord-form label.field > span, .ord-form .field > span { font-size: 12.5px; }
+  .need { font-size: 12px; opacity: .9; }
+
+  /* The picture: a real target, and a real thumbnail once it is on. */
+  .ord-drop { padding: 30px 14px; font-size: 15px; min-height: 96px;
+    display: flex; align-items: center; justify-content: center; }
+  .ord-prev { flex-direction: column; align-items: stretch; gap: 12px; }
+  .ord-prev img { width: 100%; height: 190px; }
+  .ord-prev .prev-btns .btn { flex: 1; min-height: 48px; }
+  .pic-done { font-size: 15px; }
+
+  /* The ticks: two to a row, each one a box a thumb can land on anywhere. */
+  .shape-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .shape-opt {
+    min-height: 48px; padding: 8px 10px; gap: 10px; font-size: 15px;
+    border: 1px solid var(--field-line); border-radius: 9px; background: var(--field-bg);
+  }
+  .shape-opt input { width: 22px; height: 22px; }
+  .shape-opt:has(input:checked) {
+    border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent);
+    font-weight: 600;
+  }
+
+  /* The sign-in card on a phone is the card and nothing else. */
+  .auth-wrap { padding: 18px 14px; }
+  .auth-card { padding: 26px 18px 22px; }
+  .auth-submit { min-height: 48px; }
 }
