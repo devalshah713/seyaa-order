@@ -90,6 +90,7 @@ import {
   todayInput,
   type MemoKind,
   type OrderApproval,
+  type OrderApprovalStage,
   type OrderComment,
   type OrderStatus,
   type Party,
@@ -202,10 +203,18 @@ export type Order = {
   // manager is not in production. Absent means approved, which is what every
   // order saved before this existed already was.
   approval?: OrderApproval;
+  // Which of the two decisions it is sitting on: the seller's manager, or the
+  // owner. Absent on orders saved before the owner's approval existed, and
+  // read as the manager's stage, which is the only one they had.
+  stage?: OrderApprovalStage;
   // The manager the order is waiting on, taken from the seller's account when
   // the order was entered. Held by id so renaming the account keeps the
   // chain; the name is kept beside it so the screen can say who without
   // reading the user list to draw a row.
+  //
+  // Cleared when the order reaches the owner's stage: that stage is any admin,
+  // not a named person, and a leftover name there would read as the one being
+  // waited for.
   approverId?: string;
   approverName?: string;
   sentBackReason?: string;
@@ -213,6 +222,14 @@ export type Order = {
   // --- Assigned by the owner afterwards, admin only ------------------------
   mfg?: string;
   designNo?: string;
+
+  // --- The PD sheet started from this order --------------------------------
+  //
+  // Written once, by the save that creates the sheet. From then on the sheet
+  // is its own record: nothing is copied back and forth, and this is only the
+  // way from one to the other.
+  pdId?: string;
+  pdNo?: string;
 };
 
 export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt" | "comments">;
@@ -984,6 +1001,10 @@ export async function setOrderApproval(
   id: string,
   change: {
     approval: OrderApproval;
+    // Which decision the order sits on after this change. Always passed by the
+    // route, including on the way to "approved", so an order that has been
+    // signed off does not keep a stage that is no longer outstanding.
+    stage?: OrderApprovalStage;
     approverId?: string;
     approverName?: string;
     sentBackReason?: string;
@@ -1000,6 +1021,7 @@ export async function setOrderApproval(
   const apply = (order: Order): Order => ({
     ...order,
     approval: change.approval,
+    stage: change.stage ?? order.stage,
     approverId: change.approverId ?? order.approverId,
     approverName: change.approverName ?? order.approverName,
     // Cleared whenever the order is not sitting in "sent back", so a stale

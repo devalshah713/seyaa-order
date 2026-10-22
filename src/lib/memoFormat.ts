@@ -404,8 +404,9 @@ export const GOLD_DETAILS: string[] = [
 // manager is not "In Production" — it is not anything yet — and folding the
 // two together would make the board lie about what the factory is working on.
 //
-// An order from a seller with no manager is approved the moment it is entered,
-// which is how every order worked before this existed.
+// Every order now ends with the owner's own say-so, so no order is approved the
+// moment it is entered: a seller with a manager waits for that manager and then
+// for an admin, and a seller without one waits for an admin straight away.
 export type OrderApproval = "approved" | "waiting" | "sent_back";
 
 export const APPROVAL_LABELS: Record<OrderApproval, string> = {
@@ -422,6 +423,44 @@ export function approvalOf(o: { approval?: OrderApproval }): OrderApproval {
 
 export function approvalLabel(o: { approval?: OrderApproval }): string {
   return APPROVAL_LABELS[approvalOf(o)];
+}
+
+// --- The two stages ---------------------------------------------------------
+//
+// There are two decisions, not one, and the screen has to say which of them is
+// outstanding. `manager` is the seller's own manager; `owner` is any admin,
+// which is the last word.
+//
+// Kept beside `approval` rather than folded into it, so `approvalOf` still
+// answers the only question most of the portal asks — may this go ahead — and
+// nothing that reads it had to learn a second vocabulary.
+export type OrderApprovalStage = "manager" | "owner";
+
+type Staged = { approval?: OrderApproval; stage?: OrderApprovalStage };
+
+// Which decision an order is sitting on. An order marked waiting before stages
+// existed was waiting for its manager, which is what it is read as.
+export function stageOf(o: Staged): OrderApprovalStage {
+  return o.stage === "owner" ? "owner" : "manager";
+}
+
+// An admin approving at the manager's stage does not thereby give the final
+// approval, so this is asked of the stage and never of the person.
+export function needsOwner(o: Staged): boolean {
+  return approvalOf(o) === "waiting" && stageOf(o) === "owner";
+}
+
+// The one line a screen prints about where an order stands, by name where there
+// is a name. Written here so the list, the order's page and the WhatsApp board
+// cannot word it three different ways.
+export function approvalLine(o: Staged & { approverName?: string }): string {
+  const mark = approvalOf(o);
+  if (mark === "approved") return "Approved";
+  if (mark === "sent_back") return "Sent back";
+  if (stageOf(o) === "owner") return "Waiting for the owner's approval";
+  return o.approverName
+    ? `Waiting for approval from ${o.approverName}`
+    : "Waiting for approval";
 }
 
 // A note against an order — "customer wants 18 inch", "delayed, stones short".

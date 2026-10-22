@@ -6,8 +6,10 @@ import {
   GOLD_COLORS,
   ORDER_STATUSES,
   approvalLabel,
+  approvalLine,
   approvalOf,
   formatDate,
+  stageOf,
   type OrderStatus,
 } from "@/lib/memoFormat";
 import type { Order } from "@/lib/memoStore";
@@ -83,19 +85,21 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
   const [reason, setReason] = useState("");
   const [busyApproval, setBusyApproval] = useState("");
 
-  // Nobody approves their own order, whatever the account says. An admin
-  // stands in for any manager.
+  // Nobody approves their own order at either stage, an admin's own included.
+  // An admin stands in for any manager, and the owner's stage is admins only.
   const canApprove = (o: Order) =>
     approvalOf(o) === "waiting" &&
     o.enteredBy !== me.username &&
-    (me.isAdmin || o.approverId === me.uid);
+    (stageOf(o) === "owner" ? me.isAdmin : me.isAdmin || o.approverId === me.uid);
 
-  // What the owner needs: everything waiting, under every manager. What a
-  // manager needs: the ones waiting on them.
+  // What the owner needs: everything waiting, at either stage, under every
+  // manager. What a manager needs: the ones waiting on them.
   const waiting = useMemo(
     () =>
       orders.filter(
-        (o) => approvalOf(o) === "waiting" && (me.isAdmin || o.approverId === me.uid)
+        (o) =>
+          approvalOf(o) === "waiting" &&
+          (me.isAdmin || (stageOf(o) === "manager" && o.approverId === me.uid))
       ),
     [orders, me]
   );
@@ -115,7 +119,8 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
       return [
         o.orderNo, o.customer, o.productName, o.goldColor, o.stockNo || "",
         o.category || "", o.subCategory || "", o.size || "", o.diaShape || "",
-        o.designNo || "", o.mfg || "", o.enteredBy || "", approvalLabel(o),
+        o.designNo || "", o.mfg || "", o.enteredBy || "", approvalLine(o),
+        o.pdNo || "",
       ].join(" ").toLowerCase().includes(needle);
     });
   }, [orders, q, showDelivered]);
@@ -235,9 +240,11 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                   {o.size ? ` · ${o.size}` : ""} · entered by {o.enteredBy || "unknown"} on{" "}
                   {stampOf(o)}
                 </span>
-                {me.isAdmin && o.approverName && (
-                  <span className="ev-meta">Waiting for {o.approverName}</span>
-                )}
+                {/* Which of the two signatures this one is sitting on, by name
+                    where there is a name. Shown to everybody in the queue: a
+                    manager has to know when his part is done and the order has
+                    moved on. */}
+                <span className="ev-meta">{approvalLine(o)}</span>
               </div>
               <div className="q-actions">
                 {canApprove(o) ? (
@@ -261,7 +268,7 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                   <span className="hint">
                     {o.enteredBy === me.username
                       ? "You entered this one, so somebody else approves it."
-                      : `Waiting for ${o.approverName || "a manager"}.`}
+                      : `${approvalLine(o)}.`}
                   </span>
                 )}
               </div>
@@ -438,9 +445,14 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                       <td className="num c-detail" data-label="Pcs">{o.pcs}</td>
                       <td className={`ord-mark m-${mark}`} data-label="Approval">
                         {approvalLabel(o)}
-                        {mark === "waiting" && o.approverName && (
-                          <div className="ev-meta">from {o.approverName}</div>
+                        {mark === "waiting" && (
+                          <div className="ev-meta">
+                            {stageOf(o) === "owner"
+                              ? "the owner"
+                              : `from ${o.approverName || "a manager"}`}
+                          </div>
                         )}
+                        {o.pdNo && <div className="ev-meta">PD {o.pdNo}</div>}
                       </td>
                       <td data-label="Status">
                         <select value={o.status}

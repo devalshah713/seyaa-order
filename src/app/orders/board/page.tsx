@@ -8,6 +8,7 @@ import { listOrders } from "@/lib/memoStore";
 import {
   COMPANY,
   OPEN_STATUSES,
+  approvalLine,
   approvalOf,
   ORDERS_PER_IMAGE,
   formatDate,
@@ -88,9 +89,7 @@ export default async function BoardPage(props: {
                             board, because the factory group should see it
                             coming, but it is marked so nobody starts it. */}
                         {approvalOf(o) === "waiting" && (
-                          <span className="b-wait">
-                            Waiting for approval{o.approverName ? ` from ${o.approverName}` : ""}
-                          </span>
+                          <span className="b-wait">{approvalLine(o)}</span>
                         )}
                         {approvalOf(o) === "sent_back" && (
                           <span className="b-wait">Sent back, not approved</span>

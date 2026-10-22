@@ -136,6 +136,15 @@ export type PdSheet = {
   caratCode?: string;
   pointerRange?: string;
 
+  // The order this sheet was started from, when it was started from one.
+  //
+  // Deliberately not part of NewPdSheet: it is written once, by the save that
+  // creates the sheet, and an edit cannot carry it. An edit spreads the patch
+  // over the sheet as it stands, so a field the browser does not send would
+  // otherwise be blanked the first time somebody corrected a size.
+  fromOrderId?: string;
+  fromOrderNo?: string;
+
   // Who made the sheet and who last touched it. Optional because sheets
   // written before this was recorded have nobody's name on them, and inventing
   // one would be worse than leaving it blank.
@@ -153,7 +162,7 @@ export type PdSheet = {
 export type NewPdSheet = Omit<
   PdSheet,
   "id" | "pdNo" | "fy" | "seq" | "createdAt" | "updatedAt" | "pieces"
-  | "createdBy" | "updatedBy"
+  | "createdBy" | "updatedBy" | "fromOrderId" | "fromOrderNo"
 >;
 
 export type PdDB = { counters: Record<string, number>; sheets: PdSheet[] };
@@ -239,7 +248,14 @@ async function writeDB(db: PdDB): Promise<void> {
   await writeDoc(DB_PATH, db);
 }
 
-export async function createPdSheet(input: NewPdSheet, by = ""): Promise<PdSheet> {
+// `fromOrder` is the order the sheet was started from, when there is one. It is
+// given here rather than in the patch because it is written once and never
+// edited; see the comment on PdSheet.fromOrderId.
+export async function createPdSheet(
+  input: NewPdSheet,
+  by = "",
+  fromOrder?: { id: string; orderNo: string }
+): Promise<PdSheet> {
   const date = input.assignedDate || todayInput();
   const fy = fyFromInput(date);
   const now = new Date().toISOString();
@@ -254,6 +270,8 @@ export async function createPdSheet(input: NewPdSheet, by = ""): Promise<PdSheet
     fy,
     seq: 0,
     pieces: reconcilePieces(input.sku, []),
+    fromOrderId: fromOrder?.id || undefined,
+    fromOrderNo: fromOrder?.orderNo || undefined,
     createdBy: by || undefined,
     updatedBy: by || undefined,
     createdAt: now,

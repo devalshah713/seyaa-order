@@ -7,12 +7,18 @@
 // answers back.
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { APPROVAL_LABELS, type OrderApproval } from "@/lib/memoFormat";
+import {
+  APPROVAL_LABELS,
+  approvalLine,
+  type OrderApproval,
+  type OrderApprovalStage,
+} from "@/lib/memoFormat";
 import { readReply } from "@/lib/readReply";
 
 export default function OrderApprovalPanel({
   id,
   approval,
+  stage,
   approverName,
   sentBackReason,
   canApprove,
@@ -20,6 +26,7 @@ export default function OrderApprovalPanel({
 }: {
   id: string;
   approval: OrderApproval;
+  stage: OrderApprovalStage;
   approverName: string;
   sentBackReason: string;
   canApprove: boolean;
@@ -54,20 +61,29 @@ export default function OrderApprovalPanel({
   return (
     <div className={`ord-approval a-${approval}`}>
       <h2>{APPROVAL_LABELS[approval]}</h2>
+      {/* Every order goes through two signatures, so the panel says which one
+          is outstanding rather than only that something is. */}
       {approval === "waiting" && (
         <p className="hint">
-          Waiting for approval{approverName ? ` from ${approverName}` : ""}.
+          {approvalLine({ approval, stage, approverName })}.
           <br />
+          {stage === "manager" ? (
+            <>
+              After that it needs the owner&rsquo;s approval as well.
+              <br />
+            </>
+          ) : null}
           It has its number and it is saved in full. It does not go ahead until
-          it is approved.
+          both approvals are in.
         </p>
       )}
       {approval === "sent_back" && (
         <p className="hint">
-          Sent back{approverName ? ` by ${approverName}` : ""}.
+          Sent back{stage === "owner" ? " by the owner" : approverName ? ` by ${approverName}` : ""}.
           {sentBackReason ? <> Reason: <b>{sentBackReason}</b></> : null}
           <br />
-          Correct it, then send it in again.
+          Correct it, then send it in again. It starts the approvals again from
+          the beginning.
         </p>
       )}
       {approval === "approved" && <p className="hint">This order can go ahead.</p>}
@@ -75,7 +91,7 @@ export default function OrderApprovalPanel({
       {canApprove && (
         <div className="q-actions">
           <button className="btn btn-primary" disabled={busy} onClick={() => act("approve")}>
-            Approve
+            {stage === "owner" ? "Approve, final" : "Approve"}
           </button>
           <button className="btn" disabled={busy} onClick={() => setAsking(!asking)}>
             Send back

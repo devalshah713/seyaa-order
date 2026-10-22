@@ -47,28 +47,55 @@ const BLANK: Omit<PdInitial, "id" | "pdNo"> = {
   pdMerchandiser: "", remarks: "",
 };
 
-export default function PdForm({ initial }: { initial?: PdInitial }) {
+// Prefilling and editing are two different things.
+//
+// `initial` is a sheet that exists, and it is what puts this form into edit
+// mode: Save becomes a patch against that sheet's number. `prefill` is a new
+// sheet that arrives with some boxes already filled in — from an approved
+// order — and there is nothing to patch, so it must not be handed in through
+// `initial` or the form would try to update a sheet that does not exist.
+export default function PdForm({
+  initial,
+  prefill,
+  fromOrder,
+}: {
+  initial?: PdInitial;
+  prefill?: Partial<Omit<PdInitial, "id" | "pdNo">>;
+  // The order this new sheet was started from. Sent with the save so the two
+  // records can point at each other afterwards.
+  fromOrder?: { id: string; orderNo: string };
+}) {
   const router = useRouter();
   const editing = !!initial;
 
+  const { diaLines: startLines, ...startFields } = prefill || {};
+
   const [f, setF] = useState({
     ...BLANK,
+    ...startFields,
     ...(initial || {}),
     assignedDate: initial?.assignedDate || todayInput(),
   });
   // The design number is written in three boxes — the design, then the run it
   // is being developed in — and joined back into the single number that gets
   // stored and printed.
-  const [sku, setSku] = useState(() => splitDesignNo(initial?.sku || ""));
+  const [sku, setSku] = useState(() => splitDesignNo(initial?.sku || prefill?.sku || ""));
   const setSkuPart = (k: keyof typeof sku, v: string) => setSku((s) => ({ ...s, [k]: v }));
   // Set below, once the lists are in and the codes are known.
   let designNo = joinDesignNo(sku.base, sku.from, sku.to);
 
   const [pdNo, setPdNo] = useState(initial?.pdNo || "PD/…");
   const [diaLines, setDiaLines] = useState<DiaLine[]>(
-    initial?.diaLines?.length ? initial.diaLines : [{ ...BLANK_DIA_LINE }]
+    initial?.diaLines?.length
+      ? initial.diaLines
+      : startLines?.length
+        ? startLines
+        : [{ ...BLANK_DIA_LINE }]
   );
   const [saving, setSaving] = useState(false);
+  // Set when the sheet was saved but this page could not move on to it. The
+  // sheet exists, so saving again would make a second one.
+  const [stopped, setStopped] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -207,10 +234,22 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...f, sku: designNo, diaShape, diaWeightPointers: diaText, diaLines,
+          // Only on a new sheet started from an order. An edit never carries
+          // it: the order it came from is written once and does not change.
+          fromOrderId: editing ? undefined : fromOrder?.id,
         }),
       });
       const data = await readReply(res, "Could not save the PD sheet.");
-      const sheet = data.sheet as { id?: string } | undefined;
+      const sheet = data.sheet as { id?: string; pdNo?: string } | undefined;
+      // The sheet saved and something after it did not — marking the order
+      // with its number. Said plainly, and this page stops here rather than
+      // letting a second sheet be saved for the same design.
+      if (sheet?.id && typeof data.error === "string" && data.error) {
+        setStopped(true);
+        setError(`${data.error} Open PD Sheets to find it.`);
+        setSaving(false);
+        return;
+      }
       if (!sheet?.id) {
         throw new Error(
           "The PD sheet was saved, but this page could not open it. " +
@@ -238,6 +277,14 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
   return (
     <div className="app">
       <aside className="controls no-print">
+        {fromOrder && !editing && (
+          <p className="pd-from-order">
+            Started from order <b>{fromOrder.orderNo}</b>.
+            <br />
+            The boxes below are filled in from it. Check them, change anything
+            that is wrong, then save.
+          </p>
+        )}
         <fieldset className="group">
           <legend>Design Photo</legend>
           {f.photoPath ? (
@@ -468,8 +515,12 @@ export default function PdForm({ initial }: { initial?: PdInitial }) {
         </fieldset>
 
         <div className="actions">
-          <button className="btn btn-primary" onClick={save} disabled={saving || uploading}>
-            {saving ? "Saving…" : editing ? "Update PD Sheet" : "Save PD Sheet"}
+          <button
+            className="btn btn-primary"
+            onClick={save}
+            disabled={saving || uploading || stopped}
+          >
+            {saving ? "Saving…" : stopped ? "Saved" : editing ? "Update PD Sheet" : "Save PD Sheet"}
           </button>
         </div>
         {error && <p className="save-error">{error}</p>}

@@ -2205,14 +2205,27 @@ table.ch-table tbody tr { cursor: default; }
 .ord-stamp { margin-top: 14px; opacity: .85; }
 @media (max-width: 720px) { .ord-view { grid-template-columns: 1fr; } }
 
-.ord-assign, .ord-approval, .ord-notes {
+.ord-assign, .ord-approval, .ord-notes, .ord-msg, .ord-pd {
   margin-top: 22px; padding: 16px 18px; border-radius: 10px;
   background: var(--panel); border: 1px solid var(--panel-line);
 }
-.ord-assign h2, .ord-approval h2, .ord-notes h2, .ord-queue h2 {
+.ord-assign h2, .ord-approval h2, .ord-notes h2, .ord-queue h2,
+.ord-msg h2, .ord-pd h2 {
   margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
   color: var(--gold);
 }
+/* The drafted message and the way to the PD sheet. Both only appear once the
+   order is approved, so they read as what happens next rather than as more of
+   the record. */
+.ord-msg .rc-copy { margin: 0; }
+.ord-pd .hint { margin: 0 0 10px; }
+/* Said at the top of a PD sheet that was started from an order. */
+.pd-from-order {
+  margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+  border-left: 3px solid var(--gold-soft);
+}
+
 .ord-approval.a-waiting { border-left: 4px solid #C98A1E; }
 .ord-approval.a-sent_back { border-left: 4px solid #B23A3A; }
 .ord-approval.a-approved { border-left: 4px solid #3C8A52; }
@@ -2409,9 +2422,15 @@ table.ch-table tbody tr { cursor: default; }
   .ord-row { grid-template-columns: 1fr; gap: 2px; padding: 8px 0; }
   .ord-row span { align-self: start; }
   .ord-row strong { font-size: 15px; }
-  .ord-assign, .ord-approval, .ord-notes { padding: 14px 15px; }
+  .ord-assign, .ord-approval, .ord-notes, .ord-msg, .ord-pd { padding: 14px 15px; }
   .ord-assign .btn { width: 100%; min-height: 48px; }
   .ord-assign input, .ord-assign select { min-height: 48px; }
+  /* The message is sent from a phone, so Copy text is a full-width button
+     above the text rather than a small one beside its heading. */
+  .ord-msg .rc-copy-head { flex-direction: column; align-items: stretch; gap: 8px; }
+  .ord-msg .rc-copy-head .btn { width: 100%; min-height: 48px; font-size: 15px; }
+  .ord-msg .rc-copy pre { font-size: 14px; }
+  .ord-pd .btn { width: 100%; min-height: 48px; }
 
   /* ---- The order form ---- */
   .ord-form { max-width: none; }

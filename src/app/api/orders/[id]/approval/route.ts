@@ -1,11 +1,17 @@
 // Approving an order, sending it back, and sending it in again.
 //
+// Two decisions, in order: the seller's manager if they have one, and then an
+// admin, which is the last word. Approving at the manager's stage is not the
+// final approval even when an admin is the one who did it — they are two
+// decisions about two different things, and the second one is the owner's.
+//
 // Who may do what is decided here and nowhere else. The screens hide the
 // buttons from people who cannot use them, which is a courtesy; this is the
 // rule.
 import { NextRequest, NextResponse } from "next/server";
 import { currentSession } from "@/lib/currentUser";
 import { getOrder, setOrderApproval } from "@/lib/memoStore";
+import { stageOf } from "@/lib/memoFormat";
 import { managerOf } from "@/lib/userStore";
 
 export const dynamic = "force-dynamic";
@@ -65,34 +71,50 @@ export async function POST(
       return NextResponse.json({ error: msg(err) }, { status: 503 });
     }
     const waitingOn = manager || { id: order.approverId || "", username: order.approverName || "" };
+    // A send back at either stage starts the chain from the beginning, so a
+    // corrected order goes to its manager again and only then to the owner.
+    // Without a manager it starts at the owner's stage, because every order
+    // now needs that approval.
     return run(setOrderApproval(
       params.id,
       waitingOn.id
         ? {
             approval: "waiting",
+            stage: "manager",
             approverId: waitingOn.id,
             approverName: waitingOn.username,
           }
-        : { approval: "approved" },
+        : { approval: "waiting", stage: "owner", approverId: "", approverName: "" },
       {
         text: waitingOn.id
           ? `Corrected and sent in again. Waiting for approval from ${waitingOn.username}.`
-          : "Corrected and sent in again. No manager to approve it, so it goes ahead.",
+          : "Corrected and sent in again. Waiting for the owner's approval.",
         by: session.username,
       }
     ));
   }
 
-  // Everything else is the manager's move. An admin can always stand in; the
-  // seller never can, even if somebody has set them as their own manager by
-  // mistake.
-  if (isTheSeller && !isAdmin) {
+  // Nobody signs off their own order, at either stage. An admin's own order is
+  // no different: it waits for a second admin.
+  if (isTheSeller) {
     return NextResponse.json(
-      { error: "You cannot approve your own order." },
+      { error: "You cannot approve your own order. Somebody else has to." },
       { status: 403 }
     );
   }
-  if (!isAdmin && !isTheManager) {
+
+  // Which of the two decisions is outstanding settles who may make it. The
+  // owner's stage is any admin, not a named person, so there is nothing to
+  // compare a manager's id against.
+  const stage = stageOf(order);
+  if (stage === "owner") {
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Only an admin can give the final approval." },
+        { status: 403 }
+      );
+    }
+  } else if (!isAdmin && !isTheManager) {
     return NextResponse.json(
       { error: "Only this order's manager, or an admin, can approve it." },
       { status: 403 }
@@ -103,10 +125,20 @@ export async function POST(
     if (order.approval !== "waiting" && order.approval !== "sent_back") {
       return NextResponse.json({ error: "This order is already approved." }, { status: 400 });
     }
+    // The manager's stage hands the order on; it does not let it go ahead.
+    // The name it was waiting on is cleared with it, so a leftover name cannot
+    // read as the person still being waited for.
+    if (stage === "manager") {
+      return run(setOrderApproval(
+        params.id,
+        { approval: "waiting", stage: "owner", approverId: "", approverName: "" },
+        { text: "Approved. Now waiting for the owner's approval.", by: session.username }
+      ));
+    }
     return run(setOrderApproval(
       params.id,
-      { approval: "approved" },
-      { text: "Approved.", by: session.username }
+      { approval: "approved", stage: "owner" },
+      { text: "Approved. The order can go ahead.", by: session.username }
     ));
   }
 
@@ -117,6 +149,8 @@ export async function POST(
         { status: 400 }
       );
     }
+    // The stage is left as it was, so the order says which decision sent it
+    // back. The seller sending it in again is what restarts the chain.
     return run(setOrderApproval(
       params.id,
       { approval: "sent_back", sentBackReason: reason },

@@ -2,10 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrder, listPartyNames } from "@/lib/memoStore";
 import { currentSession } from "@/lib/currentUser";
-import { approvalLabel, approvalOf, formatDate, orderStatusLabel } from "@/lib/memoFormat";
+import {
+  approvalLine,
+  approvalOf,
+  formatDate,
+  orderStatusLabel,
+  stageOf,
+} from "@/lib/memoFormat";
+import { buildOrderMessage } from "@/lib/orderMessage";
 import { photoSrc } from "@/lib/cloudinary";
 import OrderAssign from "./OrderAssign";
 import OrderApprovalPanel from "./OrderApprovalPanel";
+import OrderMessage from "./OrderMessage";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Order — Seyaa Solitaire" };
@@ -30,6 +38,8 @@ export default async function OrderPage(props: { params: Promise<{ id: string }>
 
   const session = await currentSession();
   const isAdmin = session?.role === "admin";
+  const stage = stageOf(order);
+  const approved = approvalOf(order) === "approved";
 
   // Only an admin is offered the manufacturer list, because only an admin can
   // set it. Reading it for everybody else would be a list nobody can use.
@@ -49,7 +59,7 @@ export default async function OrderPage(props: { params: Promise<{ id: string }>
     <div className="wrap">
       <div className="page-head">
         <h1>{order.orderNo}</h1>
-        <p>{approvalLabel(order)} · {orderStatusLabel(order.status)}</p>
+        <p>{approvalLine(order)} · {orderStatusLabel(order.status)}</p>
         <Link href="/orders" className="btn">← All orders</Link>
         <Link href="/orders/new" className="btn btn-primary">New order</Link>
       </div>
@@ -108,12 +118,18 @@ export default async function OrderPage(props: { params: Promise<{ id: string }>
       <OrderApprovalPanel
         id={order.id}
         approval={approvalOf(order)}
+        stage={stage}
         approverName={order.approverName || ""}
         sentBackReason={order.sentBackReason || ""}
         canApprove={
           approvalOf(order) !== "approved" &&
+          // Nobody signs off their own order at either stage, an admin's own
+          // included. The server refuses it too; this only keeps the button
+          // from being offered.
           order.enteredBy !== session?.username &&
-          (isAdmin || (!!order.approverId && order.approverId === session?.uid))
+          (stage === "owner"
+            ? isAdmin
+            : isAdmin || (!!order.approverId && order.approverId === session?.uid))
         }
         canResubmit={approvalOf(order) === "sent_back" && order.enteredBy === session?.username}
       />
@@ -125,6 +141,46 @@ export default async function OrderPage(props: { params: Promise<{ id: string }>
         mfgs={mfgs}
         isAdmin={isAdmin}
       />
+
+      {/* Both of these wait for the whole chain. An order half approved is not
+          something to send to a manufacturer or to start making. */}
+      {approved && <OrderMessage text={buildOrderMessage(order)} />}
+
+      {approved && (
+        <div className="ord-pd">
+          <h2>PD sheet</h2>
+          {order.pdId ? (
+            <>
+              <p className="hint">
+                This order already has a PD sheet: <b>{order.pdNo || order.pdId}</b>.
+              </p>
+              <Link href={`/pd/${order.pdId}`} className="btn btn-primary">
+                Open the PD sheet
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="hint">
+                Opens a new PD sheet with this order&rsquo;s details already
+                filled in. Nothing is saved until the sheet itself is saved.
+                {!order.designNo && (
+                  <>
+                    <br />
+                    No design number has been given yet, so the SKU box starts
+                    empty and is typed on the sheet.
+                  </>
+                )}
+              </p>
+              <Link
+                href={`/pd/new?order=${encodeURIComponent(order.id)}`}
+                className="btn btn-primary"
+              >
+                Start the PD sheet
+              </Link>
+            </>
+          )}
+        </div>
+      )}
 
       {(order.comments || []).length > 0 && (
         <div className="ord-notes">

@@ -142,9 +142,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // An opening note is optional; when given it is attributed like any other.
   const note = str(body.comment, 500);
 
-  // Who, if anyone, has to sign this off. Read from the seller's own account,
+  // Who, if anyone, signs this off first. Read from the seller's own account,
   // never from the request: an order cannot be saved as already approved by
   // sending the right field.
+  //
+  // Whether there is a manager or not, the order still needs the owner's
+  // approval afterwards, so nothing is approved on the way in any more.
   let manager: { id: string; username: string } | null = null;
   try {
     manager = await managerOf(session.uid);
@@ -178,8 +181,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // here looks at it.
         enteredBy: session.username,
         // Saved in full either way, numbered either way. The only difference
-        // is whether it is marked as still waiting on somebody.
-        approval: manager ? "waiting" : "approved",
+        // is which of the two stages it starts at.
+        approval: "waiting",
+        stage: manager ? "manager" : "owner",
         approverId: manager?.id || "",
         approverName: manager?.username || "",
         sentBackReason: "",
