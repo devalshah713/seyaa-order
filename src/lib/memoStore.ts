@@ -183,10 +183,12 @@ export type Order = {
   sieveSize?: string; // sieve or stone size, when they know it
   stonePcs?: number; // approximate number of stones
   instructions?: string;
-  // The reference picture. Either an uploaded image, held exactly as a PD
-  // sheet holds one, or a Drive link pasted instead — one of the two.
+  // The reference picture, uploaded, and held exactly as a PD sheet holds one.
   photoPath?: string;
   photoPublicId?: string;
+  // No longer offered: for a short while the form took a pasted Drive link
+  // instead of an upload. The field stays so the handful of orders written
+  // that way still show their picture, and the order's page still follows it.
   driveLink?: string;
 
   // --- Stamped by the portal, never editable -------------------------------

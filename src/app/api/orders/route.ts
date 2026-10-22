@@ -18,9 +18,8 @@ function num(v: unknown): number {
   return isFinite(n) && n > 0 ? n : 0;
 }
 
-// A picture has to be somewhere a browser can actually open later. Both ways
-// of giving one — the upload and a pasted Drive link — end up as a URL, so
-// that is the one thing checked.
+// An uploaded picture comes back as a URL, and a browser has to be able to
+// open it again later, so that is the one thing checked.
 function isLink(v: string): boolean {
   return /^https?:\/\/\S+$/i.test(v);
 }
@@ -108,22 +107,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const photoPath = str(body.photoPath, 500);
-  const driveLink = str(body.driveLink, 500);
-  if (!photoPath && !driveLink) {
+  if (!photoPath) {
     return NextResponse.json(
-      { error: "Add the reference picture, or paste a Drive link to it." },
+      { error: "Add the reference picture." },
       { status: 400 }
     );
   }
-  if (photoPath && !isLink(photoPath)) {
+  if (!isLink(photoPath)) {
     return NextResponse.json(
       { error: "The reference picture did not upload. Try the picture again." },
-      { status: 400 }
-    );
-  }
-  if (driveLink && !isLink(driveLink)) {
-    return NextResponse.json(
-      { error: "The Drive link must start with https://" },
       { status: 400 }
     );
   }
@@ -179,7 +171,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         instructions: str(body.instructions, 1000),
         photoPath,
         photoPublicId: str(body.photoPublicId, 200),
-        driveLink,
+        driveLink: "",
         // The stamp. Read off the signed session, never off the body — a
         // request that sends its own enteredBy is ignored, because nothing
         // here looks at it.

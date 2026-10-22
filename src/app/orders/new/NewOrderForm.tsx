@@ -30,7 +30,6 @@ const BLANK = {
   stockNo: "",
   photoPath: "",
   photoPublicId: "",
-  driveLink: "",
   instructions: "",
 };
 
@@ -89,8 +88,8 @@ export default function NewOrderForm() {
 
   function firstProblem(): [string, string] | null {
     if (!f.productName.trim()) return ["Write what is being made, in words.", "o-made"];
-    if (!f.photoPath && !f.driveLink.trim()) {
-      return ["Add the reference picture, or paste a Drive link to it.", "o-drive"];
+    if (!f.photoPath) {
+      return ["Add the reference picture.", "o-picture"];
     }
     if (!f.category) return ["Choose a category.", "o-category"];
     if (!f.goldColor) return ["Choose the gold details.", "o-gold"];
@@ -164,8 +163,6 @@ export default function NewOrderForm() {
           <legend>Reference picture</legend>
           <p className="group-hint">
             Every order needs one.
-            <br />
-            Upload the picture, or paste a Drive link instead.
           </p>
           {f.photoPath ? (
             <div className="photo-prev">
@@ -185,7 +182,11 @@ export default function NewOrderForm() {
               </div>
             </div>
           ) : (
-            <div className="photo-drop ord-drop" onClick={() => fileRef.current?.click()}>
+            <div
+              id="o-picture"
+              className="photo-drop ord-drop"
+              onClick={() => fileRef.current?.click()}
+            >
               {uploading ? "Uploading…" : "Click here to upload the reference picture"}
             </div>
           )}
@@ -197,15 +198,6 @@ export default function NewOrderForm() {
               e.target.value = "";
             }}
           />
-          <label className="field" htmlFor="o-drive" style={{ marginTop: 10 }}>
-            <span>Or a Drive link</span>
-            <input
-              id="o-drive"
-              value={f.driveLink}
-              onChange={(e) => set("driveLink", e.target.value)}
-              placeholder="https://drive.google.com/…"
-            />
-          </label>
         </fieldset>
 
         <fieldset className="group">
