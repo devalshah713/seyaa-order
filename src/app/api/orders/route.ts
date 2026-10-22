@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createOrder, listOrders, listPartyNames } from "@/lib/memoStore";
 import { GOLD_DETAILS, ORDER_STATUSES, type OrderStatus } from "@/lib/memoFormat";
-import { DIA_SHAPES } from "@/lib/pdConfig";
+import { formatShapes, parseShapes } from "@/lib/pdConfig";
 import { currentSession } from "@/lib/currentUser";
 import { managerOf } from "@/lib/userStore";
 
@@ -87,16 +87,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const diaShape = str(body.diaShape, 40);
-  if (!diaShape) {
-    return NextResponse.json({ error: "Choose the diamond shape." }, { status: 400 });
-  }
-  if (!DIA_SHAPES.includes(diaShape)) {
+  // One shape or several: a piece set with round and pear is one order, not
+  // two. Read through the same parser the form writes them with, so anything
+  // that is not a shape on the list falls out here rather than being stored.
+  const shapes = parseShapes(str(body.diaShape, 200));
+  if (!shapes.length) {
     return NextResponse.json(
-      { error: "Choose the diamond shape from the list." },
+      { error: "Tick at least one diamond shape." },
       { status: 400 }
     );
   }
+  const diaShape = formatShapes(shapes);
 
   const diamondCts = num(body.diamondCts);
   if (!diamondCts) {

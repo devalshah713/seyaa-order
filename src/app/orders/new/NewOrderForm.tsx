@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Picker from "@/components/Picker";
 import { GOLD_DETAILS } from "@/lib/memoFormat";
-import { DIA_SHAPES } from "@/lib/pdConfig";
+import { DIA_SHAPES, formatShapes, parseShapes } from "@/lib/pdConfig";
 import { photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 import { readReply } from "@/lib/readReply";
 
@@ -86,6 +86,20 @@ export default function NewOrderForm() {
     (el as HTMLElement | null)?.focus();
   }
 
+  // Every shape ticked, read back off the one line of text they are kept in.
+  const shapes = parseShapes(f.diaShape);
+  const toggleShape = (shape: string) =>
+    set(
+      "diaShape",
+      formatShapes(
+        parseShapes(
+          shapes.includes(shape)
+            ? formatShapes(shapes.filter((s) => s !== shape))
+            : formatShapes([...shapes, shape])
+        )
+      )
+    );
+
   function firstProblem(): [string, string] | null {
     if (!f.productName.trim()) return ["Write what is being made, in words.", "o-made"];
     if (!f.photoPath) {
@@ -97,7 +111,7 @@ export default function NewOrderForm() {
       return ["Enter the quantity in pieces. It must be a whole number, at least 1.", "o-pcs"];
     }
     if (!f.size.trim()) return ["Enter the size, for example 7 INCH or US7.", "o-size"];
-    if (!f.diaShape) return ["Choose the diamond shape.", "o-shape"];
+    if (!shapes.length) return ["Tick at least one diamond shape.", "o-shape"];
     if (!(Number(f.diamondCts) > 0)) {
       return ["Enter the approximate diamond weight in carats.", "o-cts"];
     }
@@ -145,7 +159,7 @@ export default function NewOrderForm() {
         <fieldset className="group">
           <legend>What is being made</legend>
           <label className="field" htmlFor="o-made">
-            <span>In words</span>
+            <span>In words <em className="need">must be filled</em></span>
             <input
               id="o-made"
               value={f.productName}
@@ -162,7 +176,7 @@ export default function NewOrderForm() {
         <fieldset className="group">
           <legend>Reference picture</legend>
           <p className="group-hint">
-            Every order needs one.
+            Every order needs one. It cannot be saved without it.
           </p>
           {f.photoPath ? (
             <div className="photo-prev">
@@ -203,7 +217,7 @@ export default function NewOrderForm() {
         <fieldset className="group">
           <legend>Product</legend>
           <label className="field" htmlFor="o-category">
-            <span>Category</span>
+            <span>Category <em className="need">must be filled</em></span>
             <Picker
               id="o-category"
               value={f.category}
@@ -245,7 +259,7 @@ export default function NewOrderForm() {
         <fieldset className="group">
           <legend>Gold and size</legend>
           <label className="field" htmlFor="o-gold">
-            <span>Gold details</span>
+            <span>Gold details <em className="need">must be filled</em></span>
             <Picker
               id="o-gold"
               value={f.goldColor}
@@ -256,7 +270,7 @@ export default function NewOrderForm() {
           </label>
           <div className="two">
             <label className="field" htmlFor="o-pcs">
-              <span>Quantity in pieces</span>
+              <span>Quantity in pieces <em className="need">must be filled</em></span>
               <input
                 id="o-pcs"
                 value={f.pcs}
@@ -266,7 +280,7 @@ export default function NewOrderForm() {
               />
             </label>
             <label className="field" htmlFor="o-size">
-              <span>Size</span>
+              <span>Size <em className="need">must be filled</em></span>
               <input
                 id="o-size"
                 value={f.size}
@@ -280,18 +294,23 @@ export default function NewOrderForm() {
         <fieldset className="group">
           <legend>Diamonds</legend>
           <div className="two">
-            <label className="field" htmlFor="o-shape">
-              <span>Diamond shape</span>
-              <Picker
-                id="o-shape"
-                value={f.diaShape}
-                onChange={(v) => set("diaShape", v)}
-                options={DIA_SHAPES}
-                prompt="Choose a shape…"
-              />
-            </label>
+            <div className="field" id="o-shape">
+              <span>Diamond shape <em className="need">must be filled</em> <em>(tick every shape the design uses)</em></span>
+              <div className="shape-grid">
+                {DIA_SHAPES.map((shape) => (
+                  <label key={shape} className="shape-opt">
+                    <input
+                      type="checkbox"
+                      checked={shapes.includes(shape)}
+                      onChange={() => toggleShape(shape)}
+                    />
+                    <span>{shape}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="field" htmlFor="o-cts">
-              <span>Approximate diamond weight (cts)</span>
+              <span>Approximate diamond weight (cts) <em className="need">must be filled</em></span>
               <input
                 id="o-cts"
                 value={f.diamondCts}

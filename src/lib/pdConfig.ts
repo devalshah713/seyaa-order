@@ -22,6 +22,24 @@ export const DIA_SHAPES = [
   "Cushion", "Radiant", "Heart", "Baguette",
 ];
 
+// A piece is often set with more than one shape, so an order records every
+// shape it uses rather than one. They are kept as one line of text, "Round,
+// Pear", because that is how the office writes them and because an order
+// written when only one shape could be chosen is already a valid list of one.
+//
+// Read and written in one place so the form, the save and the screen that
+// shows it back cannot disagree about what the line means.
+export function parseShapes(raw: string): string[] {
+  const seen = (raw || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  // Kept in the order the list above is written in, not the order they were
+  // ticked, so the same two shapes always read the same way round.
+  return DIA_SHAPES.filter((shape) => seen.includes(shape.toLowerCase()));
+}
+
+export function formatShapes(shapes: string[]): string {
+  return shapes.join(", ");
+}
+
 export const GOLD_PURITIES = ["14KT", "18KT", "10KT", "9KT", "22KT"];
 
 export const GOLD_COLORS = ["White Gold", "Yellow Gold", "Rose Gold"];
