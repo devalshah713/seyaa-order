@@ -377,14 +377,26 @@ export const GOLD_COLORS = [
 
 // What a seller picks in the one "Gold details" box on the order form.
 //
-// The office writes the purity and the colour together — "14KT YELLOW" — and
-// treats that as one fact about the piece, so it is one box here rather than
-// two. The options are built from the two lists the portal already keeps
-// rather than typed out again, so a purity added for the PD sheet shows up on
-// the order form with it.
-export const GOLD_DETAILS: string[] = GOLD_PURITIES.flatMap((purity) =>
-  GOLD_COLORS.map((colour) => `${purity} ${colour.toUpperCase()}`)
-);
+// The office writes the purity and the colour together, "14KT YELLOW", and
+// treats that as one fact about the piece, so it is one box rather than two.
+//
+// Written out rather than built from the purity and colour lists crossed
+// together, which is what this was at first. Crossing them offered every
+// combination those two lists can make, including ones the factory does not
+// work in, and an order can only be taken in metal that can actually be made.
+// Platinum and silver are on the list because a customer does sometimes ask
+// for them, and they are not a purity and a colour at all, which is the other
+// reason this is its own list.
+export const GOLD_DETAILS: string[] = [
+  "14KT WHITE",
+  "14KT YELLOW",
+  "14KT ROSE",
+  "18KT WHITE",
+  "18KT YELLOW",
+  "18KT ROSE",
+  "PLATINUM",
+  "SILVER",
+];
 
 // --- Approval ---------------------------------------------------------------
 //
