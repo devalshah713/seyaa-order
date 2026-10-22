@@ -81,9 +81,13 @@ export default function NewOrderForm() {
   // fill in all required fields" sends somebody hunting down a long form.
   function complain(message: string, box: string) {
     setError(message);
-    const el = document.getElementById(box);
+    const el = document.getElementById(box) as HTMLElement | null;
+    // Focus first, then scroll. On a phone focusing opens the keyboard, and
+    // the browser's own scroll to the field lands wherever it likes; doing it
+    // in this order the last word is ours, and "center" keeps the box in the
+    // half of the screen the keyboard leaves showing.
+    el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-    (el as HTMLElement | null)?.focus();
   }
 
   // Every shape ticked, read back off the one line of text they are kept in.
@@ -179,29 +183,46 @@ export default function NewOrderForm() {
             Every order needs one. It cannot be saved without it.
           </p>
           {f.photoPath ? (
-            <div className="photo-prev">
+            <div className="photo-prev ord-prev">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photoUrl} alt="Reference" />
-              <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
-                  Replace
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setF((cur) => ({ ...cur, photoPath: "", photoPublicId: "" }))}
-                >
-                  Remove
-                </button>
+              <div className="prev-side">
+                {/* On a phone the picture is the step most likely to go wrong,
+                    so it says out loud that it worked rather than leaving a
+                    thumbnail to be squinted at. */}
+                <p className="pic-done">Picture added.</p>
+                <div className="prev-btns">
+                  <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+                    Replace
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setF((cur) => ({ ...cur, photoPath: "", photoPublicId: "" }))}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
             <div
               id="o-picture"
-              className="photo-drop ord-drop"
-              onClick={() => fileRef.current?.click()}
+              className={`photo-drop ord-drop${uploading ? " is-busy" : ""}`}
+              role="button"
+              // Reachable by the complaint, which puts the cursor in whatever
+              // box is empty — on a plain div focus() has nothing to hold.
+              tabIndex={0}
+              aria-busy={uploading}
+              onClick={() => { if (!uploading) fileRef.current?.click(); }}
+              onKeyDown={(e) => {
+                if (!uploading && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  fileRef.current?.click();
+                }
+              }}
             >
-              {uploading ? "Uploading…" : "Click here to upload the reference picture"}
+              {uploading ? "Uploading the picture…" : "Take a photo, or choose one from the phone"}
             </div>
           )}
           <input
