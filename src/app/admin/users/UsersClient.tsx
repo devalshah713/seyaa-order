@@ -88,13 +88,29 @@ export default function UsersClient({ meId }: { meId: string }) {
     }
   }
 
-  // Who approves this account's orders, by name. Held on the account as an
-  // id, so the name is looked up here rather than stored twice.
+  // Who approves this account's orders, by name. Held on the account as an id,
+  // so the name is looked up here rather than stored twice.
+  //
+  // The owner is never shown as somebody's manager, and cannot be picked as
+  // one. Every order comes to him last whatever this box says, so naming him
+  // here would be the same arrangement written down twice, and two ways of
+  // saying one thing is how they end up disagreeing.
   function managerName(u: PublicUser): string {
-    if (!u.managerId) return "Nobody — their orders go ahead at once";
-    const boss = (users || []).find((x) => x.id === u.managerId);
-    return boss ? boss.username : "An account that no longer exists";
+    const boss = u.managerId ? (users || []).find((x) => x.id === u.managerId) : undefined;
+    if (!u.managerId || boss?.role === "admin") return "The owner";
+    return boss ? `${boss.username}, then the owner` : "An account that no longer exists";
   }
+
+  // The accounts that may be chosen: not this one, and not the owner.
+  const canApprove = (u: PublicUser) =>
+    (users || []).filter((x) => x.id !== u.id && x.role !== "admin");
+
+  // An account already carrying the owner as its manager opens with the box
+  // empty, because that is the same thing and it is the way it is written now.
+  const managerFor = (u: PublicUser): string => {
+    const boss = u.managerId ? (users || []).find((x) => x.id === u.managerId) : undefined;
+    return boss && boss.role !== "admin" ? boss.id : "";
+  };
 
   function accessLabel(u: PublicUser): string {
     if (u.role === "admin") return "Everything";
@@ -225,12 +241,10 @@ export default function UsersClient({ meId }: { meId: string }) {
                       value={editing.managerId}
                       onChange={(e) => setEditing({ ...editing, managerId: e.target.value })}
                     >
-                      <option value="">Nobody</option>
-                      {(users || [])
-                        .filter((x) => x.id !== u.id)
-                        .map((x) => (
-                          <option key={x.id} value={x.id}>{x.username}</option>
-                        ))}
+                      <option value="">The owner</option>
+                      {canApprove(u).map((x) => (
+                        <option key={x.id} value={x.id}>{x.username}, then the owner</option>
+                      ))}
                     </select>
                   ) : (
                     managerName(u)
@@ -247,7 +261,7 @@ export default function UsersClient({ meId }: { meId: string }) {
                           id: u.id,
                           role: u.role === "admin" ? "admin" : "user",
                           mods: u.role === "admin" ? [] : allowedModules(u),
-                          managerId: u.managerId || "",
+                          managerId: managerFor(u),
                         })
                       }
                     >
