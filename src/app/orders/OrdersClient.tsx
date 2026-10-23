@@ -9,6 +9,7 @@ import {
   approvalLine,
   approvalOf,
   formatDate,
+  orderStatusLabel,
   stageOf,
   type OrderStatus,
 } from "@/lib/memoFormat";
@@ -158,6 +159,11 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
       setBusyApproval("");
     }
   }
+
+  // Who may still change an order: the owner always, and the seller whose own
+  // order has been sent back to him. See the rule in the PATCH route.
+  const canEdit = (o: Order) =>
+    me.isAdmin || (o.enteredBy === me.username && approvalOf(o) === "sent_back");
 
   function startEdit(o: Order) {
     setError("");
@@ -455,12 +461,18 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                         {o.pdNo && <div className="ev-meta">PD {o.pdNo}</div>}
                       </td>
                       <td data-label="Status">
-                        <select value={o.status}
-                          onChange={(e) => setStatus(o, e.target.value as OrderStatus)}>
-                          {ORDER_STATUSES.map((s) => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
-                          ))}
-                        </select>
+                        {/* How the firm tracks the work, so it is the owner's
+                            to move. A seller reads it. */}
+                        {me.isAdmin ? (
+                          <select value={o.status}
+                            onChange={(e) => setStatus(o, e.target.value as OrderStatus)}>
+                            {ORDER_STATUSES.map((s) => (
+                              <option key={s.value} value={s.value}>{s.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span>{orderStatusLabel(o.status)}</span>
+                        )}
                       </td>
                       <td className="row-actions">
                         <button
@@ -469,8 +481,18 @@ export default function OrdersClient({ orders, me }: { orders: Order[]; me: View
                         >
                           + Note
                         </button>
-                        <button className="rowbtn" onClick={() => startEdit(o)}>Edit</button>
-                        <button className="rowbtn danger" onClick={() => remove(o)}>Delete</button>
+                        {/* An order that is in belongs to the firm, not to
+                            whoever typed it. The one a seller may still change
+                            is his own, sent back to him to correct, which is
+                            the whole of what sending it back is for. The
+                            server decides this; these buttons only stop him
+                            being offered something that will refuse him. */}
+                        {canEdit(o) && (
+                          <button className="rowbtn" onClick={() => startEdit(o)}>Edit</button>
+                        )}
+                        {me.isAdmin && (
+                          <button className="rowbtn danger" onClick={() => remove(o)}>Delete</button>
+                        )}
                       </td>
                     </>
                   )}

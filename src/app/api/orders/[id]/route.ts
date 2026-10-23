@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteOrder, listPartyNames, updateOrder } from "@/lib/memoStore";
+import { deleteOrder, getOrder, listPartyNames, updateOrder } from "@/lib/memoStore";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/memoFormat";
-import { requireAdmin } from "@/lib/currentUser";
+import { currentSession, requireAdmin } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,11 +22,56 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   const params = await ctx.params;
+  const session = await currentSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+
+  // Once an order is in, it is the firm's record and not the writer's draft.
+  // A seller may not change it and may not remove it; both are the owner's.
+  //
+  // The one exception is the order that has been sent back to the seller to
+  // correct, because that is the whole of what sending it back is for. It is
+  // not placed: somebody has looked at it and refused it, and it goes nowhere
+  // until he fixes it and sends it in again.
+  //
+  // Decided here rather than by hiding the buttons, because the buttons are a
+  // courtesy and this is the rule.
+  const isAdmin = session.role === "admin";
+  let mayEdit = isAdmin;
+  if (!isAdmin) {
+    let order;
+    try {
+      order = await getOrder(params.id);
+    } catch (err) {
+      return NextResponse.json({ error: msg(err) }, { status: 503 });
+    }
+    if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    mayEdit = order.enteredBy === session.username && order.approval === "sent_back";
+    if (!mayEdit) {
+      return NextResponse.json(
+        {
+          error:
+            order.enteredBy === session.username
+              ? "This order is in. Ask the owner to change it."
+              : "Only the owner can change somebody else's order.",
+        },
+        { status: 403 }
+      );
+    }
+    // Even then, only what he wrote. The status is how the firm tracks the
+    // work, and the manufacturer and the design number are the owner's.
+    if (body.status !== undefined || body.mfg !== undefined || body.designNo !== undefined) {
+      return NextResponse.json(
+        { error: "Only the owner can change that." },
+        { status: 403 }
+      );
+    }
   }
 
   // Only the fields actually sent are changed — the status dropdown on the
@@ -105,6 +150,17 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
   const params = await ctx.params;
+  // Removing an order is the owner's alone. It had no check at all before,
+  // which meant anybody who could reach the orders screen could delete any
+  // order in the book, including one that had already been approved and sent
+  // to a manufacturer.
+  const admin = await requireAdmin();
+  if (!admin) {
+    return NextResponse.json(
+      { error: "Only the owner can delete an order." },
+      { status: 403 }
+    );
+  }
   try {
     const ok = await deleteOrder(params.id);
     if (!ok) return NextResponse.json({ error: "Order not found." }, { status: 404 });
@@ -115,4 +171,8 @@ export async function DELETE(
       { status: 503 }
     );
   }
+}
+
+function msg(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong.";
 }

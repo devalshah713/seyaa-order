@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteQuotation, getQuotation, updateQuotation } from "@/lib/memoStore";
 import { currentSession } from "@/lib/currentUser";
+import { isQuotationPriced } from "@/lib/quotationConfig";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -107,6 +108,30 @@ export async function DELETE(
         { status: 409 }
       );
     }
+
+    // Who may remove one. The owner, always. A seller, only his own and only
+    // before it has been priced: up to that point it is a question he has
+    // asked and may withdraw, and after it there is a figure on it that the
+    // owner worked out and somebody may have quoted to a customer.
+    //
+    // This had no check beyond being signed in, which meant any seller could
+    // delete any other seller's quotation, priced or not.
+    if (session.role !== "admin") {
+      const mine = existing.enteredBy === session.username;
+      if (!mine) {
+        return NextResponse.json(
+          { error: "Only the owner can delete somebody else's quotation." },
+          { status: 403 }
+        );
+      }
+      if (isQuotationPriced(existing)) {
+        return NextResponse.json(
+          { error: "This one has been priced. Ask the owner to delete it." },
+          { status: 403 }
+        );
+      }
+    }
+
     const gone = await deleteQuotation(params.id);
     if (!gone) return NextResponse.json({ error: "Quotation not found." }, { status: 404 });
     return NextResponse.json({ ok: true });
