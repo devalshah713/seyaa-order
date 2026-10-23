@@ -176,6 +176,23 @@ export function quotationRow(list: PriceList, q: Quotation): QuotationRow {
   };
 }
 
+// The quoted figure as it is shown, and the same figure for a whole quantity.
+//
+// Rounded to the dollar and the rupee before it is multiplied, on purpose. A
+// customer reads "$2,689 per piece" and doubles it himself; a total worked out
+// from the unrounded figure behind that comes to $5,377 against his $5,378, and
+// then he is asking which of the two is right. The arithmetic on the page has
+// to be arithmetic the person reading it can do.
+export function perPiece(price: Money): Money {
+  return { usd: Math.round(price.usd), inr: Math.round(price.inr) };
+}
+
+export function forPieces(price: Money, pcs: number): Money {
+  const per = perPiece(price);
+  const n = pcs > 0 ? pcs : 1;
+  return { usd: per.usd * n, inr: per.inr * n };
+}
+
 // Is the quoted figure a different number from the calculated one? Asked so the
 // screen can say so plainly rather than showing two figures and leaving
 // somebody to compare them.

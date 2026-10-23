@@ -33,6 +33,12 @@ export default async function OrdersPage() {
             way to a new order is a door to that form rather than a row of
             boxes here that cannot hold a whole order. */}
         <Link href="/orders/new" className="btn btn-primary">New order</Link>
+        {/* Quotations are the same seller's job one step earlier: a customer
+            asks what a piece would cost, and if he says yes the quotation
+            becomes an order without anybody retyping it. Same module, so
+            anybody who can write an order can write one. */}
+        <Link href="/orders/quotations" className="btn">Quotations</Link>
+        <Link href="/orders/quotations/new" className="btn">New quotation</Link>
         {/* The portal used to photograph the board with a browser on the
             server and hand back a PNG to forward. That browser is a paid
             add-on on Cloudflare and this was the only thing using it, so the

@@ -20,7 +20,9 @@
 // own and so the screen has no say in the wording.
 import { money, type Money } from "./priceList";
 import { diaCertificationLabel } from "./memoFormat";
-import { quoteCarats, quoteShapeLine, type Quotation } from "./quotationConfig";
+import {
+  forPieces, perPiece, quoteCarats, quoteShapeLine, type Quotation,
+} from "./quotationConfig";
 
 export type QuotationMessageInput = Pick<
   Quotation,
@@ -73,11 +75,11 @@ export function buildQuotationMessage(q: QuotationMessageInput, price: Money): s
     !!pcs && `Quantity: ${pcs} ${pcs === 1 ? "pc" : "pcs"}`,
     !!diamondWords(q) && `Diamond: ${diamondWords(q)}`,
     !!certified && `Certification: ${certified}`,
-    `Price per piece: ${bothWays(price)}`,
+    `Price per piece: ${bothWays(perPiece(price))}`,
     // Only when there is more than one, because "for 1 pc" is the line above
-    // said twice.
-    pcs > 1 &&
-      `For ${pcs} pcs: ${bothWays({ usd: price.usd * pcs, inr: price.inr * pcs })}`,
+    // said twice. Worked out from the rounded figure, so the two lines are
+    // arithmetic the customer can check.
+    pcs > 1 && `For ${pcs} pcs: ${bothWays(forPieces(price, pcs))}`,
   ];
   return lines.filter((l): l is string => !!l).join("\n");
 }

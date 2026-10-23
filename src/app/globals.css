@@ -2469,3 +2469,96 @@ table.ch-table tbody tr { cursor: default; }
   .auth-card { padding: 26px 18px 22px; }
   .auth-submit { min-height: 48px; }
 }
+
+/* ============================================================================
+   Quotations
+   ----------------------------------------------------------------------------
+   A price asked for, priced before the piece exists. The screens borrow from
+   two places that already work rather than inventing a third look: the order
+   form and the order's own page for the shape of a seller's screen, and the
+   stock book's own panels for the diamond lines and the two money columns.
+
+   That reuse is deliberate and it is what makes these work on a phone. The
+   diamond lines are `.sb-lines .sb-table`, which already becomes a card per
+   line with its labels shown instead of a table to scroll sideways; the money
+   is `.sb-money`, which already goes full width; and the list is the orders
+   list's own `.orders-table`, which already becomes a card per row. What is
+   left to say here is what is particular to a quotation.
+   ========================================================================== */
+
+/* Two figures, and which is which has to be unmistakable. The quoted one is
+   ruled off in gold; the cost below it is a panel like any other. */
+.qt-price {
+  margin-top: 22px; padding: 16px 18px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+  border-left: 4px solid var(--gold);
+}
+.qt-price h2 {
+  margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--gold);
+}
+.qt-price table.sb-money { margin-left: 0; width: 100%; max-width: 420px; }
+.qt-price .hint { margin: 10px 0 0; }
+.qt-cost { margin-top: 18px; }
+.qt-sizes { margin-top: 18px; }
+
+/* The box on the form that is his own decision rather than the portal's. */
+.ord-form .qt-quote { border-left: 3px solid var(--gold); }
+.qt-form .sb-lines, .qt-form .sb-total { margin-top: 18px; }
+/* The form is one column, so the figures sit under the weights rather than off
+   to the right of them. */
+.qt-form .sb-total { flex-direction: column; gap: 16px; }
+.qt-form table.sb-money { margin-left: 0; width: 100%; max-width: 420px; }
+
+/* In the list, the quoted figure leads and the rupee figure sits under it, so
+   the two currencies are never read as one number. */
+.qt-table td.qt-money b { font-size: 14px; }
+.qt-table td.qt-money .ev-meta { font-variant-numeric: tabular-nums; }
+.qt-table td.qt-money .qt-differs { color: #C98A1E; }
+
+@media (max-width: 860px) {
+  /* Every box on the quotation form is a thumb's target, exactly as the order
+     form's are, and the diamond lines are typed into as well. */
+  .qt-form .sb-table input, .qt-form .sb-table .combo input,
+  .qt-form .sb-table select { min-height: 48px; }
+  .qt-form .sb-table .combo-toggle { min-height: 48px; width: 34px; }
+  .qt-form .sb-lines .btn, .qt-form .sb-table .del { min-height: 44px; min-width: 44px; }
+  .qt-form .check { min-height: 48px; }
+  .qt-form .check input { width: 22px; height: 22px; }
+  .qt-price, .qt-cost, .qt-sizes { padding: 14px 15px; }
+  .qt-price table.sb-money, .qt-form table.sb-money { max-width: none; }
+  /* The money columns stay on the card: a quotation whose price is one tap
+     away would be pointless. */
+  .qt-table td.qt-money { text-align: left; }
+  .qt-act .btn { width: 100%; min-height: 48px; }
+}
+
+@media print {
+  /* The customer's copy. The number, what is being made, the stones and the
+     price, on company paper — and not one figure of what it costs to make.
+     That is `.no-print` on the cost panel, on the buttons and on the text to
+     send, and the print rules below only lay out what is left. */
+  .print-only { display: block; }
+  .qt-head { margin-bottom: 14px; }
+  .qt-head h2 {
+    font-family: var(--serif); font-size: 20px; margin: 0 0 2px; letter-spacing: .5px;
+  }
+  .qt-head h3 { font-family: var(--serif); font-size: 15px; margin: 12px 0 2px; }
+  .qt-head p { margin: 0; font-size: 11px; }
+  .qt-page .ord-view { grid-template-columns: 150px 1fr; gap: 16px; }
+  .qt-page .ord-facts h2 { font-size: 16px; }
+  .qt-page .ord-row { padding: 3px 0; break-inside: avoid; }
+  .qt-page .ord-row span { font-size: 9.5px; }
+  .qt-page .ord-row strong { font-size: 11.5px; }
+  /* Flat on paper: the panels become ruled sections, as the audit's blocks do. */
+  .qt-price, .qt-sizes {
+    border: 0; border-top: 1px solid var(--paper-rule); border-radius: 0;
+    background: transparent; padding: 10px 0 0; margin: 12px 0 0;
+    break-inside: avoid;
+  }
+  .qt-price h2, .qt-sizes .sb-lines-head h2 { font-size: 11px; }
+  .qt-price table.sb-money { max-width: none; }
+  .qt-sizes .jg-scroll { border: 0; background: none; overflow: visible; }
+  .qt-sizes table.sb-table td { font-size: 10.5px; }
+  @page { size: A4; margin: 12mm; }
+}
