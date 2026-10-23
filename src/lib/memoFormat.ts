@@ -482,6 +482,29 @@ export function orderIdFor(fy: string, seq: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Quotations
+//
+// A price asked for is not an order placed, so it is counted in its own book:
+// QT/26-27/001 alongside ORD/26-27/001, per financial year, exactly as the memo
+// books are. Most quotations never become orders, and a book that mixed the two
+// could not answer how many of either there were.
+// ---------------------------------------------------------------------------
+
+export function quotationNoFor(fy: string, seq: number): string {
+  return `QT/${fy}/${pad(seq)}`;
+}
+
+export function quotationIdFor(fy: string, seq: number): string {
+  return `QT-${fy}-${pad(seq)}`;
+}
+
+// The quotation book's running number, kept under its own key so it can never
+// be confused with the order book's.
+export function quotationCounterKey(fy: string): string {
+  return `Q:${fy}`;
+}
+
+// ---------------------------------------------------------------------------
 // Stock movement
 //
 // A memo records goods going out. What became of each individual piece is kept
