@@ -30,7 +30,9 @@ import { compressImage, photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 import { readReply } from "@/lib/readReply";
 
 const BLANK = {
-  date: todayInput(),
+  // Filled in when the form opens, not when the file is loaded: the date has to
+  // be the browser's today, and the server renders this page too.
+  date: "",
   customerName: "",
   productName: "",
   category: "",
@@ -57,7 +59,7 @@ export default function QuotationForm({
   nextNo: string;
 }) {
   const router = useRouter();
-  const [f, setF] = useState(BLANK);
+  const [f, setF] = useState(() => ({ ...BLANK, date: todayInput() }));
   const [lines, setLines] = useState<QuotationLine[]>([{ ...BLANK_QUOTE_LINE }]);
   const [categories, setCategories] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);

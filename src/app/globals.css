@@ -2521,10 +2521,29 @@ table.ch-table tbody tr { cursor: default; }
      form's are, and the diamond lines are typed into as well. */
   .qt-form .sb-table input, .qt-form .sb-table .combo input,
   .qt-form .sb-table select { min-height: 48px; }
+  /* And none of them is a small box.
+     `table.jg-table input` sets 12.5px, which is more specific than the rule
+     that puts every box on a phone at 16px, so the stone sizes would be the one
+     place on this form that an iPhone zooms into when it is tapped. The stock
+     book lives with it because it is worked at a desk; this form is worked
+     standing up in front of a customer. */
+  .qt-form .sb-table input, .qt-form .sb-table .combo input { font-size: 16px; }
   .qt-form .sb-table .combo-toggle { min-height: 48px; width: 34px; }
-  .qt-form .sb-lines .btn, .qt-form .sb-table .del { min-height: 44px; min-width: 44px; }
+  .qt-form .sb-lines .btn { min-height: 44px; }
+  /* Removing a size: the stock book rides this in the card's corner at the size
+     a mouse wants. A thumb wants 44 pixels, so it is given them, and the line
+     number beside it keeps clear of it. */
+  .qt-form .sb-lines .sb-table tr td.jg-sr:last-child { top: 4px; right: 6px; }
+  .qt-form .sb-lines .sb-table .del {
+    min-height: 44px; min-width: 44px; font-size: 20px; border-radius: 9px;
+  }
+  .qt-form .sb-lines .sb-table td.jg-sr:first-child { padding-right: 56px; }
   .qt-form .check { min-height: 48px; }
   .qt-form .check input { width: 22px; height: 22px; }
+  /* The stone sizes as they read back on the quotation's own page: not typed
+     into, so the 16px rule does not apply, but they are figures a customer is
+     being shown and 12.5px is the register's size, not a phone's. */
+  .qt-sizes table.sb-table td { font-size: 14px; }
   .qt-price, .qt-cost, .qt-sizes { padding: 14px 15px; }
   .qt-price table.sb-money, .qt-form table.sb-money { max-width: none; }
   /* The money columns stay on the card: a quotation whose price is one tap

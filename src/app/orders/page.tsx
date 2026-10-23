@@ -36,9 +36,12 @@ export default async function OrdersPage() {
         {/* Quotations are the same seller's job one step earlier: a customer
             asks what a piece would cost, and if he says yes the quotation
             becomes an order without anybody retyping it. Same module, so
-            anybody who can write an order can write one. */}
+            anybody who can write an order can write one.
+
+            One door and not two: the quotations page carries the button for a
+            new one, and the head of this page is already four links wide on a
+            phone. */}
         <Link href="/orders/quotations" className="btn">Quotations</Link>
-        <Link href="/orders/quotations/new" className="btn">New quotation</Link>
         {/* The portal used to photograph the board with a browser on the
             server and hand back a PNG to forward. That browser is a paid
             add-on on Cloudflare and this was the only thing using it, so the

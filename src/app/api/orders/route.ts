@@ -159,18 +159,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Certified or not: a design is one or the other, and the factory has to be
-  // told which. Compulsory here as well as on the form, like every other
-  // compulsory box, and it changes no figure — see DiaCertification.
-  const diaCertificationRaw = str(src.diaCertification, 20);
-  if (!isDiaCertification(diaCertificationRaw)) {
-    return NextResponse.json(
-      { error: "Choose whether the diamonds are certified." },
-      { status: 400 }
-    );
-  }
-  const diaCertification: DiaCertification = diaCertificationRaw;
-
   const photoPath = str(src.photoPath, 500);
   if (!photoPath) {
     return NextResponse.json(
@@ -184,6 +172,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   }
+
+  // Certified or not: a design is one or the other, and the factory has to be
+  // told which. Compulsory here as well as on the form, like every other
+  // compulsory box, and it changes no figure — see DiaCertification.
+  const diaCertificationRaw = str(src.diaCertification, 20);
+  if (!isDiaCertification(diaCertificationRaw)) {
+    return NextResponse.json(
+      { error: "Choose whether the diamonds are certified." },
+      { status: 400 }
+    );
+  }
+  const diaCertification: DiaCertification = diaCertificationRaw;
 
   // The category is a controlled list, so a name that is not on it is a typo
   // or a hand-made request either way.
