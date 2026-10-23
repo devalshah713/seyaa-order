@@ -1256,10 +1256,10 @@ export async function peekNextQuotationNo(dateInput: string): Promise<string> {
   return quotationNoFor(fy, (db.counters[key] || 0) + 1);
 }
 
-// The only two things that ever change about a saved quotation: the picture,
-// which can be added after the price was given, and the order it became. The
-// price itself is never edited — a different price is a different quotation,
-// with its own number, which is what makes the book worth keeping.
+// What changes about a saved quotation: the picture, which can be added after
+// it was written; the order it became; and the owner's pricing, which is the
+// second sitting on the same record and can be done again when a customer
+// argues about the price. The number and the hand that wrote it never move.
 function quotationWith(quotation: Quotation, patch: QuotationPatch): Quotation {
   return {
     ...quotation,

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { listQuotations } from "@/lib/memoStore";
 import { loadPrices } from "@/lib/priceStore";
-import { quotationRow, type QuotationRow } from "@/lib/quotationConfig";
+import {
+  isQuotationPriced, quotationRow, type QuotationRow,
+} from "@/lib/quotationConfig";
+import { currentSession } from "@/lib/currentUser";
 import QuotationsClient from "./QuotationsClient";
 
 export const metadata = { title: "Quotations — Seyaa Solitaire" };
@@ -20,6 +23,13 @@ export default async function QuotationsPage() {
     error = err instanceof Error ? err.message : "Could not load the quotations.";
   }
 
+  // Who is reading. The owner's list is a list of work to do; a seller's is a
+  // list of what he asked for and whether it has come back priced.
+  const session = await currentSession();
+
+  // The count that matters most, said at the top: how many are sitting with the
+  // owner, the way the orders page counts the ones waiting for approval.
+  const unpriced = rows.filter((r) => !isQuotationPriced(r.quotation)).length;
   const open = rows.filter((r) => !r.quotation.orderId).length;
   const became = rows.length - open;
 
@@ -29,6 +39,7 @@ export default async function QuotationsPage() {
         <h1>Quotations</h1>
         <p>
           {rows.length} total · {open} still open
+          {unpriced > 0 && <> · {unpriced} waiting for a price</>}
           {became > 0 && <> · {became} became orders</>}
         </p>
         <Link href="/orders" className="btn">← All orders</Link>
@@ -39,13 +50,21 @@ export default async function QuotationsPage() {
       ) : (
         <>
           <p className="hint">
-            A quotation is priced on today&rsquo;s price list, every time it is
-            opened. Change a rate and every quotation&rsquo;s calculated figure
-            moves with it.
+            A quotation is written in two sittings. The seller writes down what
+            the customer asked for, and the owner puts the stones, the gold
+            weight and the price on it afterwards.
             <br />
-            The price that was quoted is kept as it was given, and does not move.
+            Once it is priced, the calculated figure is worked out on
+            today&rsquo;s price list every time it is opened. The price that was
+            quoted is kept as it was given, and does not move.
           </p>
-          <QuotationsClient rows={rows} />
+          <QuotationsClient
+            rows={rows}
+            me={{
+              username: session?.username || "",
+              isAdmin: session?.role === "admin",
+            }}
+          />
         </>
       )}
     </div>

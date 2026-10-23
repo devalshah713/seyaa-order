@@ -2,6 +2,11 @@
 // What can be done with a saved quotation: copy the text, print it, add the
 // picture it may be short of, and turn it into an order.
 //
+// All of it waits on a price. The words to send carry one figure and it is the
+// price; an order built from a quotation carries the stones and the weight the
+// price was worked out from. So until the owner has priced it, each of those is
+// a sentence saying why rather than a button that does nothing.
+//
 // The portal sends nothing. The text is written on the server, shown here
 // exactly as it will be pasted, and the seller puts it into WhatsApp himself —
 // the same hand-off the order message and the receipt chase use, for the same
@@ -24,12 +29,18 @@ export default function QuotationActions({
   // page above says which order it became and links to it. The server refuses a
   // second one as well — hiding the button is a courtesy, not the rule.
   madeOrder,
+  // Has the owner priced it? The words to send and the way to an order both
+  // belong to a priced quotation only: an unpriced one has no price to send and
+  // nothing to carry. Said in a sentence rather than left as a dead button, and
+  // the order route refuses it as well.
+  priced,
 }: {
   id: string;
   quotationNo: string;
   text: string;
   hasPhoto: boolean;
   madeOrder: boolean;
+  priced: boolean;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -106,36 +117,57 @@ export default function QuotationActions({
     <div className="no-print">
       <div className="ord-msg">
         <h2>Quotation to send</h2>
-        <div className="rc-copy">
-          <div className="rc-copy-head">
-            <b>To send on WhatsApp</b>
-            <button type="button" className="btn btn-small" onClick={copy}>
-              {copied ? "Copied" : "Copy text"}
-            </button>
-          </div>
-          <pre>{text}</pre>
-        </div>
-        <p className="hint">
-          This is the customer&rsquo;s quotation, so it carries the price and not
-          what the piece costs to make.
-        </p>
+        {priced ? (
+          <>
+            <div className="rc-copy">
+              <div className="rc-copy-head">
+                <b>To send on WhatsApp</b>
+                <button type="button" className="btn btn-small" onClick={copy}>
+                  {copied ? "Copied" : "Copy text"}
+                </button>
+              </div>
+              <pre>{text}</pre>
+            </div>
+            <p className="hint">
+              This is the customer&rsquo;s quotation, so it carries the price and
+              not what the piece costs to make.
+            </p>
+          </>
+        ) : (
+          <p className="hint">
+            {quotationNo} has no price on it yet, and the only figure the
+            customer&rsquo;s quotation carries is the price, so there is nothing
+            to send.
+            <br />
+            The owner prices it on this page. Come back once it says priced.
+          </p>
+        )}
       </div>
 
-      <div className="ord-pd qt-act">
-        <h2>Print it</h2>
-        <p className="hint">
-          Prints the quotation on one page, without the cost breakdown. Choose
-          &ldquo;Save as PDF&rdquo; in the print dialog to send it as a file.
-        </p>
-        <button type="button" className="btn" onClick={() => window.print()}>
-          Print
-        </button>
-      </div>
+      {priced && (
+        <div className="ord-pd qt-act">
+          <h2>Print it</h2>
+          <p className="hint">
+            Prints the quotation on one page, without the cost breakdown. Choose
+            &ldquo;Save as PDF&rdquo; in the print dialog to send it as a file.
+          </p>
+          <button type="button" className="btn" onClick={() => window.print()}>
+            Print
+          </button>
+        </div>
+      )}
 
       {!madeOrder && (
       <div className="ord-pd qt-act">
         <h2>The customer said yes</h2>
-        {hasPhoto ? (
+        {!priced ? (
+          <p className="hint">
+            {quotationNo} has not been priced yet, so there is nothing to carry
+            onto an order.
+            <br />
+            The owner prices it on this page, and then this button will work.
+          </p>
+        ) : hasPhoto ? (
           <p className="hint">
             Writes a real order from this quotation, with its own order number,
             and sends it down the approval chain exactly as an order written on
@@ -154,7 +186,7 @@ export default function QuotationActions({
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!!busy || !hasPhoto}
+          disabled={!!busy || !hasPhoto || !priced}
           onClick={makeOrder}
         >
           {busy === "order" ? "Writing the order…" : "Turn this into an order"}

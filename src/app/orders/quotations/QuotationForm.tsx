@@ -1,31 +1,23 @@
 "use client";
-// The one place a quotation is written.
+// The seller's half of a quotation, which is all he is asked for.
 //
-// A customer asks what a piece would cost. What is asked for here is what the
-// price needs and nothing else: the gold it will come out at, the purity, the
-// labour, and a line per stone size. The figures appear as it is typed, from
-// the same code the server prices it with on the way in, so what he reads out
-// to the customer is what gets saved.
+// A customer rings up and asks what a piece would cost. What he says is what
+// goes on this form: who he is, what he wants made, the category, the gold, the
+// size, how many, whether it is certified, and anything else he said.
 //
-// One box matters more than the rest. The calculated total is what the piece
-// costs on the price list; what he tells a customer may be rounder, or higher,
-// or a favour. So the quoted figure starts at the calculated one and can be
-// written over, both are kept, and the screen says plainly which is which.
+// There is not one figure on this form, on purpose. A seller on the phone knows
+// what the customer asked for; he does not know how many stones of which sieve
+// go into it, what it will come out at in gold, or what it should sell for.
+// Those are the owner's to decide, and asking a seller for them produces
+// guesses that then read as facts. So he never sees a figure he did not put
+// there, and there is nothing to price until the owner has priced it.
 //
-// Written for a phone: one column, every box at least 48 pixels, and the
-// diamond lines read as cards rather than a table to scroll sideways.
-import { useEffect, useMemo, useRef, useState } from "react";
+// Written for a phone: one column, every box at least 48 pixels.
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Combo from "@/components/Combo";
 import Picker from "@/components/Picker";
 import { DIA_CERTIFICATIONS, GOLD_DETAILS, todayInput } from "@/lib/memoFormat";
-import { findPrice, karatOf, money, trim, type PriceList } from "@/lib/priceList";
-import { suggestCode } from "@/lib/stockBookConfig";
-import {
-  BLANK_QUOTE_LINE, QUOTE_SHAPES, priceQuotation, ratelessMetal,
-  type QuotationLine,
-} from "@/lib/quotationConfig";
 import { compressImage, photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 import { readReply } from "@/lib/readReply";
 
@@ -39,8 +31,6 @@ const BLANK = {
   subCategory: "",
   subSubCategory: "",
   goldDetails: "",
-  goldWt: "",
-  polkiLabour: false,
   size: "",
   pcs: "1",
   diaCertification: "",
@@ -51,27 +41,14 @@ const BLANK = {
 
 type Field = keyof typeof BLANK;
 
-export default function QuotationForm({
-  prices,
-  nextNo,
-}: {
-  prices: PriceList;
-  nextNo: string;
-}) {
+export default function QuotationForm({ nextNo }: { nextNo: string }) {
   const router = useRouter();
   const [f, setF] = useState(() => ({ ...BLANK, date: todayInput() }));
-  const [lines, setLines] = useState<QuotationLine[]>([{ ...BLANK_QUOTE_LINE }]);
   const [categories, setCategories] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // What he decided to quote, once he has decided something. Until then the
-  // boxes read the calculated figure, which is what "starts at the calculated
-  // one" means: there is no empty box to wonder about.
-  const [quoted, setQuoted] = useState({ usd: "", inr: "" });
-  const [quoteOwn, setQuoteOwn] = useState(false);
 
   const set = <K extends Field>(k: K, v: (typeof BLANK)[K]) =>
     setF((s) => ({ ...s, [k]: v }));
@@ -90,68 +67,6 @@ export default function QuotationForm({
       .catch(() => {});
     return () => { off = true; };
   }, []);
-
-  // Priced as it is typed, by the stock book's own pricing. The gold and the
-  // labour are charged on the expected gold weight, because the stones are not
-  // gold.
-  const priced = useMemo(
-    () => priceQuotation(prices, {
-      goldWt: f.goldWt,
-      goldDetails: f.goldDetails,
-      polkiLabour: f.polkiLabour,
-      lines,
-    }),
-    [prices, f.goldWt, f.goldDetails, f.polkiLabour, lines]
-  );
-
-  // The figures in the two quoted boxes: his own, or the calculated ones.
-  const shownQuote = quoteOwn
-    ? quoted
-    : { usd: String(Math.round(priced.total.usd)), inr: String(Math.round(priced.total.inr)) };
-
-  // Taking over the boxes fills both from the calculated figures first, so
-  // changing the dollar price does not leave the rupee one blank.
-  function editQuote(which: "usd" | "inr", value: string) {
-    setQuoted((q) => {
-      const from = quoteOwn
-        ? q
-        : {
-            usd: String(Math.round(priced.total.usd)),
-            inr: String(Math.round(priced.total.inr)),
-          };
-      return { ...from, [which]: value };
-    });
-    setQuoteOwn(true);
-  }
-
-  const setLine = (i: number, k: keyof QuotationLine, v: string) =>
-    setLines((rows) =>
-      rows.map((l, n) => {
-        if (n !== i) return l;
-        const next = { ...l, [k]: v };
-        // The Product Code is what the rate hangs on, and it can be worked out
-        // from the sieve or the shape — so it is offered as soon as there is
-        // enough to go on, and left alone once it has been typed over. The
-        // same rule, and the same function, as the stock book's own form.
-        if (k !== "code" && (!l.code || l.code === suggestCode(prices, l))) {
-          next.code = suggestCode(prices, next) || next.code;
-        }
-        return next;
-      })
-    );
-
-  const addLine = () => setLines((rows) => [...rows, { ...BLANK_QUOTE_LINE }]);
-
-  const dropLine = (i: number) =>
-    setLines((rows) =>
-      rows.length > 1 ? rows.filter((_, n) => n !== i) : [{ ...BLANK_QUOTE_LINE }]
-    );
-
-  const codes = useMemo(
-    () => [...prices.round.map((r) => r.code), ...prices.fancy.map((p) => p.code)],
-    [prices]
-  );
-  const sieves = useMemo(() => prices.round.map((r) => r.sieve).filter(Boolean), [prices]);
 
   async function pickPhoto(file: File) {
     setError("");
@@ -185,9 +100,6 @@ export default function QuotationForm({
     if (!f.productName.trim()) return ["Write what is being made, in words.", "q-made"];
     if (!f.category) return ["Choose a category.", "q-category"];
     if (!f.goldDetails) return ["Choose the gold details.", "q-gold"];
-    if (!(Number(f.goldWt) > 0)) {
-      return ["Enter the expected gold weight in grams.", "q-goldwt"];
-    }
     if (!(Math.round(Number(f.pcs)) >= 1)) {
       return ["Enter the quantity in pieces. It must be a whole number, at least 1.", "q-pcs"];
     }
@@ -209,16 +121,7 @@ export default function QuotationForm({
       const res = await fetch("/api/orders/quotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...f,
-          pcs: f.pcs,
-          lines,
-          // Both figures go up as they read on screen. A quotation keeps the
-          // price he gave, so it does not move when a rate changes later —
-          // that is the whole point of keeping it beside the calculated one.
-          quotedUsd: shownQuote.usd,
-          quotedInr: shownQuote.inr,
-        }),
+        body: JSON.stringify({ ...f, pcs: f.pcs }),
       });
       const data = await readReply(res, "Could not save the quotation.");
       const quotation = data.quotation as { id?: string } | undefined;
@@ -236,7 +139,6 @@ export default function QuotationForm({
   }
 
   const photoUrl = photoSrc(f.photoPath);
-  const rateless = ratelessMetal(f.goldDetails);
 
   return (
     <form className="ord-form qt-form" onSubmit={save}>
@@ -329,36 +231,10 @@ export default function QuotationForm({
             prompt="Choose the gold…"
           />
         </label>
-        <label className="field" htmlFor="q-goldwt">
-          <span>Expected gold weight (g) <em className="need">must be filled</em></span>
-          <input
-            id="q-goldwt"
-            value={f.goldWt}
-            inputMode="decimal"
-            onChange={(e) => set("goldWt", e.target.value)}
-            placeholder="12.500"
-          />
-        </label>
         <p className="group-hint">
-          The gold and the labour are both charged on this weight, at the{" "}
-          {karatOf(f.goldDetails)}KT rate, which comes from the gold details.
+          What the piece will weigh in gold is not asked for here. The owner puts
+          that on when he prices it.
         </p>
-        {rateless && (
-          <p className="dia-note">
-            The price list has no {rateless.toLowerCase()} rate, so this is worked
-            out at the 14KT gold rate.
-            <br />
-            Put the real figure in the quoted price below.
-          </p>
-        )}
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={f.polkiLabour}
-            onChange={(e) => set("polkiLabour", e.target.checked)}
-          />
-          <span>Polki labour rate</span>
-        </label>
         <div className="two">
           <label className="field" htmlFor="q-pcs">
             <span>Quantity in pieces <em className="need">must be filled</em></span>
@@ -403,142 +279,6 @@ export default function QuotationForm({
           <br />
           It does not change the price.
         </p>
-      </fieldset>
-
-      {/* One line per stone size, in the shape the stock book keeps them. The
-          Product Code is what the rate hangs on, and it is offered from the
-          sieve or the shape rather than looked up on a printed sheet. */}
-      <section className="sb-lines qt-lines">
-        <div className="sb-lines-head">
-          <h2>One line per stone size</h2>
-          <span className="jg-muted">
-            {lines.filter((l) => l.code.trim()).length === 0
-              ? "Nothing priced yet."
-              : `${lines.length} ${lines.length === 1 ? "size" : "sizes"}`}
-          </span>
-        </div>
-        <div className="jg-scroll">
-          <table className="jg-table sb-table">
-            <thead>
-              <tr>
-                <th className="jg-sr">#</th>
-                <th>Shape</th><th>Sieve / Size</th>
-                <th>Weight (cts)</th><th>Pcs</th>
-                <th>Product Code</th>
-                <th>Price ($)</th><th>Price (₹)</th>
-                <th className="jg-sr" />
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => {
-                const p = priced.lines[i];
-                const hit = findPrice(prices, l.code);
-                return (
-                  <tr key={i} className={l.code && !hit ? "jg-short" : undefined}>
-                    <td className="jg-sr">{i + 1}</td>
-                    <td data-label="Shape">
-                      <Combo value={l.shape} onChange={(v) => setLine(i, "shape", v)}
-                        options={QUOTE_SHAPES} placeholder="Round" /></td>
-                    <td data-label="Sieve / Size">
-                      <Combo value={l.sieve} onChange={(v) => setLine(i, "sieve", v)}
-                        options={sieves} placeholder="+6.5-11" /></td>
-                    <td data-label="Weight (cts)">
-                      <input inputMode="decimal" value={l.breakupWt}
-                        onChange={(e) => setLine(i, "breakupWt", e.target.value)} /></td>
-                    <td data-label="Pcs">
-                      <input inputMode="numeric" value={l.pcs}
-                        onChange={(e) => setLine(i, "pcs", e.target.value)} /></td>
-                    <td data-label="Product Code">
-                      <Combo value={l.code} onChange={(v) => setLine(i, "code", v)}
-                        options={codes} placeholder="+6.5-11 : 01" /></td>
-                    <td data-label="Price ($)" className="sb-num">{money(p?.diamond.usd ?? 0)}</td>
-                    <td data-label="Price (₹)" className="sb-num">{money(p?.diamond.inr ?? 0)}</td>
-                    <td className="jg-sr">
-                      <button type="button" className="del" onClick={() => dropLine(i)}
-                        title="Remove line" aria-label="Remove line">×</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="pieces-actions">
-          <button type="button" className="btn" onClick={addLine}>+ Add a stone size</button>
-        </div>
-        {priced.unknownCodes.length > 0 && (
-          <p className="jg-mismatch">
-            No price for {priced.unknownCodes.join(", ")} — that size is counted at
-            nothing until the code is on the price list, so the total below is
-            short.
-          </p>
-        )}
-      </section>
-
-      {/* What the piece comes to on the price list, as the stock book shows it.
-          Per piece, however many pieces are being quoted for. */}
-      <section className="sb-total qt-total">
-        <div className="sb-total-grid">
-          <span>Total diamond weight</span><b>{trim(priced.totalWeight, 3)} cts</b>
-          <span>Total stones</span><b>{priced.totalPcs || "—"}</b>
-          <span>Pointers</span><b>{trim(priced.pointer, 2) || "—"}</b>
-        </div>
-        <table className="sb-money">
-          <thead><tr><th>Cost, per piece</th><th>$</th><th>₹</th></tr></thead>
-          <tbody>
-            <tr><td>Diamonds</td><td>{money(priced.diamond.usd)}</td><td>{money(priced.diamond.inr)}</td></tr>
-            <tr><td>Gold</td><td>{money(priced.gold.usd)}</td><td>{money(priced.gold.inr)}</td></tr>
-            <tr><td>Labour</td><td>{money(priced.labour.usd)}</td><td>{money(priced.labour.inr)}</td></tr>
-            <tr className="sb-grand"><td>Calculated total</td><td>{money(priced.total.usd)}</td><td>{money(priced.total.inr)}</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <fieldset className="group qt-quote">
-        <legend>The price you are quoting</legend>
-        <p className="group-hint">
-          The figures above are what the piece costs on the price list. These two
-          are what you are telling the customer, for one piece.
-          <br />
-          They start at the calculated figures. Change either one and the
-          quotation keeps what you typed.
-        </p>
-        <div className="two">
-          <label className="field" htmlFor="q-usd">
-            <span>Quoted price, per piece ($)</span>
-            <input
-              id="q-usd"
-              value={shownQuote.usd}
-              inputMode="decimal"
-              onChange={(e) => editQuote("usd", e.target.value)}
-            />
-          </label>
-          <label className="field" htmlFor="q-inr">
-            <span>Quoted price, per piece (₹)</span>
-            <input
-              id="q-inr"
-              value={shownQuote.inr}
-              inputMode="decimal"
-              onChange={(e) => editQuote("inr", e.target.value)}
-            />
-          </label>
-        </div>
-        {quoteOwn ? (
-          <div className="pieces-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => { setQuoteOwn(false); setQuoted({ usd: "", inr: "" }); }}
-            >
-              Go back to the calculated price
-            </button>
-          </div>
-        ) : (
-          <p className="dia-note">
-            Both boxes are following the calculated price. Nothing has been
-            changed by hand.
-          </p>
-        )}
       </fieldset>
 
       <fieldset className="group">
@@ -621,8 +361,11 @@ export default function QuotationForm({
       <p className="hint">
         The quotation number, the time and your username are added by the portal.
         <br />
-        If the customer says yes, one button on the saved quotation turns it into
-        an order.
+        This goes to the owner for a price. He puts the stones, the gold weight
+        and the figure on it.
+        <br />
+        When he has, it shows as priced on the Quotations list. Open it there and
+        read the price to the customer.
       </p>
     </form>
   );

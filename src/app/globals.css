@@ -2502,6 +2502,50 @@ table.ch-table tbody tr { cursor: default; }
 .qt-cost { margin-top: 18px; }
 .qt-sizes { margin-top: 18px; }
 
+/* Waiting for a price: the same panel as the price, ruled off in the colour the
+   portal uses for "somebody else has this", so the two states are told apart
+   before a word of either is read. */
+.qt-waiting { border-left-color: #C98A1E; }
+.qt-waiting h2 { color: #8A5B06; }
+.qt-waiting .hint { margin: 0 0 8px; }
+
+/* The owner's half of a quotation, on the quotation's own page. The same panel
+   as the price above it, so the page reads as one record and not two screens. */
+.qt-owner {
+  margin-top: 22px; padding: 16px 18px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+  border-left: 4px solid var(--gold);
+}
+.qt-owner > h2 {
+  margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--gold);
+}
+.qt-owner .field { margin-top: 12px; }
+.qt-owner .hint { margin: 8px 0; }
+.qt-owner .sb-lines, .qt-owner .sb-total { margin-top: 18px; }
+/* The panel is one column, so the figures sit under the weights rather than off
+   to the right of them. */
+.qt-owner .sb-total { flex-direction: column; gap: 16px; }
+.qt-owner table.sb-money { margin-left: 0; width: 100%; max-width: 420px; }
+/* The two boxes that are his decision rather than the portal's. */
+.qt-owner .qt-quote {
+  margin-top: 18px; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid var(--panel-line); border-left: 3px solid var(--gold);
+}
+.qt-owner .qt-quote h2 {
+  margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--gold);
+}
+.qt-owner .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* The seller's way back in, at the top of the list: his quotations that have
+   come back priced. Green rather than amber, because nothing is pending. */
+.ord-queue.qt-ready { border-left-color: #3C8A52; }
+
+/* Which of the two states a quotation is in, on its row. */
+.qt-table .qt-state { color: #8A5B06; font-weight: 600; }
+.qt-table .qt-state.qt-is-priced { color: #3C8A52; }
+
 /* The box on the form that is his own decision rather than the portal's. */
 .ord-form .qt-quote { border-left: 3px solid var(--gold); }
 .qt-form .sb-lines, .qt-form .sb-total { margin-top: 18px; }
@@ -2517,6 +2561,29 @@ table.ch-table tbody tr { cursor: default; }
 .qt-table td.qt-money .qt-differs { color: #C98A1E; }
 
 @media (max-width: 860px) {
+  /* The owner prices a quotation standing up with his phone in his hand, same
+     as the seller writes one, so the stone lines in his panel get every rule
+     the form's used to get. The selectors are listed twice rather than shared,
+     because the two sit in different places and a later edit to one must not
+     quietly move the other. */
+  .qt-owner .sb-table input, .qt-owner .sb-table .combo input,
+  .qt-owner .sb-table select { min-height: 48px; font-size: 16px; }
+  .qt-owner .sb-table .combo-toggle { min-height: 48px; width: 34px; }
+  .qt-owner .sb-lines .btn, .qt-owner .qt-act .btn { min-height: 48px; }
+  .qt-owner .qt-act .btn { width: 100%; }
+  .qt-owner .sb-lines .sb-table tr td.jg-sr:last-child { top: 4px; right: 6px; }
+  .qt-owner .sb-lines .sb-table .del {
+    min-height: 44px; min-width: 44px; font-size: 20px; border-radius: 9px;
+  }
+  .qt-owner .sb-lines .sb-table td.jg-sr:first-child { padding-right: 56px; }
+  .qt-owner .check { min-height: 48px; }
+  .qt-owner .check input { width: 22px; height: 22px; }
+  /* One column: two money boxes side by side at 360 pixels are two boxes
+     nobody can type a figure into. */
+  .qt-owner .two { grid-template-columns: 1fr; }
+  .qt-owner, .qt-waiting { padding: 14px 15px; }
+  .qt-owner table.sb-money { max-width: none; }
+
   /* Every box on the quotation form is a thumb's target, exactly as the order
      form's are, and the diamond lines are typed into as well. */
   .qt-form .sb-table input, .qt-form .sb-table .combo input,

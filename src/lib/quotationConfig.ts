@@ -1,10 +1,15 @@
 // A quotation: what a piece would cost, worked out before the piece exists.
 //
-// A customer asks what something would come to. A seller writes down what was
-// described, the portal prices it, and out comes a figure to send. This is the
-// same sum the stock book does after a piece is made, done before it is made
-// instead, so the pricing is the stock book's and not a second one:
-// pricePiece() in priceList.ts, reached through priceOf() below.
+// One quotation, two hands, in two sittings. A seller on the phone with a
+// customer writes down what the customer asked for and nothing else. He does
+// not know how many stones of which sieve go into it, what it will weigh in
+// gold, or what it should sell for, and asking him produces guesses that then
+// read as facts. Those are the owner's to decide, so the owner opens the
+// quotation afterwards and prices it.
+//
+// The sum itself is the stock book's and not a second one: pricePiece() in
+// priceList.ts, reached through priceOf() below. This is the same sum the stock
+// book does after a piece is made, done before it is made instead.
 //
 // Two things follow from that and both matter.
 //
@@ -43,6 +48,18 @@ export const BLANK_QUOTE_LINE: QuotationLine = {
 
 export const QUOTE_SHAPES: readonly string[] = DIA_SHAPES;
 
+// One pricing, recorded. A customer argues about a price, so the owner must be
+// able to come back and price the same quotation again, and every time he does
+// is kept rather than overwritten — the way an order's notes are kept.
+//
+// Only who and when. What he decided is on the quotation itself, which is what
+// the screen reads; this is the trail of hands and moments behind it.
+export type QuotationPricing = {
+  id: string;
+  at: string; // ISO
+  by: string; // username
+};
+
 export type Quotation = {
   id: string; // URL-safe, e.g. "QT-26-27-001"
   quotationNo: string; // printed, e.g. "QT/26-27/001"
@@ -63,16 +80,30 @@ export type Quotation = {
   subSubCategory: string;
 
   goldDetails: string; // one of GOLD_DETAILS — the purity in it picks the rate
+
+  size: string;
+  pcs: number;
+
+  // --- The owner's, not the seller's ---------------------------------------
+  //
+  // Blank until he prices it. A seller never sees these boxes, so he never
+  // reads back a figure he did not put there.
+
   // The gold the piece is expected to come out at, in grams. Kept as it was
   // typed, as every weight in this portal is, and it is what the gold and the
   // labour are charged on.
   goldWt: string;
   polkiLabour: boolean; // a polki piece is set differently and costs more
 
-  size: string;
-  pcs: number;
-
   lines: QuotationLine[];
+
+  // Every pricing and re-pricing, who and when, oldest first.
+  //
+  // It is also what says which of the two states a quotation is in, and the
+  // reading is in isQuotationPriced(): the field missing altogether means the
+  // record was written when one form asked one person for everything, and such
+  // a record has its weight, its lines and its price already.
+  pricings?: QuotationPricing[];
 
   // Whether the diamonds are certified. Compulsory on the form and at the
   // server, and it carries into the order the quotation becomes. It changes no
@@ -115,11 +146,45 @@ export type NewQuotation = Omit<
   "id" | "quotationNo" | "fy" | "seq" | "createdAt" | "updatedAt" | "orderId" | "orderNo"
 >;
 
-// The only two things that ever change about a saved quotation: the picture,
-// which can be added after the price was given, and the order it became.
+// What can change about a saved quotation: the picture, which can be added
+// after it was written; the order it became; and the owner's pricing, which is
+// a second sitting on the same record and can be done again when a customer
+// argues about the price.
 export type QuotationPatch = Partial<
-  Pick<Quotation, "photoPath" | "photoPublicId" | "orderId" | "orderNo">
+  Pick<
+    Quotation,
+    | "photoPath" | "photoPublicId" | "orderId" | "orderNo"
+    | "goldWt" | "polkiLabour" | "lines" | "quotedUsd" | "quotedInr" | "pricings"
+  >
 >;
+
+// Has the owner priced it?
+//
+// Two states and no third one, so this is the only place the question is
+// answered and every screen and every route asks it here.
+//
+// A record with no `pricings` field at all was written before pricing became
+// the owner's own step, when one form asked one person for everything. It has
+// its gold weight, its stone lines and its price already, so it reads as
+// priced. A quotation written by the seller's form carries an empty list, which
+// is the honest "nothing has been priced yet".
+export function isQuotationPriced(q: Pick<Quotation, "pricings">): boolean {
+  return !Array.isArray(q.pricings) || q.pricings.length > 0;
+}
+
+// The state in the words the screen uses, so the list, the card and the
+// quotation's own page all say the same thing.
+export function quotationStateLabel(q: Pick<Quotation, "pricings">): string {
+  return isQuotationPriced(q) ? "Priced" : "Waiting for a price";
+}
+
+// The last hand to price it, for the line that says who and when.
+export function lastPricing(
+  q: Pick<Quotation, "pricings">
+): QuotationPricing | null {
+  const all = q.pricings || [];
+  return all.length > 0 ? all[all.length - 1] : null;
+}
 
 // What a quotation is worth on today's price list, per piece.
 //

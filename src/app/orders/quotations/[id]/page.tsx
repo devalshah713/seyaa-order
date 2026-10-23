@@ -5,12 +5,15 @@ import { loadPrices } from "@/lib/priceStore";
 import { COMPANY, diaCertificationLabel, formatDate } from "@/lib/memoFormat";
 import { money, trim } from "@/lib/priceList";
 import {
-  forPieces, perPiece, priceQuotation, quoteCarats, quoteDiffers,
-  quoteShapeLine, quoteStones, quotedFigure, ratelessMetal,
+  forPieces, isQuotationPriced, perPiece, priceQuotation, quoteCarats,
+  quoteDiffers, quoteShapeLine, quoteStones, quotationStateLabel, quotedFigure,
+  ratelessMetal,
 } from "@/lib/quotationConfig";
 import { buildQuotationMessage } from "@/lib/quotationMessage";
 import { photoSrc } from "@/lib/cloudinary";
+import { currentSession } from "@/lib/currentUser";
 import QuotationActions from "./QuotationActions";
+import QuotationPricing from "./QuotationPricing";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Quotation — Seyaa Solitaire" };
@@ -35,6 +38,18 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
   const quotation = await getQuotation(params.id).catch(() => null);
   if (!quotation) notFound();
 
+  // Which of the two sittings it is in. There is nothing to price until the
+  // owner has priced it, so almost everything about the money below hangs on
+  // this one answer.
+  const hasPrice = isQuotationPriced(quotation);
+  const state = quotationStateLabel(quotation);
+  const pricings = quotation.pricings || [];
+
+  // Only the owner fills in the owner's half, and the route behind the panel
+  // refuses anybody else as well. Hiding it is a courtesy, not the rule.
+  const session = await currentSession();
+  const isAdmin = session?.role === "admin";
+
   // Priced on the way out, from today's price list. Nothing was stamped onto
   // the quotation when it was saved, so a rate changed since shows here.
   const prices = await loadPrices();
@@ -46,14 +61,16 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
   const carats = quoteCarats(quotation.lines);
   const stones = quoteStones(quotation.lines);
   const rateless = ratelessMetal(quotation.goldDetails);
-  const text = buildQuotationMessage(quotation, quoted);
+  // No price, no words to send. Worked out here rather than inside the message,
+  // which is handed a figure and has no way of knowing there is not one.
+  const text = hasPrice ? buildQuotationMessage(quotation, quoted) : "";
 
   return (
     <div className="wrap qt-page">
       <div className="page-head no-print">
         <h1>{quotation.quotationNo}</h1>
         <p>
-          {formatDate(quotation.date)} · for {quotation.customerName}
+          {formatDate(quotation.date)} · for {quotation.customerName} · {state}
           {quotation.orderId && <> · became order {quotation.orderNo || quotation.orderId}</>}
         </p>
         <Link href="/orders/quotations" className="btn">← All quotations</Link>
@@ -96,7 +113,11 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
             label="Expected gold weight"
             value={quotation.goldWt ? `${quotation.goldWt} g` : ""}
           />
-          <Row label="Labour" value={quotation.polkiLabour ? "Polki rate" : "Standard rate"} />
+          {/* The labour rate is part of the owner's pricing, so it is a fact
+              about this quotation only once there is one. */}
+          {hasPrice && (
+            <Row label="Labour" value={quotation.polkiLabour ? "Polki rate" : "Standard rate"} />
+          )}
           <Row label="Size" value={quotation.size} />
           <Row label="Pieces" value={quotation.pcs} />
           <Row label="Diamond shape" value={quoteShapeLine(quotation.lines)} />
@@ -111,12 +132,40 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
               label="Written on"
               value={`${formatDate(quotation.createdAt.slice(0, 10))} ${quotation.createdAt.slice(11, 16)}`}
             />
+            {/* Every pricing and re-pricing, oldest first, the way an order's
+                notes are kept. A customer argues about a price and the price
+                changes; who changed it and when is part of the record. */}
+            {pricings.map((p, i) => (
+              <Row
+                key={p.id}
+                label={i === 0 ? "Priced by" : "Priced again by"}
+                value={`${p.by} on ${formatDate(p.at.slice(0, 10))} ${p.at.slice(11, 16)}`}
+              />
+            ))}
           </div>
         </div>
       </div>
 
-      {/* The price. Two figures, said apart in words so nobody has to work out
-          which is which: what was quoted, and what the piece costs today. */}
+      {/* Waiting for a price, said in plain words where the price would be, so
+          nobody reads a blank panel as a free piece. Everybody sees this: the
+          seller has to know his quotation is with the owner. */}
+      {!hasPrice ? (
+        <section className="qt-price qt-waiting">
+          <h2>Waiting for a price</h2>
+          <p className="hint">
+            This quotation is with the owner. He puts the stones, the gold weight
+            and the price on it.
+            <br />
+            There are no figures yet, so there is nothing to read to the customer.
+          </p>
+          <p className="hint">
+            Open {quotation.quotationNo} again from the Quotations list once it
+            shows as priced.
+          </p>
+        </section>
+      ) : (
+      /* The price. Two figures, said apart in words so nobody has to work out
+         which is which: what was quoted, and what the piece costs today. */
       <section className="qt-price">
         <h2>The price quoted</h2>
         <table className="sb-money">
@@ -142,9 +191,15 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
             : "This is the calculated price as it stood when the quotation was given."}
         </p>
       </section>
+      )}
 
-      {/* What the piece costs to make. Not on the customer's copy: the print
-          rules leave this out, and the text to send never carries it. */}
+      {/* What the piece costs to make. Shown to everybody who can see orders,
+          which is what the owner asked for, and not on the customer's copy: the
+          print rules leave it out and the text to send never carries it.
+
+          Only once it has been priced. Before that every figure in it would be
+          nought, which reads as an answer and is not one. */}
+      {hasPrice && (
       <section className="sb-total qt-cost no-print">
         <div className="sb-total-grid">
           <span>Total diamond weight</span><b>{trim(priced.totalWeight, 3)} cts</b>
@@ -162,15 +217,16 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
           </tbody>
         </table>
       </section>
+      )}
 
       <div className="no-print">
-        {priced.unknownCodes.length > 0 && (
+        {hasPrice && priced.unknownCodes.length > 0 && (
           <p className="jg-mismatch">
             No price for {priced.unknownCodes.join(", ")} — that size counts at
             nothing, so the calculated figure above is short.
           </p>
         )}
-        {rateless && (
+        {hasPrice && rateless && (
           <p className="dia-note">
             The price list has no {rateless.toLowerCase()} rate, so the
             calculated figure uses the 14KT gold rate. The quoted price is the
@@ -212,6 +268,23 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
         </section>
       )}
 
+      {/* The owner's half. Once it has become an order the order is its own
+          record, so there is nothing left to price here. */}
+      {isAdmin && !quotation.orderId && (
+        <QuotationPricing
+          id={quotation.id}
+          quotationNo={quotation.quotationNo}
+          prices={prices}
+          goldDetails={quotation.goldDetails}
+          goldWt={quotation.goldWt}
+          polkiLabour={!!quotation.polkiLabour}
+          lines={quotation.lines}
+          quotedUsd={quotation.quotedUsd}
+          quotedInr={quotation.quotedInr}
+          priced={hasPrice}
+        />
+      )}
+
       {quotation.orderId ? (
         <div className="ord-pd no-print">
           <h2>The customer said yes</h2>
@@ -232,6 +305,7 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
         text={text}
         hasPhoto={!!photoUrl}
         madeOrder={!!quotation.orderId}
+        priced={hasPrice}
       />
     </div>
   );

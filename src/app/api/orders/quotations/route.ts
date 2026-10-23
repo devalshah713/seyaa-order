@@ -6,14 +6,18 @@
 // of its own. That is what the owner asked for, and it is settled by the
 // address rather than by a second rule somebody has to remember to keep in
 // step.
+//
+// What is asked for here is the seller's half and only his half: who it is for,
+// what is being made, the gold, the size, the quantity, whether it is
+// certified, his notes and the picture. The stones, the expected gold weight
+// and the price are the owner's, and they arrive later through
+// /api/orders/quotations/[id]/price. A quotation saved here is waiting for a
+// price and carries no figures at all.
 import { NextRequest, NextResponse } from "next/server";
 import { createQuotation, listPartyNames, listQuotations } from "@/lib/memoStore";
 import {
   GOLD_DETAILS, isDiaCertification, todayInput, type DiaCertification,
 } from "@/lib/memoFormat";
-import {
-  BLANK_QUOTE_LINE, QUOTE_SHAPES, hasQuoteContent, type QuotationLine,
-} from "@/lib/quotationConfig";
 import { currentSession } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
@@ -28,42 +32,10 @@ function num(v: unknown): number {
   return isFinite(n) && n > 0 ? n : 0;
 }
 
-// A quoted figure, which may genuinely be nothing at all: a blank box means
-// "nothing was written over the calculated figure", not nought rupees.
-function figure(v: unknown): number | undefined {
-  const raw = typeof v === "number" ? String(v) : str(v, 20);
-  if (!raw.trim()) return undefined;
-  const n = parseFloat(raw.replace(/[^0-9.]/g, ""));
-  return isFinite(n) && n >= 0 ? n : undefined;
-}
-
 // An uploaded picture comes back as a URL, and a browser has to be able to open
 // it again later, so that is the one thing checked.
 function isLink(v: string): boolean {
   return /^https?:\/\/\S+$/i.test(v);
-}
-
-// The diamond lines, read the way the stock book's are: every box is text, and
-// a line with nothing at all in it is dropped rather than stored empty.
-function readLines(v: unknown): QuotationLine[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .slice(0, 40)
-    .map((raw): QuotationLine => {
-      const l = (raw || {}) as Record<string, unknown>;
-      const shape = str(l.shape, 40);
-      return {
-        ...BLANK_QUOTE_LINE,
-        breakupWt: str(l.breakupWt, 20),
-        pcs: str(l.pcs, 10),
-        // Only a shape the order form would accept, so a quotation can never
-        // name a shape the order it becomes would be refused for.
-        shape: QUOTE_SHAPES.find((s) => s.toLowerCase() === shape.toLowerCase()) || "",
-        sieve: str(l.sieve, 40),
-        code: str(l.code, 40),
-      };
-    })
-    .filter(hasQuoteContent);
 }
 
 export async function GET(): Promise<NextResponse> {
@@ -117,17 +89,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!GOLD_DETAILS.includes(goldDetails)) {
     return NextResponse.json(
       { error: "Choose the gold details from the list." },
-      { status: 400 }
-    );
-  }
-
-  // The gold and the labour are both charged on this, so a quotation without it
-  // is a quotation priced on its stones alone — which would read as a real
-  // figure and be short by most of it.
-  const goldWt = str(body.goldWt, 20);
-  if (!num(goldWt)) {
-    return NextResponse.json(
-      { error: "Enter the expected gold weight in grams." },
       { status: 400 }
     );
   }
@@ -192,21 +153,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       subCategory: str(body.subCategory, 80),
       subSubCategory: str(body.subSubCategory, 80),
       goldDetails,
-      goldWt,
-      polkiLabour: body.polkiLabour === true,
       size,
       pcs,
-      lines: readLines(body.lines),
       diaCertification,
       notes: str(body.notes, 1000),
       photoPath,
       photoPublicId: str(body.photoPublicId, 200),
-      // What he told the customer. Kept as it was typed, and left out
-      // altogether when nothing was typed over the calculated figure, so the
-      // quotation says "this is the calculated price" rather than claiming a
-      // figure nobody chose.
-      quotedUsd: figure(body.quotedUsd),
-      quotedInr: figure(body.quotedInr),
+      // The owner's half, blank. Written here rather than left off the record
+      // so a quotation keeps one shape whichever sitting it is in, and ignored
+      // from the body on purpose: a seller cannot put a figure on a quotation
+      // even by sending one.
+      goldWt: "",
+      polkiLabour: false,
+      lines: [],
+      // No pricing yet, said as an empty list rather than as a missing field.
+      // A missing field means a record from before pricing was its own step,
+      // and such a record is priced — see isQuotationPriced().
+      pricings: [],
       // The stamp. Read off the signed session, never off the body.
       enteredBy: session.username,
     });

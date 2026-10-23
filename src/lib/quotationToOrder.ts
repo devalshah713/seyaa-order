@@ -8,23 +8,27 @@
 // the same way and by the same code. Nothing here numbers anything, approves
 // anything or saves anything.
 //
-// Two things a quotation can be short of, because the quotation form does not
+// Three things a quotation can be short of, because the quotation form does not
 // insist on them and the order form does:
 //
+//   * the owner's pricing, without which there is nothing to carry: the stones,
+//     the gold weight and the price are all his to decide and are all blank
+//     until he has decided them;
 //   * the reference picture, which is optional on a quotation on purpose — a
 //     customer on the phone often has not sent one yet;
 //   * a diamond line with a shape and a weight on it, for a plain gold piece.
 //
-// Both are refused here with a sentence that names the quotation, rather than
-// being left to come back from the order route in the order form's words, which
-// would send somebody looking for ticks that are not on the screen in front of
-// them.
+// All three are refused here with a sentence that names the quotation, rather
+// than being left to come back from the order route in the order form's words,
+// which would send somebody looking for ticks that are not on the screen in
+// front of them.
 //
 // Pure on purpose — no store, no session, no "server-only". It is handed a
 // quotation and gives back the body, so it can be exercised on its own.
 import { formatShapes } from "./pdConfig";
 import {
-  quoteCarats, quoteShapes, quoteSieve, quoteStones, type Quotation,
+  isQuotationPriced, quoteCarats, quoteShapes, quoteSieve, quoteStones,
+  type Quotation,
 } from "./quotationConfig";
 
 // The order form's body, as the form itself sends it. Strings, because that is
@@ -55,6 +59,17 @@ export function orderFromQuotation(
   const shapes = quoteShapes(lines);
   const carats = quoteCarats(lines);
   const stones = quoteStones(lines);
+
+  // Asked first, because it is the reason the other two would be empty.
+  if (!isQuotationPriced(q)) {
+    return {
+      ok: false,
+      error:
+        `Quotation ${q.quotationNo} has not been priced yet, so there is ` +
+        "nothing to carry onto an order. The owner prices it on the " +
+        "quotation's own page, and then this button will work.",
+    };
+  }
 
   if (!(q.photoPath || "").trim()) {
     return {
