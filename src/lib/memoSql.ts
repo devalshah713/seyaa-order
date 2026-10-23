@@ -24,7 +24,7 @@
 // to memos: which columns, which counters, and the queries the memo screens
 // ask.
 import "server-only";
-import { sqlAll, sqlFirst, sqlRun } from "./sql";
+import { isMissingTable, sqlAll, sqlFirst, sqlRun } from "./sql";
 import {
   insertRows,
   keyChunks,
@@ -51,6 +51,7 @@ import {
   PARTY_TABLE,
   QUOTATION_COLUMNS,
   QUOTATION_TABLE,
+  applyMemoSchema,
 } from "./sqlSchema";
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, MemoItem, GoldItem, Order } from "./memoStore";
@@ -471,17 +472,49 @@ export async function sqlDeleteOrder(id: string): Promise<boolean> {
 // keys in it cannot collide: an order counts under "O:26-27" and a quotation
 // under "Q:26-27".
 
+// The quotation book is younger than the database it lives in.
+//
+// A table is made by the move that fills a module, and the memo book moved
+// before quotations existed, so a database set up back then has every table
+// but this one. Nothing in the portal asked for it to be made, and the first
+// person to open Quotations met a database error instead of an empty book.
+//
+// So the quotation statements say so themselves: a missing table is caught,
+// the memo schema is applied, which makes anything absent and leaves
+// everything present alone, and the statement is tried once more. It costs
+// nothing when the table is there, which is every time after the first.
+//
+// Applied once per Worker rather than once per request: the schema does not go
+// missing again while a Worker lives, and a second person opening the page
+// should not pay for the first one's repair.
+let schemaMended = false;
+
+async function withQuotationTable<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (err) {
+    if (schemaMended || !isMissingTable(err)) throw err;
+    await applyMemoSchema();
+    schemaMended = true;
+    return work();
+  }
+}
+
 export async function sqlListQuotations(): Promise<Quotation[]> {
-  const rows = await sqlAll<{ doc: string }>(
-    `SELECT doc FROM ${QUOTATION_TABLE} ORDER BY created_at DESC`
+  const rows = await withQuotationTable(() =>
+    sqlAll<{ doc: string }>(
+      `SELECT doc FROM ${QUOTATION_TABLE} ORDER BY created_at DESC`
+    )
   );
   return rows.map(parseDoc<Quotation>);
 }
 
 export async function sqlGetQuotation(id: string): Promise<Quotation | null> {
-  const row = await sqlFirst<{ doc: string }>(
-    `SELECT doc FROM ${QUOTATION_TABLE} WHERE id = ?`,
-    [id]
+  const row = await withQuotationTable(() =>
+    sqlFirst<{ doc: string }>(
+      `SELECT doc FROM ${QUOTATION_TABLE} WHERE id = ?`,
+      [id]
+    )
   );
   return row ? parseDoc<Quotation>(row) : null;
 }
@@ -495,22 +528,24 @@ export async function sqlCreateQuotation(
   counterKey: string,
   templates: { id: string; no: string }
 ): Promise<Quotation> {
-  return takeNextNumber(
+  return withQuotationTable(() => takeNextNumber(
     QUOTATION_TABLE, QUOTATION_COLUMNS, quotation, MEMO_COUNTERS(counterKey), templates,
     {
       id: { column: "id", path: "$.id" },
       no: { column: "quotation_no", path: "$.quotationNo" },
       seq: { column: "seq", path: "$.seq" },
     }
-  );
+  ));
 }
 
 export async function sqlPutQuotation(quotation: Quotation): Promise<void> {
-  await putRow(QUOTATION_TABLE, QUOTATION_COLUMNS, quotation);
+  await withQuotationTable(() => putRow(QUOTATION_TABLE, QUOTATION_COLUMNS, quotation));
 }
 
 export async function sqlDeleteQuotation(id: string): Promise<boolean> {
-  const { changes } = await sqlRun(`DELETE FROM ${QUOTATION_TABLE} WHERE id = ?`, [id]);
+  const { changes } = await withQuotationTable(() =>
+    sqlRun(`DELETE FROM ${QUOTATION_TABLE} WHERE id = ?`, [id])
+  );
   return changes > 0;
 }
 
