@@ -3,7 +3,7 @@ import { createOrder, listOrders, listPartyNames } from "@/lib/memoStore";
 import { GOLD_DETAILS, ORDER_STATUSES, type OrderStatus } from "@/lib/memoFormat";
 import { formatShapes, parseShapes } from "@/lib/pdConfig";
 import { currentSession } from "@/lib/currentUser";
-import { managerOf } from "@/lib/userStore";
+import { approvalStartFor, approvalStartNote } from "@/lib/orderApproval";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -142,15 +142,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // An opening note is optional; when given it is attributed like any other.
   const note = str(body.comment, 500);
 
-  // Who, if anyone, signs this off first. Read from the seller's own account,
-  // never from the request: an order cannot be saved as already approved by
-  // sending the right field.
-  //
-  // Whether there is a manager or not, the order still needs the owner's
-  // approval afterwards, so nothing is approved on the way in any more.
-  let manager: { id: string; username: string } | null = null;
+  // Who signs this off, and in what order. Worked out from the firm's own
+  // shape, read off the seller's account and never from the request: an order
+  // cannot be saved as already approved by sending the right field.
+  // See approvalStartFor().
+  let start;
   try {
-    manager = await managerOf(session.uid);
+    start = await approvalStartFor(session);
   } catch (err) {
     return NextResponse.json({ error: msg(err) }, { status: 503 });
   }
@@ -180,19 +178,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // request that sends its own enteredBy is ignored, because nothing
         // here looks at it.
         enteredBy: session.username,
-        // Saved in full either way, numbered either way. The only difference
-        // is which of the two stages it starts at.
-        approval: "waiting",
-        stage: manager ? "manager" : "owner",
-        approverId: manager?.id || "",
-        approverName: manager?.username || "",
+        // Saved in full whoever writes it, and numbered whoever writes it.
+        // The only difference is who it is sitting with afterwards.
+        ...start,
         sentBackReason: "",
         // The owner assigns these afterwards on the order's own page, and
         // only he can. A seller's save never carries them.
         mfg: "",
         designNo: "",
       },
-      note ? { text: note, by: session.username } : undefined
+      // The opening note says where it has gone, so the trail starts with it.
+      { text: [approvalStartNote(start, false), note].filter(Boolean).join(" "), by: session.username }
     );
     return NextResponse.json({ order }, { status: 201 });
   } catch (err) {

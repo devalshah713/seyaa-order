@@ -12,7 +12,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentSession } from "@/lib/currentUser";
 import { getOrder, setOrderApproval } from "@/lib/memoStore";
 import { stageOf } from "@/lib/memoFormat";
-import { managerOf } from "@/lib/userStore";
+import {
+  approvalStartFor, approvalStartNote, type ApprovalStart,
+} from "@/lib/orderApproval";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -61,36 +63,33 @@ export async function POST(
         { status: 400 }
       );
     }
-    // The manager is read off the seller's account again rather than reused,
-    // so an order sent in again after the chain changed waits on whoever
-    // approves that seller now.
-    let manager: { id: string; username: string } | null = null;
+    // A send back at either stage starts the chain from the beginning, and the
+    // chain is worked out afresh rather than reused: an order corrected after
+    // the seller's manager changed goes to whoever approves that seller now.
+    //
+    // Worked out for the seller when the seller is the one correcting it. An
+    // admin correcting somebody else's order must not turn his own place in
+    // the firm into theirs, so that case restarts the order on the chain it
+    // was already recorded as having.
+    let start: ApprovalStart;
     try {
-      manager = isTheSeller ? await managerOf(session.uid) : null;
-    } catch (err) {
-      return NextResponse.json({ error: msg(err) }, { status: 503 });
-    }
-    const waitingOn = manager || { id: order.approverId || "", username: order.approverName || "" };
-    // A send back at either stage starts the chain from the beginning, so a
-    // corrected order goes to its manager again and only then to the owner.
-    // Without a manager it starts at the owner's stage, because every order
-    // now needs that approval.
-    return run(setOrderApproval(
-      params.id,
-      waitingOn.id
+      start = isTheSeller
+        ? await approvalStartFor(session)
+        : order.approverId
         ? {
             approval: "waiting",
             stage: "manager",
-            approverId: waitingOn.id,
-            approverName: waitingOn.username,
+            approverId: order.approverId,
+            approverName: order.approverName || "",
           }
-        : { approval: "waiting", stage: "owner", approverId: "", approverName: "" },
-      {
-        text: waitingOn.id
-          ? `Corrected and sent in again. Waiting for approval from ${waitingOn.username}.`
-          : "Corrected and sent in again. Waiting for the owner's approval.",
-        by: session.username,
-      }
+        : { approval: "waiting", stage: "owner", approverId: "", approverName: "" };
+    } catch (err) {
+      return NextResponse.json({ error: msg(err) }, { status: 503 });
+    }
+    return run(setOrderApproval(
+      params.id,
+      start,
+      { text: approvalStartNote(start, true), by: session.username }
     ));
   }
 

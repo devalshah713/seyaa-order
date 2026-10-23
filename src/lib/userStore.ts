@@ -194,14 +194,19 @@ export async function setUserManager(
 
 // The account that approves this one's orders, or null. Used on the way in
 // when an order is saved, so the order carries who it is waiting for.
+// The manager's role comes back with the name because the approval chain turns
+// on it: a seller whose manager is the head of the firm has one approval to
+// wait for, not the same person's twice.
 export async function managerOf(
   id: string
-): Promise<{ id: string; username: string } | null> {
+): Promise<{ id: string; username: string; role: Role } | null> {
   const users = await readUsers();
   const me = users.find((u) => u.id === id);
   if (!me?.managerId || me.managerId === id) return null;
   const manager = users.find((u) => u.id === me.managerId);
-  return manager ? { id: manager.id, username: manager.username } : null;
+  return manager
+    ? { id: manager.id, username: manager.username, role: manager.role }
+    : null;
 }
 
 export async function deleteUser(id: string): Promise<{ ok: boolean; error?: string }> {
