@@ -213,30 +213,63 @@ function band(text: string): [number, number] {
   return [Number(m[1]), Number(m[2])];
 }
 
-// The round codes by sieve name, worked out once per price list.
+// Everything a code can be worked out from, and not one rate.
+//
+// A seller writing a quotation is offered the Product Code exactly as the
+// stock book's own form offers it, and a seller may not read the price list.
+// So the part of the list a code comes out of is lifted away from the money:
+// the sieve names, the shapes, the pointer bands and the codes themselves.
+// This is what goes to a seller's browser, and there is no price in it to
+// leak.
+export type CodeBook = {
+  sieves: { sieve: string; code: string }[];
+  fancy: { shape: string; code: string; pointers: string }[];
+  // Every code in both tables, in the order they are printed, for the box that
+  // offers them.
+  codes: string[];
+};
+
+// The code book of a price list, worked out once per list.
 //
 // A code is suggested for every diamond line in the jangad register whenever
 // the take-into-stock page is opened, and the register holds a line per stone
 // size per piece. Scanning the whole round list for each of them meant tens of
 // thousands of string comparisons for a page that is only listing design
-// numbers, so the one lookup the list can answer by name is kept against it.
-const SIEVE_CODES = new WeakMap<PriceList, Map<string, string>>();
+// numbers, so the book and its sieve index are kept against the list.
+const CODE_BOOKS = new WeakMap<PriceList, CodeBook>();
+const SIEVE_CODES = new WeakMap<CodeBook, Map<string, string>>();
 
-function sieveCodes(list: PriceList): Map<string, string> {
-  let index = SIEVE_CODES.get(list);
+export function codeBookOf(list: PriceList): CodeBook {
+  let book = CODE_BOOKS.get(list);
+  if (book) return book;
+  book = {
+    sieves: list.round
+      .filter((r) => (r.sieve || "").trim())
+      .map((r) => ({ sieve: r.sieve, code: r.code })),
+    fancy: list.fancy.map((f) => ({
+      shape: f.shape, code: f.code, pointers: f.pointers,
+    })),
+    codes: [...list.round.map((r) => r.code), ...list.fancy.map((f) => f.code)],
+  };
+  CODE_BOOKS.set(list, book);
+  return book;
+}
+
+function sieveCodes(book: CodeBook): Map<string, string> {
+  let index = SIEVE_CODES.get(book);
   if (index) return index;
   index = new Map<string, string>();
   // First one wins, which is what scanning the list in order did.
-  for (const r of list.round) {
+  for (const r of book.sieves) {
     const key = norm(r.sieve);
     if (key && !index.has(key)) index.set(key, r.code);
   }
-  SIEVE_CODES.set(list, index);
+  SIEVE_CODES.set(book, index);
   return index;
 }
 
-export function suggestCode(
-  list: PriceList,
+export function suggestCodeFrom(
+  book: CodeBook,
   line: { shape: string; sieve: string; breakupWt: string; pcs: string }
 ): string {
   const sieve = norm(line.sieve);
@@ -245,7 +278,7 @@ export function suggestCode(
   // Round: the sieve name is the identity, and it is written the same way in
   // both places.
   if (sieve) {
-    const hit = sieveCodes(list).get(sieve);
+    const hit = sieveCodes(book).get(sieve);
     if (hit) return hit;
   }
 
@@ -255,7 +288,7 @@ export function suggestCode(
   // heavy one stone is, so the per-stone weight picks between them.
   const wt = Number(line.breakupWt), pcs = Number(line.pcs);
   const per = Number.isFinite(wt) && pcs ? wt / pcs : null;
-  const candidates = list.fancy.filter((f) => {
+  const candidates = book.fancy.filter((f) => {
     const s = (f.shape || "").toUpperCase();
     return s.startsWith(shape) || norm(f.code).startsWith(shape + ":");
   });
@@ -267,4 +300,11 @@ export function suggestCode(
     return per >= lo && per <= hi;
   });
   return (inBand || candidates[0]).code;
+}
+
+export function suggestCode(
+  list: PriceList,
+  line: { shape: string; sieve: string; breakupWt: string; pcs: string }
+): string {
+  return suggestCodeFrom(codeBookOf(list), line);
 }

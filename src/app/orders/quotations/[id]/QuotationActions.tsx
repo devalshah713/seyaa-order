@@ -2,10 +2,10 @@
 // What can be done with a saved quotation: copy the text, print it, add the
 // picture it may be short of, and turn it into an order.
 //
-// All of it waits on a price. The words to send carry one figure and it is the
-// price; an order built from a quotation carries the stones and the weight the
-// price was worked out from. So until the owner has priced it, each of those is
-// a sentence saying why rather than a button that does nothing.
+// All of it waits on the owner. The words to send carry one figure and it is
+// the price; an order built from a quotation carries the figures the owner
+// checked. So until he has approved it and priced it, each of those is a
+// sentence saying why rather than a button that does nothing.
 //
 // The portal sends nothing. The text is written on the server, shown here
 // exactly as it will be pasted, and the seller puts it into WhatsApp himself —
@@ -139,7 +139,8 @@ export default function QuotationActions({
             customer&rsquo;s quotation carries is the price, so there is nothing
             to send.
             <br />
-            The owner prices it on this page. Come back once it says priced.
+            The owner approves it and puts the price on it on this page. Come
+            back once it says priced.
           </p>
         )}
       </div>
@@ -165,7 +166,8 @@ export default function QuotationActions({
             {quotationNo} has not been priced yet, so there is nothing to carry
             onto an order.
             <br />
-            The owner prices it on this page, and then this button will work.
+            The owner approves it and puts the price on it on this page, and
+            then this button will work.
           </p>
         ) : hasPhoto ? (
           <p className="hint">

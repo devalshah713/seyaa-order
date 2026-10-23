@@ -1,18 +1,18 @@
 "use client";
 // The quotation book, as a list.
 //
-// Every quotation is in one of two states and the list says which in plain
-// words. Waiting for a price means the seller has written it down and it is
-// with the owner, and there are no figures because there are none. Priced means
-// the figures are there: what was quoted, and what the piece costs on today's
-// price list, because nothing is stamped onto a quotation.
+// Every quotation is in one of two states, and the list says which in the words
+// of the person reading it: the owner's rows say it is waiting for his approval,
+// a seller's say it is with the owner. Priced means the owner has approved it
+// and the figures are there — what was quoted, and what the piece costs on
+// today's price list, because nothing is stamped onto a quotation.
 //
 // Above the table sit the blocks that answer "what do I do now", the way the
 // orders list puts the approval queue above the board. The owner's is the list
-// of quotations to price. A seller's is two short lists: the ones he is waiting
-// on, and the ones that have come back priced and are his to read out. That
-// second one is the whole way back in, so it is at the top of the page rather
-// than something to hunt for.
+// of quotations to approve. A seller's is two short lists: the ones he is
+// waiting on, and the ones that have come back priced and are his to read out.
+// That second one is the whole way back in, so it is at the top of the page
+// rather than something to hunt for.
 //
 // It borrows the orders list's own table and its classes, so at phone width
 // each quotation reads as a card with its labels shown rather than as nine
@@ -24,7 +24,7 @@ import Link from "next/link";
 import { diaCertificationLabel, formatDate } from "@/lib/memoFormat";
 import { money } from "@/lib/priceList";
 import {
-  isQuotationPriced, searchQuotations, type QuotationRow,
+  isQuotationPriced, quotationStateLabel, searchQuotations, type QuotationRow,
 } from "@/lib/quotationConfig";
 
 // One row of a block above the table. The orders list's own queue row, so the
@@ -66,7 +66,7 @@ export default function QuotationsClient({
   const [q, setQ] = useState("");
   const [onlyOpen, setOnlyOpen] = useState(false);
 
-  // Waiting for a price. The owner's to price, so he sees all of them; a seller
+  // Not approved yet. The owner's to approve, so he sees all of them; a seller
   // sees his own, which is what he is waiting on.
   const waiting = useMemo(
     () =>
@@ -118,7 +118,7 @@ export default function QuotationsClient({
       {waiting.length > 0 && (
         <div className="ord-queue">
           <h2>
-            {me.isAdmin ? "Waiting for a price" : "With the owner for a price"}
+            {me.isAdmin ? "Waiting for your approval" : "With the owner for approval"}
             <span className="q-count">{waiting.length}</span>
           </h2>
           {waiting.map((r) => <QueueRow key={r.quotation.id} row={r} />)}
@@ -163,10 +163,10 @@ export default function QuotationsClient({
                   <Link href={`/orders/quotations/${x.id}`}>{x.quotationNo}</Link>
                   <div className="ev-meta">{formatDate(x.date)}</div>
                   <div className="ev-meta">by {x.enteredBy || "not recorded"}</div>
-                  {/* Which of the two states, on the row itself, so the table
-                      reads the same as the blocks above it. */}
+                  {/* Which of the two states, on the row itself, in the same
+                      words as the block above it. */}
                   <div className={`ev-meta qt-state${priced ? " qt-is-priced" : ""}`}>
-                    {priced ? "Priced" : "Waiting for a price"}
+                    {quotationStateLabel(x, me.isAdmin)}
                   </div>
                 </td>
                 <td>
@@ -203,7 +203,7 @@ export default function QuotationsClient({
                   </>
                 ) : (
                   <td className="qt-money" colSpan={2} data-label="Price">
-                    <span className="hint">Waiting for a price</span>
+                    <span className="hint">{quotationStateLabel(x, me.isAdmin)}</span>
                   </td>
                 )}
                 <td data-label="Became an order">

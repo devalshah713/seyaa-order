@@ -5,9 +5,9 @@ import { loadPrices } from "@/lib/priceStore";
 import { COMPANY, diaCertificationLabel, formatDate } from "@/lib/memoFormat";
 import { money, trim } from "@/lib/priceList";
 import {
-  forPieces, isQuotationPriced, perPiece, priceQuotation, quoteCarats,
-  quoteDiffers, quoteShapeLine, quoteStones, quotationStateLabel, quotedFigure,
-  ratelessMetal,
+  forPieces, hasQuoteContent, isQuotationPriced, perPiece, priceQuotation,
+  quoteCarats, quoteDiffers, quoteShapeLine, quoteStones, quotationStateLabel,
+  quotedFigure, ratelessMetal, sellerFiguresDiffer,
 } from "@/lib/quotationConfig";
 import { buildQuotationMessage } from "@/lib/quotationMessage";
 import { photoSrc } from "@/lib/cloudinary";
@@ -38,17 +38,25 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
   const quotation = await getQuotation(params.id).catch(() => null);
   if (!quotation) notFound();
 
-  // Which of the two sittings it is in. There is nothing to price until the
-  // owner has priced it, so almost everything about the money below hangs on
-  // this one answer.
-  const hasPrice = isQuotationPriced(quotation);
-  const state = quotationStateLabel(quotation);
-  const pricings = quotation.pricings || [];
-
-  // Only the owner fills in the owner's half, and the route behind the panel
-  // refuses anybody else as well. Hiding it is a courtesy, not the rule.
+  // Only the owner approves and prices, and the route behind the panel refuses
+  // anybody else as well. Hiding it is a courtesy, not the rule.
   const session = await currentSession();
   const isAdmin = session?.role === "admin";
+
+  // Which of the two states it is in. There is no price until the owner has
+  // approved it, so almost everything about the money below hangs on this one
+  // answer — and the words for it are the ones the person reading the page would
+  // use: the owner's says it is his to do, the seller's says it is with him.
+  const hasPrice = isQuotationPriced(quotation);
+  const state = quotationStateLabel(quotation, isAdmin);
+  const pricings = quotation.pricings || [];
+
+  // What the seller sent, where the owner has since changed it. On the record
+  // either way, and shown to both of them: the gap between a seller's figure
+  // and what the piece really takes is the thing worth looking at later.
+  const sent = quotation.sellerFigures;
+  const corrected = sellerFiguresDiffer(quotation);
+  const sentLines = (sent?.lines || []).filter(hasQuoteContent);
 
   // Priced on the way out, from today's price list. Nothing was stamped onto
   // the quotation when it was saved, so a rate changed since shows here.
@@ -146,22 +154,36 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
         </div>
       </div>
 
-      {/* Waiting for a price, said in plain words where the price would be, so
-          nobody reads a blank panel as a free piece. Everybody sees this: the
-          seller has to know his quotation is with the owner. */}
+      {/* No price yet, said in plain words where the price would be, so nobody
+          reads a blank panel as a free piece. Everybody sees this, and each sees
+          it in his own words: the owner's says it is waiting for him, the
+          seller's says it is with the owner. */}
       {!hasPrice ? (
         <section className="qt-price qt-waiting">
-          <h2>Waiting for a price</h2>
-          <p className="hint">
-            This quotation is with the owner. He puts the stones, the gold weight
-            and the price on it.
-            <br />
-            There are no figures yet, so there is nothing to read to the customer.
-          </p>
-          <p className="hint">
-            Open {quotation.quotationNo} again from the Quotations list once it
-            shows as priced.
-          </p>
+          <h2>{state}</h2>
+          {isAdmin ? (
+            <p className="hint">
+              The figures on this quotation are the seller&rsquo;s. Check them in
+              the panel below, correct what is out, and put the price on.
+              <br />
+              Saving the price is the approval, and then the seller can read it to
+              his customer.
+            </p>
+          ) : (
+            <>
+              <p className="hint">
+                This quotation is with the owner. He checks your figures and puts
+                the price on it.
+                <br />
+                There is no price yet, so there is nothing to read to the
+                customer.
+              </p>
+              <p className="hint">
+                Open {quotation.quotationNo} again from the Quotations list once
+                it shows as priced.
+              </p>
+            </>
+          )}
         </section>
       ) : (
       /* The price. Two figures, said apart in words so nobody has to work out
@@ -268,8 +290,46 @@ export default async function QuotationPage(props: { params: Promise<{ id: strin
         </section>
       )}
 
-      {/* The owner's half. Once it has become an order the order is its own
-          record, so there is nothing left to price here. */}
+      {/* What the seller sent, where the owner has since changed it. Not on the
+          customer's copy: he is being quoted a piece, not shown the office
+          working out what it takes. Shown to the seller as well as the owner,
+          because it is his own figure and he is entitled to see what became of
+          it. */}
+      {sent && corrected && (
+        <section className="qt-sent no-print">
+          <h2>What the seller sent</h2>
+          <p className="hint">
+            {quotation.enteredBy || "The seller"} raised this quotation with the
+            figures below. The ones above are the owner&rsquo;s, after checking
+            them.
+          </p>
+          <div className="ord-row">
+            <span>Gold weight as sent</span>
+            <strong>
+              {(sent.goldWt || "").trim() ? `${sent.goldWt} g` : "nothing written"}
+            </strong>
+          </div>
+          <div className="ord-row">
+            <span>Diamonds as sent</span>
+            <strong>
+              {sentLines.length === 0
+                ? "nothing written"
+                : sentLines
+                    .map((l) =>
+                      [
+                        l.shape, l.sieve,
+                        l.breakupWt ? `${l.breakupWt} cts` : "",
+                        l.pcs ? `${l.pcs} pcs` : "", l.code,
+                      ].filter(Boolean).join(" · ")
+                    )
+                    .join("  |  ")}
+            </strong>
+          </div>
+        </section>
+      )}
+
+      {/* The approval and the price. Once it has become an order the order is
+          its own record, so there is nothing left to price here. */}
       {isAdmin && !quotation.orderId && (
         <QuotationPricing
           id={quotation.id}

@@ -2538,6 +2538,23 @@ table.ch-table tbody tr { cursor: default; }
 }
 .qt-owner .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+/* What the seller sent, where the owner has since changed it. The same panel as
+   the price, ruled off in the colour the portal uses for "somebody else wrote
+   this", so it is never read as the figures the price was worked out on. It
+   sits directly above the owner's panel, so he reads it while he works. */
+.qt-sent {
+  margin-top: 18px; padding: 16px 18px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+  border-left: 4px solid #C98A1E;
+}
+.qt-sent h2 {
+  margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+  color: #8A5B06;
+}
+/* The stone sizes as sent are one long line, so they wrap rather than pushing
+   the page sideways. */
+.qt-sent .ord-row strong { white-space: normal; word-break: break-word; }
+
 /* The seller's way back in, at the top of the list: his quotations that have
    come back priced. Green rather than amber, because nothing is pending. */
 .ord-queue.qt-ready { border-left-color: #3C8A52; }
@@ -2546,13 +2563,9 @@ table.ch-table tbody tr { cursor: default; }
 .qt-table .qt-state { color: #8A5B06; font-weight: 600; }
 .qt-table .qt-state.qt-is-priced { color: #3C8A52; }
 
-/* The box on the form that is his own decision rather than the portal's. */
-.ord-form .qt-quote { border-left: 3px solid var(--gold); }
-.qt-form .sb-lines, .qt-form .sb-total { margin-top: 18px; }
-/* The form is one column, so the figures sit under the weights rather than off
-   to the right of them. */
-.qt-form .sb-total { flex-direction: column; gap: 16px; }
-.qt-form table.sb-money { margin-left: 0; width: 100%; max-width: 420px; }
+/* The stone lines on the seller's form. There is no money panel beside them,
+   because there is no price on his form. */
+.qt-form .sb-lines { margin-top: 18px; }
 
 /* In the list, the quoted figure leads and the rupee figure sits under it, so
    the two currencies are never read as one number. */
@@ -2605,14 +2618,12 @@ table.ch-table tbody tr { cursor: default; }
     min-height: 44px; min-width: 44px; font-size: 20px; border-radius: 9px;
   }
   .qt-form .sb-lines .sb-table td.jg-sr:first-child { padding-right: 56px; }
-  .qt-form .check { min-height: 48px; }
-  .qt-form .check input { width: 22px; height: 22px; }
   /* The stone sizes as they read back on the quotation's own page: not typed
      into, so the 16px rule does not apply, but they are figures a customer is
      being shown and 12.5px is the register's size, not a phone's. */
   .qt-sizes table.sb-table td { font-size: 14px; }
-  .qt-price, .qt-cost, .qt-sizes { padding: 14px 15px; }
-  .qt-price table.sb-money, .qt-form table.sb-money { max-width: none; }
+  .qt-price, .qt-cost, .qt-sizes, .qt-sent { padding: 14px 15px; }
+  .qt-price table.sb-money { max-width: none; }
   /* The money columns stay on the card: a quotation whose price is one tap
      away would be pointless. */
   .qt-table td.qt-money { text-align: left; }

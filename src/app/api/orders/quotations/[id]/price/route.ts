@@ -1,22 +1,24 @@
-// The owner's half of a quotation: the stones, the expected gold weight, the
-// labour rate and the price.
+// The owner approving a quotation and putting the price on it. One action, not
+// two: saving it is the approval.
+//
+// What arrives here is the seller's figures as the owner has them after reading
+// them — corrected where he was wrong, left alone where he was right — plus the
+// two things that are the owner's own: which labour rate the piece is charged
+// at, and the figure to tell the customer.
 //
 // Admin only, and refused here rather than merely left off the screen. The
 // quotation's page hides the panel from a seller as a courtesy; this is the
-// rule. A seller on the phone with a customer knows what the customer asked
-// for and does not know how many stones of which sieve go into it, so these
-// boxes are not his to fill and not his to send either.
+// rule.
 //
 // It can be done again. A customer argues about a price, so the owner comes
-// back and prices the same quotation a second time; every pricing is recorded
-// with who and when, the way an order's notes are, and the figures themselves
-// are written over because the current price is the price.
+// back and prices the same quotation a second time; every one is recorded with
+// who and when, the way an order's notes are, and the figures themselves are
+// written over because the current price is the price. What the seller first
+// sent is in sellerFigures and is not among the fields a patch can name, so no
+// correction here can reach it.
 import { NextRequest, NextResponse } from "next/server";
 import { getQuotation, updateQuotation } from "@/lib/memoStore";
-import {
-  BLANK_QUOTE_LINE, QUOTE_SHAPES, hasQuoteContent, type QuotationLine,
-  type QuotationPricing,
-} from "@/lib/quotationConfig";
+import { readQuoteLines, type QuotationPricing } from "@/lib/quotationConfig";
 import { requireAdmin } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
@@ -40,29 +42,6 @@ function figure(v: unknown): number | undefined {
   return isFinite(n) && n >= 0 ? n : undefined;
 }
 
-// The diamond lines, read the way the stock book's are: every box is text, and
-// a line with nothing at all in it is dropped rather than stored empty.
-function readLines(v: unknown): QuotationLine[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .slice(0, 40)
-    .map((raw): QuotationLine => {
-      const l = (raw || {}) as Record<string, unknown>;
-      const shape = str(l.shape, 40);
-      return {
-        ...BLANK_QUOTE_LINE,
-        breakupWt: str(l.breakupWt, 20),
-        pcs: str(l.pcs, 10),
-        // Only a shape the order form would accept, so a quotation can never
-        // name a shape the order it becomes would be refused for.
-        shape: QUOTE_SHAPES.find((s) => s.toLowerCase() === shape.toLowerCase()) || "",
-        sieve: str(l.sieve, 40),
-        code: str(l.code, 40),
-      };
-    })
-    .filter(hasQuoteContent);
-}
-
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -72,8 +51,8 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Only the owner prices a quotation. Ask him to open it and put the " +
-          "stones and the price on it.",
+          "Only the owner approves a quotation and puts the price on it. Ask " +
+          "him to open it.",
       },
       { status: 403 }
     );
@@ -89,7 +68,8 @@ export async function POST(
 
   // The gold and the labour are both charged on this, so a quotation without it
   // is a quotation priced on its stones alone — which would read as a real
-  // figure and be short by most of it.
+  // figure and be short by most of it. Optional on the seller's form, because
+  // he may not know it; not optional here, because the price depends on it.
   const goldWt = str(body.goldWt, 20);
   if (!num(goldWt)) {
     return NextResponse.json(
@@ -127,7 +107,7 @@ export async function POST(
     const quotation = await updateQuotation(params.id, {
       goldWt,
       polkiLabour: body.polkiLabour === true,
-      lines: readLines(body.lines),
+      lines: readQuoteLines(body.lines),
       // What he is telling the customer. Left out altogether when nothing was
       // written over the calculated figure, so the quotation says "this is the
       // calculated price" rather than claiming a figure nobody chose.

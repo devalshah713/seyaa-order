@@ -7,17 +7,25 @@
 // address rather than by a second rule somebody has to remember to keep in
 // step.
 //
-// What is asked for here is the seller's half and only his half: who it is for,
-// what is being made, the gold, the size, the quantity, whether it is
-// certified, his notes and the picture. The stones, the expected gold weight
-// and the price are the owner's, and they arrive later through
-// /api/orders/quotations/[id]/price. A quotation saved here is waiting for a
-// price and carries no figures at all.
+// What is asked for here is what the seller has in hand: who it is for, what is
+// being made, the gold, the size, the quantity, whether it is certified, his
+// notes, the picture, and his own figures — the expected gold weight and a line
+// per stone size.
+//
+// None of those figures is compulsory. They are a seller's best guess at what
+// the piece takes, and a form that refuses him until he knows the sieve of
+// every stone sends him back to WhatsApp, which is the thing this replaces.
+//
+// Two things are not his and are ignored even if sent: the price, and the
+// labour rate. Both are part of the price, and the price is the owner's. They
+// arrive later through /api/orders/quotations/[id]/price, which is also the
+// approval.
 import { NextRequest, NextResponse } from "next/server";
 import { createQuotation, listPartyNames, listQuotations } from "@/lib/memoStore";
 import {
   GOLD_DETAILS, isDiaCertification, todayInput, type DiaCertification,
 } from "@/lib/memoFormat";
+import { readQuoteLines } from "@/lib/quotationConfig";
 import { currentSession } from "@/lib/currentUser";
 
 export const dynamic = "force-dynamic";
@@ -144,6 +152,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // His figures. Read, not refused: a blank weight and no stone lines is a
+  // quotation the owner fills the figures in on, and that is allowed.
+  const goldWt = str(body.goldWt, 20);
+  const lines = readQuoteLines(body.lines);
+
   try {
     const quotation = await createQuotation({
       date: str(body.date, 10) || todayInput(),
@@ -159,15 +172,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       notes: str(body.notes, 1000),
       photoPath,
       photoPublicId: str(body.photoPublicId, 200),
-      // The owner's half, blank. Written here rather than left off the record
-      // so a quotation keeps one shape whichever sitting it is in, and ignored
-      // from the body on purpose: a seller cannot put a figure on a quotation
-      // even by sending one.
-      goldWt: "",
+      // The figures describing the piece, as he sent them. These are what the
+      // owner reads and corrects.
+      goldWt,
+      lines,
+      // And the same figures again, kept as he sent them. Nothing afterwards
+      // writes over this, so a corrected weight can always be held up beside
+      // the one he estimated.
+      sellerFigures: { goldWt, lines },
+      // The labour rate is a choice of rate and a rate is part of the price, so
+      // it is the owner's. Ignored from the body on purpose: a seller cannot
+      // set it even by sending it.
       polkiLabour: false,
-      lines: [],
-      // No pricing yet, said as an empty list rather than as a missing field.
-      // A missing field means a record from before pricing was its own step,
+      // No approval yet, said as an empty list rather than as a missing field.
+      // A missing field means a record from before approval was its own step,
       // and such a record is priced — see isQuotationPriced().
       pricings: [],
       // The stamp. Read off the signed session, never off the body.

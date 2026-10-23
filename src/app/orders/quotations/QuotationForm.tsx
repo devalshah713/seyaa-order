@@ -1,23 +1,38 @@
 "use client";
-// The seller's half of a quotation, which is all he is asked for.
+// The seller raising a quotation, which is where one starts.
 //
-// A customer rings up and asks what a piece would cost. What he says is what
-// goes on this form: who he is, what he wants made, the category, the gold, the
-// size, how many, whether it is certified, and anything else he said.
+// He wants to know what a piece would cost, so he writes down what he has in
+// hand: the piece, the picture, and his own figures — how many grams of gold,
+// how many carats of diamond, which shapes, which sieves. That is exactly the
+// WhatsApp message he sends today, and this is it on a form.
 //
-// There is not one figure on this form, on purpose. A seller on the phone knows
-// what the customer asked for; he does not know how many stones of which sieve
-// go into it, what it will come out at in gold, or what it should sell for.
-// Those are the owner's to decide, and asking a seller for them produces
-// guesses that then read as facts. So he never sees a figure he did not put
-// there, and there is nothing to price until the owner has priced it.
+// Not one of his figures is compulsory. They are his best guess at what the
+// piece takes, not a measurement, and a form that refuses him until he knows
+// the sieve of every stone is a form he gives up on and goes back to WhatsApp.
+// So the gaps are allowed and the form says so in one line.
 //
-// Written for a phone: one column, every box at least 48 pixels.
-import { useEffect, useRef, useState } from "react";
+// He never sees a price. There is no cost breakdown on this form, no calculated
+// total and no price box, and his browser is not sent the price list — only the
+// code book, which is the sieve names, the shapes and the codes with no rate in
+// it, so the Product Code can still be offered rather than hunted for.
+//
+// What happens next is the owner reading his figures, correcting the ones that
+// are wrong, and putting the price on. Saving that is the approval, and then the
+// quotation comes back here with the price on it.
+//
+// Written for a phone: one column, every box at least 48 pixels, and the stone
+// lines read as cards rather than a table to scroll sideways.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Combo from "@/components/Combo";
 import Picker from "@/components/Picker";
 import { DIA_CERTIFICATIONS, GOLD_DETAILS, todayInput } from "@/lib/memoFormat";
+import { suggestCodeFrom, type CodeBook } from "@/lib/stockBookConfig";
+import {
+  BLANK_QUOTE_LINE, QUOTE_SHAPES, quoteCarats, quoteStones,
+  type QuotationLine,
+} from "@/lib/quotationConfig";
 import { compressImage, photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 import { readReply } from "@/lib/readReply";
 
@@ -31,6 +46,7 @@ const BLANK = {
   subCategory: "",
   subSubCategory: "",
   goldDetails: "",
+  goldWt: "",
   size: "",
   pcs: "1",
   diaCertification: "",
@@ -41,14 +57,55 @@ const BLANK = {
 
 type Field = keyof typeof BLANK;
 
-export default function QuotationForm({ nextNo }: { nextNo: string }) {
+export default function QuotationForm({
+  nextNo,
+  codeBook,
+}: {
+  nextNo: string;
+  codeBook: CodeBook;
+}) {
   const router = useRouter();
   const [f, setF] = useState(() => ({ ...BLANK, date: todayInput() }));
+  const [lines, setLines] = useState<QuotationLine[]>([{ ...BLANK_QUOTE_LINE }]);
   const [categories, setCategories] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const setLine = (i: number, k: keyof QuotationLine, v: string) =>
+    setLines((rows) =>
+      rows.map((l, n) => {
+        if (n !== i) return l;
+        const next = { ...l, [k]: v };
+        // The Product Code is what the rate hangs on, and it can be worked out
+        // from the sieve or the shape — so it is offered as soon as there is
+        // enough to go on, and left alone once it has been typed over. The same
+        // rule, and the same function, as the stock book's own form, reading
+        // the code book instead of the price list.
+        if (k !== "code" && (!l.code || l.code === suggestCodeFrom(codeBook, l))) {
+          next.code = suggestCodeFrom(codeBook, next) || next.code;
+        }
+        return next;
+      })
+    );
+
+  const addLine = () => setLines((rows) => [...rows, { ...BLANK_QUOTE_LINE }]);
+
+  const dropLine = (i: number) =>
+    setLines((rows) =>
+      rows.length > 1 ? rows.filter((_, n) => n !== i) : [{ ...BLANK_QUOTE_LINE }]
+    );
+
+  const sieves = useMemo(
+    () => codeBook.sieves.map((s) => s.sieve).filter(Boolean),
+    [codeBook]
+  );
+
+  // The carats and the stones he has written, added up and shown back. Not a
+  // price: a seller checking he has typed what he meant to.
+  const carats = quoteCarats(lines);
+  const stones = quoteStones(lines);
 
   const set = <K extends Field>(k: K, v: (typeof BLANK)[K]) =>
     setF((s) => ({ ...s, [k]: v }));
@@ -121,7 +178,7 @@ export default function QuotationForm({ nextNo }: { nextNo: string }) {
       const res = await fetch("/api/orders/quotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...f, pcs: f.pcs }),
+        body: JSON.stringify({ ...f, pcs: f.pcs, lines }),
       });
       const data = await readReply(res, "Could not save the quotation.");
       const quotation = data.quotation as { id?: string } | undefined;
@@ -231,9 +288,19 @@ export default function QuotationForm({ nextNo }: { nextNo: string }) {
             prompt="Choose the gold…"
           />
         </label>
+        <label className="field" htmlFor="q-goldwt">
+          <span>Expected gold weight in grams <em>(optional)</em></span>
+          <input
+            id="q-goldwt"
+            value={f.goldWt}
+            inputMode="decimal"
+            onChange={(e) => set("goldWt", e.target.value)}
+            placeholder="12.500"
+          />
+        </label>
         <p className="group-hint">
-          What the piece will weigh in gold is not asked for here. The owner puts
-          that on when he prices it.
+          Your own figure, as near as you know it. The owner checks it and
+          corrects it if it is out.
         </p>
         <div className="two">
           <label className="field" htmlFor="q-pcs">
@@ -281,11 +348,72 @@ export default function QuotationForm({ nextNo }: { nextNo: string }) {
         </p>
       </fieldset>
 
+      {/* One line per stone size, in the shape the stock book keeps them. His
+          figures, not measurements: he fills in what he has and leaves the rest.
+          The Product Code is offered from the sieve or the shape so he does not
+          look one up on a printed sheet, and there is no price column, because
+          there is no price on this form. */}
+      <section className="sb-lines qt-lines">
+        <div className="sb-lines-head">
+          <h2>The diamonds, one line per size</h2>
+          <span className="jg-muted">
+            {carats > 0 || stones > 0
+              ? `${carats.toFixed(2)} cts · ${stones} stones`
+              : "Nothing written yet."}
+          </span>
+        </div>
+        <p className="group-hint">
+          Write what you have. Every box here can be left empty, and a line you
+          have not filled in is simply not saved.
+        </p>
+        <div className="jg-scroll">
+          <table className="jg-table sb-table">
+            <thead>
+              <tr>
+                <th className="jg-sr">#</th>
+                <th>Shape</th><th>Sieve / Size</th>
+                <th>Weight (cts)</th><th>Pcs</th>
+                <th>Product Code</th>
+                <th className="jg-sr" />
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={i}>
+                  <td className="jg-sr">{i + 1}</td>
+                  <td data-label="Shape">
+                    <Combo value={l.shape} onChange={(v) => setLine(i, "shape", v)}
+                      options={QUOTE_SHAPES} placeholder="Round" /></td>
+                  <td data-label="Sieve / Size">
+                    <Combo value={l.sieve} onChange={(v) => setLine(i, "sieve", v)}
+                      options={sieves} placeholder="+6.5-11" /></td>
+                  <td data-label="Weight (cts)">
+                    <input inputMode="decimal" value={l.breakupWt}
+                      onChange={(e) => setLine(i, "breakupWt", e.target.value)} /></td>
+                  <td data-label="Pcs">
+                    <input inputMode="numeric" value={l.pcs}
+                      onChange={(e) => setLine(i, "pcs", e.target.value)} /></td>
+                  <td data-label="Product Code">
+                    <Combo value={l.code} onChange={(v) => setLine(i, "code", v)}
+                      options={codeBook.codes} placeholder="+6.5-11 : 01" /></td>
+                  <td className="jg-sr">
+                    <button type="button" className="del" onClick={() => dropLine(i)}
+                      title="Remove line" aria-label="Remove line">×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="pieces-actions">
+          <button type="button" className="btn" onClick={addLine}>+ Add a stone size</button>
+        </div>
+      </section>
+
       <fieldset className="group">
         <legend>Reference picture</legend>
         <p className="group-hint">
-          Optional. A customer ringing up for a price has often not sent anything
-          yet.
+          Optional, though it is usually the first thing you have.
           <br />
           An order needs one, so a picture added here saves retyping the whole
           thing later.
@@ -361,8 +489,8 @@ export default function QuotationForm({ nextNo }: { nextNo: string }) {
       <p className="hint">
         The quotation number, the time and your username are added by the portal.
         <br />
-        This goes to the owner for a price. He puts the stones, the gold weight
-        and the figure on it.
+        This goes to the owner for approval. He checks your figures, corrects
+        anything that is out, and puts the price on it.
         <br />
         When he has, it shows as priced on the Quotations list. Open it there and
         read the price to the customer.

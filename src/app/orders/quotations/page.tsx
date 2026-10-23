@@ -27,6 +27,8 @@ export default async function QuotationsPage() {
   // list of what he asked for and whether it has come back priced.
   const session = await currentSession();
 
+  const isAdmin = session?.role === "admin";
+
   // The count that matters most, said at the top: how many are sitting with the
   // owner, the way the orders page counts the ones waiting for approval.
   const unpriced = rows.filter((r) => !isQuotationPriced(r.quotation)).length;
@@ -39,7 +41,13 @@ export default async function QuotationsPage() {
         <h1>Quotations</h1>
         <p>
           {rows.length} total · {open} still open
-          {unpriced > 0 && <> · {unpriced} waiting for a price</>}
+          {unpriced > 0 && (
+            <>
+              {" · "}
+              {unpriced}
+              {isAdmin ? " waiting for your approval" : " with the owner"}
+            </>
+          )}
           {became > 0 && <> · {became} became orders</>}
         </p>
         <Link href="/orders" className="btn">← All orders</Link>
@@ -50,9 +58,9 @@ export default async function QuotationsPage() {
       ) : (
         <>
           <p className="hint">
-            A quotation is written in two sittings. The seller writes down what
-            the customer asked for, and the owner puts the stones, the gold
-            weight and the price on it afterwards.
+            A quotation goes two ways. The seller raises it with his own figures
+            on it, the owner checks them and puts the price on, and it comes back
+            to the seller with the price for his customer.
             <br />
             Once it is priced, the calculated figure is worked out on
             today&rsquo;s price list every time it is opened. The price that was

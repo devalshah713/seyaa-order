@@ -1,15 +1,23 @@
 "use client";
-// The owner's half of a quotation, on the quotation's own page.
+// The owner approving a quotation and putting the price on it.
 //
-// The seller wrote down what the customer asked for. This is the part only the
-// owner can answer: what the piece will weigh in gold, whether it is set polki,
-// a line per stone size, and the figure to tell the customer. The cost appears
-// as he types, from the same code the stock book prices a finished piece with,
-// so what he reads here is the sum the portal would do anyway.
+// The seller raised it with his own figures on it. The owner reads them here,
+// in the boxes themselves, and corrects the ones that are wrong — a weight that
+// is out, a sieve he has guessed at — rather than retyping the quotation. What
+// the seller first sent is shown beside them once the two part company, because
+// the gap between what a seller estimates and what a piece really takes is
+// worth seeing.
 //
-// It can be filled in again. A customer argues about a price, so pressing the
-// button a second time re-prices the quotation; the page above lists every
-// pricing with who and when.
+// Two things here are the owner's own: which labour rate the piece is charged
+// at, and the figure to tell the customer. The cost appears as he types, from
+// the same code the stock book prices a finished piece with, so what he reads
+// is the sum the portal would do anyway.
+//
+// Saving is the approval. One button, not two.
+//
+// It can be done again. A customer argues about a price, so pressing the button
+// a second time re-prices the quotation; the page above lists every time it was
+// done, with who and when.
 //
 // The panel is shown to an admin and nobody else, and the route behind it
 // refuses anybody else as well. Hiding it is a courtesy, not the rule.
@@ -22,8 +30,8 @@ import Combo from "@/components/Combo";
 import { findPrice, karatOf, money, trim, type PriceList } from "@/lib/priceList";
 import { suggestCode } from "@/lib/stockBookConfig";
 import {
-  BLANK_QUOTE_LINE, QUOTE_SHAPES, priceQuotation, ratelessMetal,
-  type QuotationLine,
+  BLANK_QUOTE_LINE, QUOTE_SHAPES, hasQuoteContent, priceQuotation,
+  ratelessMetal, type QuotationLine,
 } from "@/lib/quotationConfig";
 import { readReply } from "@/lib/readReply";
 
@@ -32,8 +40,8 @@ export default function QuotationPricing({
   quotationNo,
   prices,
   goldDetails,
-  // What is already on the record. Blank on one the seller has just written;
-  // the figures he put on last time when he is pricing it again.
+  // What is on the record now: the seller's figures on one he has just raised,
+  // or the corrected ones when it is being priced again.
   goldWt: savedGoldWt,
   polkiLabour: savedPolki,
   lines: savedLines,
@@ -175,13 +183,14 @@ export default function QuotationPricing({
 
   return (
     <section className="qt-owner no-print">
-      <h2>{priced ? "Change the price" : "Put a price on it"}</h2>
+      <h2>{priced ? "Change the price" : "Approve it and put the price on"}</h2>
       <p className="hint">
         {priced
           ? `${quotationNo} has a price on it already. Change it here and the` +
             " new one becomes the price. Every time it is priced is recorded above."
-          : `${quotationNo} is waiting for a price. The seller wrote down what the` +
-            " customer asked for; the stones, the gold weight and the figure are yours."}
+          : `${quotationNo} is waiting for your approval. The figures below are the` +
+            " seller's. Correct what is out, choose the labour rate, put the price" +
+            " on, and saving it is the approval."}
       </p>
 
       <label className="field" htmlFor="qp-goldwt">
@@ -195,9 +204,9 @@ export default function QuotationPricing({
         />
       </label>
       <p className="hint">
-        The gold and the labour are both charged on this weight, at the{" "}
-        {karatOf(goldDetails)}KT rate, which comes from the gold details the
-        seller chose.
+        The seller&rsquo;s figure, for you to keep or correct. The gold and the
+        labour are both charged on this weight, at the {karatOf(goldDetails)}KT
+        rate, which comes from the gold details he chose.
       </p>
       {rateless && (
         <p className="dia-note">
@@ -215,16 +224,20 @@ export default function QuotationPricing({
         />
         <span>Polki labour rate</span>
       </label>
+      <p className="hint">
+        Yours, not the seller&rsquo;s: it picks which of the two labour rates the
+        piece is charged at, and a rate is part of the price.
+      </p>
 
-      {/* One line per stone size, in the shape the stock book keeps them. The
-          Product Code is what the rate hangs on, and it is offered from the
+      {/* One line per stone size, as the seller sent them, to keep or correct.
+          The Product Code is what the rate hangs on, and it is offered from the
           sieve or the shape rather than looked up on a printed sheet. */}
       <div className="sb-lines qt-lines">
         <div className="sb-lines-head">
-          <h2>One line per stone size</h2>
+          <h2>The diamonds, one line per size</h2>
           <span className="jg-muted">
-            {lines.filter((l) => l.code.trim()).length === 0
-              ? "Nothing priced yet."
+            {lines.filter(hasQuoteContent).length === 0
+              ? "Nothing on it yet."
               : `${lines.length} ${lines.length === 1 ? "size" : "sizes"}`}
           </span>
         </div>
@@ -360,8 +373,8 @@ export default function QuotationPricing({
           onClick={save}
         >
           {saving
-            ? "Saving the price…"
-            : priced ? "Save the new price" : "Save the price"}
+            ? "Saving…"
+            : priced ? "Save the new price" : "Approve it and save the price"}
         </button>
       </div>
       {error && <p className="save-error">{error}</p>}

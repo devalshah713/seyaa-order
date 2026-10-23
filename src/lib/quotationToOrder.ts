@@ -11,11 +11,11 @@
 // Three things a quotation can be short of, because the quotation form does not
 // insist on them and the order form does:
 //
-//   * the owner's pricing, without which there is nothing to carry: the stones,
-//     the gold weight and the price are all his to decide and are all blank
-//     until he has decided them;
-//   * the reference picture, which is optional on a quotation on purpose — a
-//     customer on the phone often has not sent one yet;
+//   * the owner's approval and price, without which there is nothing to carry:
+//     the seller's figures are his best guess until the owner has checked them,
+//     and there is no price at all;
+//   * the reference picture, which is optional on a quotation on purpose — the
+//     seller may not have one in hand yet;
 //   * a diamond line with a shape and a weight on it, for a plain gold piece.
 //
 // All three are refused here with a sentence that names the quotation, rather
@@ -66,8 +66,9 @@ export function orderFromQuotation(
       ok: false,
       error:
         `Quotation ${q.quotationNo} has not been priced yet, so there is ` +
-        "nothing to carry onto an order. The owner prices it on the " +
-        "quotation's own page, and then this button will work.",
+        "nothing to carry onto an order. The owner approves it and puts the " +
+        "price on it on the quotation's own page, and then this button will " +
+        "work.",
     };
   }
 

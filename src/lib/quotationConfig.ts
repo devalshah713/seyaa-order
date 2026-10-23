@@ -1,11 +1,22 @@
 // A quotation: what a piece would cost, worked out before the piece exists.
 //
-// One quotation, two hands, in two sittings. A seller on the phone with a
-// customer writes down what the customer asked for and nothing else. He does
-// not know how many stones of which sieve go into it, what it will weigh in
-// gold, or what it should sell for, and asking him produces guesses that then
-// read as facts. Those are the owner's to decide, so the owner opens the
-// quotation afterwards and prices it.
+// One quotation, two hands. A seller wants to know what a piece would cost, so
+// he raises the quotation and writes down what he has in hand: the piece, the
+// picture, and his own figures — how many grams of gold, how many carats of
+// diamond. That is exactly what he sends on WhatsApp today, which is the thing
+// this replaces.
+//
+// It then goes to the owner for approval. The owner reads the seller's figures,
+// corrects the ones that are wrong, and puts the price on it. Saving that is
+// the approval; there is no second button. The quotation goes back to the
+// seller's screen with the price on it, and that is the quotation he gives the
+// customer.
+//
+// So the owner's own are two things and no more: the approval, and the price.
+// Every figure that describes the piece is the seller's to send, and none of
+// them is compulsory — they are his best figures, not measurements, and a form
+// that refuses him until he knows the sieve of every stone sends him straight
+// back to WhatsApp.
 //
 // The sum itself is the stock book's and not a second one: pricePiece() in
 // priceList.ts, reached through priceOf() below. This is the same sum the stock
@@ -84,20 +95,39 @@ export type Quotation = {
   size: string;
   pcs: number;
 
-  // --- The owner's, not the seller's ---------------------------------------
+  // --- The figures describing the piece ------------------------------------
   //
-  // Blank until he prices it. A seller never sees these boxes, so he never
-  // reads back a figure he did not put there.
+  // The seller sends these when he raises the quotation, and the owner corrects
+  // them in place when he approves it. Current here means current: what the
+  // price is worked out on. What the seller first sent is in sellerFigures
+  // below and is never written over.
 
   // The gold the piece is expected to come out at, in grams. Kept as it was
   // typed, as every weight in this portal is, and it is what the gold and the
   // labour are charged on.
   goldWt: string;
-  polkiLabour: boolean; // a polki piece is set differently and costs more
+
+  // Which of the two labour rates the piece is charged at. The owner's alone:
+  // it is not a figure describing the piece but a choice of rate, and a rate is
+  // part of the price.
+  polkiLabour: boolean;
 
   lines: QuotationLine[];
 
-  // Every pricing and re-pricing, who and when, oldest first.
+  // What the seller sent, kept as he sent it.
+  //
+  // The owner corrects a wrong weight or a wrong sieve on the record itself,
+  // because retyping the quotation is the thing this exists to stop. But the
+  // difference between what a seller estimated and what the piece really takes
+  // is worth seeing, so his own figures are written once, when the quotation is
+  // raised, and nothing afterwards touches them — QuotationPatch cannot name
+  // this field, so no route can.
+  //
+  // Optional, so a record from either earlier version reads as a quotation
+  // whose seller sent no figures of his own, which is the truth about it.
+  sellerFigures?: { goldWt: string; lines: QuotationLine[] };
+
+  // Every approval and re-pricing, who and when, oldest first.
   //
   // It is also what says which of the two states a quotation is in, and the
   // reading is in isQuotationPriced(): the field missing altogether means the
@@ -115,10 +145,9 @@ export type Quotation = {
 
   notes: string;
 
-  // Optional here, unlike on an order. A customer asking for a price on the
-  // phone often has not sent anything yet, and refusing to quote without a
-  // picture would push the whole conversation back to WhatsApp, which is what
-  // this exists to stop.
+  // Optional here, unlike on an order. The seller usually has the picture in
+  // hand, but refusing him the form until he does would push him back to
+  // WhatsApp, which is what this exists to stop.
   photoPath?: string;
   photoPublicId?: string;
 
@@ -158,24 +187,72 @@ export type QuotationPatch = Partial<
   >
 >;
 
-// Has the owner priced it?
+// Has the owner approved and priced it?
 //
 // Two states and no third one, so this is the only place the question is
 // answered and every screen and every route asks it here.
 //
-// A record with no `pricings` field at all was written before pricing became
+// A record with no `pricings` field at all was written before approval became
 // the owner's own step, when one form asked one person for everything. It has
 // its gold weight, its stone lines and its price already, so it reads as
-// priced. A quotation written by the seller's form carries an empty list, which
-// is the honest "nothing has been priced yet".
+// priced. A quotation raised by a seller carries an empty list, which is the
+// honest "nobody has approved this yet".
 export function isQuotationPriced(q: Pick<Quotation, "pricings">): boolean {
   return !Array.isArray(q.pricings) || q.pricings.length > 0;
 }
 
-// The state in the words the screen uses, so the list, the card and the
-// quotation's own page all say the same thing.
-export function quotationStateLabel(q: Pick<Quotation, "pricings">): string {
-  return isQuotationPriced(q) ? "Priced" : "Waiting for a price";
+// The state in the words the person looking at it would use.
+//
+// One quotation sitting in one place reads two ways, because the two people
+// waiting on it are waiting for different things. The seller's screen says it
+// is with the owner; the owner's says it is his to do. Saying "waiting for a
+// price" to the man who has to give the price names the queue and not the job.
+//
+// `forOwner` left off gives the state in nobody's particular words, which is
+// what a caller that does not know who is reading should say.
+export function quotationStateLabel(
+  q: Pick<Quotation, "pricings">,
+  forOwner?: boolean
+): string {
+  if (isQuotationPriced(q)) return "Priced";
+  if (forOwner === undefined) return "Waiting for a price";
+  return forOwner ? "Waiting for your approval" : "With the owner for approval";
+}
+
+// Did the owner change a figure the seller sent?
+//
+// Asked so the screen can show what the seller sent beside what the record now
+// says, and only when the two are different things. Where they agree the record
+// is what he sent and a second copy of it would be noise.
+//
+// A quotation with no sellerFigures — either earlier version's, or one raised
+// with every figure left blank — has nothing to compare, so nothing differs.
+export function sellerFiguresDiffer(
+  q: Pick<Quotation, "goldWt" | "lines" | "sellerFigures">
+): boolean {
+  const sent = q.sellerFigures;
+  if (!sent) return false;
+  if ((sent.goldWt || "").trim() !== (q.goldWt || "").trim()) return true;
+  const now = q.lines || [];
+  const then = sent.lines || [];
+  if (now.length !== then.length) return true;
+  return now.some((l, i) => !sameQuoteLine(l, then[i]));
+}
+
+function sameQuoteLine(a: QuotationLine, b: QuotationLine): boolean {
+  const keys: (keyof QuotationLine)[] = ["breakupWt", "pcs", "shape", "sieve", "code"];
+  return keys.every((k) => (a[k] || "").trim() === (b[k] || "").trim());
+}
+
+// Did the seller send any figure at all? A quotation he sent with the diamond
+// boxes empty is allowed, and the screen says so rather than showing an empty
+// panel headed "what the seller sent".
+export function sellerSentFigures(
+  q: Pick<Quotation, "sellerFigures">
+): boolean {
+  const sent = q.sellerFigures;
+  if (!sent) return false;
+  return !!(sent.goldWt || "").trim() || (sent.lines || []).some(hasQuoteContent);
 }
 
 // The last hand to price it, for the line that says who and when.
@@ -284,6 +361,37 @@ export function quoteShapes(lines: QuotationLine[]): string[] {
 
 export function quoteShapeLine(lines: QuotationLine[]): string {
   return formatShapes(quoteShapes(lines));
+}
+
+// The stone lines as they arrive off a form, cleaned.
+//
+// One reader for both forms, because both now send them: the seller when he
+// raises the quotation, the owner when he corrects it. Two readers would be two
+// chances for the two forms to disagree about what a line is.
+//
+// Every box is text, as the stock book keeps them. A line with nothing at all
+// in it is dropped rather than stored empty, and a shape the order form would
+// not accept is dropped from the line, so a quotation can never name a shape
+// the order it becomes would be refused for.
+export function readQuoteLines(v: unknown): QuotationLine[] {
+  if (!Array.isArray(v)) return [];
+  const str = (raw: unknown, max: number): string =>
+    typeof raw === "string" ? raw.trim().slice(0, max) : "";
+  return v
+    .slice(0, 40)
+    .map((raw): QuotationLine => {
+      const l = (raw || {}) as Record<string, unknown>;
+      const shape = str(l.shape, 40);
+      return {
+        ...BLANK_QUOTE_LINE,
+        breakupWt: str(l.breakupWt, 20),
+        pcs: str(l.pcs, 10),
+        shape: QUOTE_SHAPES.find((s) => s.toLowerCase() === shape.toLowerCase()) || "",
+        sieve: str(l.sieve, 40),
+        code: str(l.code, 40),
+      };
+    })
+    .filter(hasQuoteContent);
 }
 
 // A line is worth keeping if anything at all was put in it — the same reading
