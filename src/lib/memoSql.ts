@@ -49,9 +49,12 @@ import {
   ORDER_TABLE,
   PARTY_COLUMNS,
   PARTY_TABLE,
+  QUOTATION_COLUMNS,
+  QUOTATION_TABLE,
 } from "./sqlSchema";
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, MemoItem, GoldItem, Order } from "./memoStore";
+import type { Quotation } from "./quotationConfig";
 
 // Where the memo book's counters live, said once and handed to the shared
 // numbering. The memo tables keep their own counter table, so a restore of
@@ -458,6 +461,56 @@ export async function sqlPutOrder(order: Order): Promise<void> {
 
 export async function sqlDeleteOrder(id: string): Promise<boolean> {
   const { changes } = await sqlRun(`DELETE FROM ${ORDER_TABLE} WHERE id = ?`, [id]);
+  return changes > 0;
+}
+
+// --- Quotations --------------------------------------------------------------
+//
+// The same four statements an order needs, against the quotation book's own
+// table and its own counter. Nothing is shared but the counter table, and the
+// keys in it cannot collide: an order counts under "O:26-27" and a quotation
+// under "Q:26-27".
+
+export async function sqlListQuotations(): Promise<Quotation[]> {
+  const rows = await sqlAll<{ doc: string }>(
+    `SELECT doc FROM ${QUOTATION_TABLE} ORDER BY created_at DESC`
+  );
+  return rows.map(parseDoc<Quotation>);
+}
+
+export async function sqlGetQuotation(id: string): Promise<Quotation | null> {
+  const row = await sqlFirst<{ doc: string }>(
+    `SELECT doc FROM ${QUOTATION_TABLE} WHERE id = ?`,
+    [id]
+  );
+  return row ? parseDoc<Quotation>(row) : null;
+}
+
+// The quotation written under the next number in its book, taken by the
+// database inside the same transaction that writes the row. See
+// takeNextNumber(): two quotations saved in the very same moment cannot be
+// given one number, and neither can a number be skipped.
+export async function sqlCreateQuotation(
+  quotation: Quotation,
+  counterKey: string,
+  templates: { id: string; no: string }
+): Promise<Quotation> {
+  return takeNextNumber(
+    QUOTATION_TABLE, QUOTATION_COLUMNS, quotation, MEMO_COUNTERS(counterKey), templates,
+    {
+      id: { column: "id", path: "$.id" },
+      no: { column: "quotation_no", path: "$.quotationNo" },
+      seq: { column: "seq", path: "$.seq" },
+    }
+  );
+}
+
+export async function sqlPutQuotation(quotation: Quotation): Promise<void> {
+  await putRow(QUOTATION_TABLE, QUOTATION_COLUMNS, quotation);
+}
+
+export async function sqlDeleteQuotation(id: string): Promise<boolean> {
+  const { changes } = await sqlRun(`DELETE FROM ${QUOTATION_TABLE} WHERE id = ?`, [id]);
   return changes > 0;
 }
 

@@ -5,6 +5,7 @@ import { currentSession } from "@/lib/currentUser";
 import {
   approvalLine,
   approvalOf,
+  diaCertificationLabel,
   formatDate,
   orderStatusLabel,
   stageOf,
@@ -98,9 +99,26 @@ export default async function OrderPage(props: { params: Promise<{ id: string }>
           />
           <Row label="Sieve or size" value={order.sieveSize} />
           <Row label="Stone pieces" value={order.stonePcs} />
+          {/* Orders taken before this was asked for have no answer, and say so
+              rather than being shown as one of the two. */}
+          <Row label="Certification" value={diaCertificationLabel(order.diaCertification)} />
           <Row label="Remake of" value={order.stockNo} />
           <Row label="Party" value={order.customer} />
           <Row label="Special instructions" value={order.instructions} />
+
+          {/* Where it came from, when the customer said yes to a price he had
+              been given. The quotation keeps the money side; this is only the
+              way back to it. */}
+          {order.fromQuotationId && (
+            <div className="ord-row">
+              <span>From quotation</span>
+              <strong>
+                <Link href={`/orders/quotations/${order.fromQuotationId}`}>
+                  {order.fromQuotationNo || order.fromQuotationId}
+                </Link>
+              </strong>
+            </div>
+          )}
 
           {/* The stamp. Shown here because knowing who took an order and when
               is the first question asked about it, and nothing on this page

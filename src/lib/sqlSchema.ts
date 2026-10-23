@@ -25,6 +25,7 @@ import "server-only";
 import { isMissingTable, sqlFirst, sqlRun } from "./sql";
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, Order } from "./memoStore";
+import type { Quotation } from "./quotationConfig";
 import type { JangadRow } from "./jangadConfig";
 import type { PdSheet } from "./pdStore";
 import type { Demand } from "./demandStore";
@@ -150,6 +151,36 @@ export const ORDER_COLUMNS: SqlColumn<Order>[] = [
   { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (o) => text(o.updatedAt), blank: "" },
 ];
 
+// --- Quotations --------------------------------------------------------------
+//
+// What a piece would cost, priced before it exists. A quotation's own book,
+// counted per financial year, beside the order book and in the same tables as
+// it, because a quotation becoming an order is the one thing the two do
+// together and the flag that decides which store is live is the memo book's.
+//
+// The list shows every quotation newest first and the whole row is shown rather
+// than filtered on, exactly as the order board is, so the columns that earn
+// their place are the identity, the number it was taken under, the sort, and
+// the one fact the list groups by: whether it became an order.
+//
+// Everything else a quotation carries, the customer, the gold, the diamond
+// lines and the figure that was quoted, is in `doc`. None of it is sorted,
+// filtered or asked of the database: the page searches the quotations it has
+// been handed, as the order list does.
+export const QUOTATION_COLUMNS: SqlColumn<Quotation>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (q) => q.id, blank: "", primaryKey: true },
+  { name: "quotation_no", type: "TEXT", path: "$.quotationNo", get: (q) => text(q.quotationNo), blank: "" },
+  // QT/26-27/004 is counted per financial year in its own book, exactly as a
+  // memo and an order are, and takes its number the same way.
+  { name: "fy", type: "TEXT", path: "$.fy", get: (q) => text(q.fy), blank: "" },
+  { name: "seq", type: "INTEGER", path: "$.seq", get: (q) => num(q.seq), blank: 0 },
+  // Set once, by the save that turns the quotation into an order. Blank means
+  // it has not been accepted yet, which is most of them.
+  { name: "order_id", type: "TEXT", path: "$.orderId", get: (q) => text(q.orderId), blank: "" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (q) => text(q.createdAt), blank: "" },
+  { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (q) => text(q.updatedAt), blank: "" },
+];
+
 // --- Parties -----------------------------------------------------------------
 //
 // The controlled lists: memo parties, manufacturers, categories and the rest.
@@ -260,6 +291,7 @@ export function columnValues<T>(columns: SqlColumn<T>[], record: T): unknown[] {
 export const MEMO_TABLE = "memos";
 export const EVENT_TABLE = "memo_events";
 export const ORDER_TABLE = "memo_orders";
+export const QUOTATION_TABLE = "memo_quotations";
 export const PARTY_TABLE = "memo_parties";
 export const COUNTER_TABLE = "memo_counters";
 export const FLAG_TABLE = "memo_flags";
@@ -276,6 +308,12 @@ export const MEMO_SCHEMA: string[] = [
   createTable(MEMO_TABLE, MEMO_COLUMNS),
   createTable(EVENT_TABLE, EVENT_COLUMNS),
   createTable(ORDER_TABLE, ORDER_COLUMNS),
+  // Added after the memos moved, and the quotation book starts empty, so there
+  // is nothing in R2 to copy across. The table still has to be made, which is
+  // what the count below does for it: a database already set up is one object
+  // short, so the whole list runs again, and every statement in it is
+  // IF NOT EXISTS.
+  createTable(QUOTATION_TABLE, QUOTATION_COLUMNS),
   createTable(PARTY_TABLE, PARTY_COLUMNS),
 
   // The running numbers, one row per book: "26-27" for jewellery memos,
@@ -315,6 +353,8 @@ export const MEMO_SCHEMA: string[] = [
 
   // The order board, newest first.
   `CREATE INDEX IF NOT EXISTS idx_orders_created_at ON ${ORDER_TABLE} (created_at DESC)`,
+  // The quotation list, the same way.
+  `CREATE INDEX IF NOT EXISTS idx_quotations_created_at ON ${QUOTATION_TABLE} (created_at DESC)`,
   // One controlled list at a time, alphabetically, which is how every dropdown
   // in the portal asks for it.
   `CREATE INDEX IF NOT EXISTS idx_parties_kind_name ON ${PARTY_TABLE} (kind, name)`,
@@ -323,10 +363,11 @@ export const MEMO_SCHEMA: string[] = [
 // Everything the statements above create, by name, so whether they have all
 // been run can be asked in one query instead of fourteen.
 const MEMO_OBJECTS = [
-  MEMO_TABLE, EVENT_TABLE, ORDER_TABLE, PARTY_TABLE, COUNTER_TABLE, FLAG_TABLE,
+  MEMO_TABLE, EVENT_TABLE, ORDER_TABLE, QUOTATION_TABLE, PARTY_TABLE,
+  COUNTER_TABLE, FLAG_TABLE,
   "idx_memos_created_at", "idx_memos_memo_date", "idx_memos_kind_purpose",
   "idx_memos_to_party", "idx_events_memo_id", "idx_events_stock_no",
-  "idx_orders_created_at", "idx_parties_kind_name",
+  "idx_orders_created_at", "idx_quotations_created_at", "idx_parties_kind_name",
 ];
 
 // Create what is missing. Safe to run as often as anyone presses the button.

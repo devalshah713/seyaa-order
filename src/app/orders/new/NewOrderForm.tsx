@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Picker from "@/components/Picker";
-import { GOLD_DETAILS } from "@/lib/memoFormat";
+import { DIA_CERTIFICATIONS, GOLD_DETAILS } from "@/lib/memoFormat";
 import { DIA_SHAPES, formatShapes, parseShapes } from "@/lib/pdConfig";
 import { photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 import { readReply } from "@/lib/readReply";
@@ -25,6 +25,7 @@ const BLANK = {
   size: "",
   diaShape: "",
   diamondCts: "",
+  diaCertification: "",
   sieveSize: "",
   stonePcs: "",
   stockNo: "",
@@ -118,6 +119,9 @@ export default function NewOrderForm() {
     if (!shapes.length) return ["Tick at least one diamond shape.", "o-shape"];
     if (!(Number(f.diamondCts) > 0)) {
       return ["Enter the approximate diamond weight in carats.", "o-cts"];
+    }
+    if (!f.diaCertification) {
+      return ["Choose whether the diamonds are certified.", "o-certi"];
     }
     return null;
   }
@@ -343,6 +347,25 @@ export default function NewOrderForm() {
               />
             </label>
           </div>
+          <label className="field" htmlFor="o-certi">
+            <span>Certified or not <em className="need">must be filled</em></span>
+            <select
+              id="o-certi"
+              value={f.diaCertification}
+              onChange={(e) => set("diaCertification", e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {DIA_CERTIFICATIONS.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+          <p className="group-hint">
+            A design is either certified or it is not, and the factory has to be
+            told which.
+            <br />
+            It does not change the price.
+          </p>
           <div className="two">
             <label className="field" htmlFor="o-sieve">
               <span>Sieve or size <em>(optional)</em></span>

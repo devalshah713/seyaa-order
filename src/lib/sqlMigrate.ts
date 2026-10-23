@@ -98,11 +98,11 @@ const FLAT_CHUNK_BYTES = CHUNK_BYTES / 2;
 // How many of the fifty statements a request is allowed may go on copying
 // records. The rest of the run needs the others, and the worst case is the
 // first press, which also makes the tables: asking whether the schema is there
-// (1), making it (14), counting before and after (2), the running numbers (1),
+// (1), making it (16), counting before and after (2), the running numbers (1),
 // up to one flag per controlled list (7), the flag at the end (1) and, on a
 // second press, one query per kind to find out what is already across (4).
-// That is 30, so the records get what is left.
-const QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 30;
+// That is 32, so the records get what is left.
+const QUERY_BUDGET = MAX_QUERIES_PER_REQUEST - 32;
 
 export type RecordCounts = {
   memos: number;

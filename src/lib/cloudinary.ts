@@ -59,3 +59,33 @@ export async function uploadToCloudinary(
   }
   return { secure_url: data.secure_url, public_id: data.public_id || "" };
 }
+
+// Shrink a camera photo before it goes up, so an upload on a phone's own signal
+// finishes. A photo off a phone is several megabytes and nothing in the portal
+// shows one larger than about 1,200 pixels.
+//
+// Anything that goes wrong on the way falls back to sending the file as it is:
+// a picture that uploads slowly is better than a picture that does not upload.
+//
+// Browser only — it draws on a canvas. The order form and the PD sheet each
+// still carry their own copy of this, written before there was anywhere shared
+// to put it; they could be pointed here.
+export async function compressImage(file: File, max = 1200): Promise<Blob> {
+  if (file.size < 400_000) return file;
+  const img = document.createElement("img");
+  const url = URL.createObjectURL(file);
+  try {
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+    return blob || file;
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

@@ -398,6 +398,47 @@ export const GOLD_DETAILS: string[] = [
   "SILVER",
 ];
 
+// --- Certified or not -------------------------------------------------------
+//
+// A design is either certified or it is not, and the person quoting it and the
+// person making it both need to know, so it is asked for on the order form and
+// on the quotation form alike and neither will save without an answer.
+//
+// It records a fact about the piece and moves no figure. The price list's codes
+// are by sieve and by shape and it holds no certified and non-certified rates,
+// so there is nothing here to multiply a price by, and nothing in the pricing
+// reads it.
+export type DiaCertification = "certified" | "non_certified";
+
+export const DIA_CERTIFICATIONS: { value: DiaCertification; label: string }[] = [
+  { value: "certified", label: "Certified" },
+  { value: "non_certified", label: "Non-certified" },
+];
+
+export const DIA_CERTIFICATION_LABELS: readonly string[] =
+  DIA_CERTIFICATIONS.map((c) => c.label);
+
+export function isDiaCertification(v: unknown): v is DiaCertification {
+  return typeof v === "string" && DIA_CERTIFICATIONS.some((c) => c.value === v);
+}
+
+// The label a form shows, back to the stored value. The forms offer the words,
+// because "Non-certified" is what the office says, and the record keeps the
+// value, because that is what everything else compares.
+export function diaCertificationValue(label: string): DiaCertification | "" {
+  const found = DIA_CERTIFICATIONS.find(
+    (c) => c.label.toLowerCase() === (label || "").trim().toLowerCase()
+  );
+  return found ? found.value : "";
+}
+
+// An order or a quotation written before this was asked for has no answer, and
+// is never guessed into one of the two: it reads as not stated, on every screen
+// and in every list.
+export function diaCertificationLabel(v: string | undefined | null): string {
+  return DIA_CERTIFICATIONS.find((c) => c.value === v)?.label || "Not stated";
+}
+
 // --- Approval ---------------------------------------------------------------
 //
 // Deliberately separate from the production status. An order waiting for its

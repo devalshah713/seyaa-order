@@ -15,6 +15,7 @@
 // Pure on purpose — no store, no session, no "server-only". It is handed an
 // order and gives back a string, so it can be exercised on its own and so the
 // screen has no say in the wording.
+import { diaCertificationLabel } from "./memoFormat";
 import type { Order } from "./memoStore";
 
 // What a line needs to carry. Everything is optional because an order saved
@@ -23,7 +24,7 @@ export type OrderMessageInput = Pick<
   Order,
   | "orderNo" | "productName" | "category" | "subCategory" | "subSubCategory"
   | "goldColor" | "size" | "pcs" | "diaShape" | "diamondCts" | "sieveSize"
-  | "stonePcs" | "instructions" | "designNo" | "mfg"
+  | "stonePcs" | "diaCertification" | "instructions" | "designNo" | "mfg"
 >;
 
 const clean = (v: string | undefined): string => (v || "").trim();
@@ -55,6 +56,10 @@ export function buildOrderMessage(o: OrderMessageInput): string {
     !!diamondWords(o) && `Diamond: ${diamondWords(o)}`,
     !!clean(o.sieveSize) && `Sieve or stone size: ${clean(o.sieveSize)}`,
     !!(o.stonePcs && o.stonePcs > 0) && `Stones: ${o.stonePcs} pcs`,
+    // Left out altogether on an order taken before this was asked for, rather
+    // than going out as "Certification: Not stated", which reads to a
+    // manufacturer like an instruction nobody can follow.
+    !!o.diaCertification && `Certification: ${diaCertificationLabel(o.diaCertification)}`,
     !!clean(o.designNo) && `Design number: ${clean(o.designNo)}`,
     !!clean(o.mfg) && `Making: ${clean(o.mfg)}`,
     !!clean(o.instructions) && `Please note: ${clean(o.instructions)}`,

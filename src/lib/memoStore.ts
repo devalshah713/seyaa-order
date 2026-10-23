@@ -52,9 +52,14 @@ import {
   sqlCounters,
   sqlCreateMemo,
   sqlCreateOrder,
+  sqlCreateQuotation,
   sqlDeleteMemo,
   sqlDeleteOrder,
   sqlDeleteParties,
+  sqlDeleteQuotation,
+  sqlGetQuotation,
+  sqlListQuotations,
+  sqlPutQuotation,
   sqlEventsForStock,
   sqlEventsForStockNos,
   sqlFlags,
@@ -86,8 +91,12 @@ import {
   orderIdFor,
   orderNoFor,
   partyKey,
+  quotationCounterKey,
+  quotationIdFor,
+  quotationNoFor,
   stockKey,
   todayInput,
+  type DiaCertification,
   type MemoKind,
   type OrderApproval,
   type OrderApprovalStage,
@@ -105,6 +114,7 @@ import {
   parentKindOf,
   type PartyKind,
 } from "./memoFormat";
+import type { NewQuotation, Quotation, QuotationPatch } from "./quotationConfig";
 
 const DB_PATH = "memos/db.json";
 
@@ -183,6 +193,10 @@ export type Order = {
   diaShape?: string;
   sieveSize?: string; // sieve or stone size, when they know it
   stonePcs?: number; // approximate number of stones
+  // Whether the diamonds are certified. Compulsory on the form and at the
+  // server now; orders taken before it was asked for have no answer and read as
+  // not stated rather than being guessed into one of the two.
+  diaCertification?: DiaCertification;
   instructions?: string;
   // The reference picture, uploaded, and held exactly as a PD sheet holds one.
   photoPath?: string;
@@ -230,6 +244,14 @@ export type Order = {
   // way from one to the other.
   pdId?: string;
   pdNo?: string;
+
+  // --- The quotation this order came from ----------------------------------
+  //
+  // Written once, by the save that creates the order, when the customer said
+  // yes to a price he had been given. Absent on an order written straight onto
+  // the order form, which is most of them.
+  fromQuotationId?: string;
+  fromQuotationNo?: string;
 };
 
 export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt" | "comments">;
@@ -239,6 +261,10 @@ export type DB = {
   memos: Memo[];
   events: StockEvent[];
   orders: Order[];
+  // What a piece would cost, priced before it exists. Its own book with its own
+  // numbers, in this document because a quotation becoming an order is the one
+  // thing the two do together.
+  quotations: Quotation[];
   parties: Party[];
   // Set once a list's built-in names have been written in, so removing one does
   // not bring it back on the next read. `mfgSeeded` is the first version of
@@ -270,6 +296,9 @@ async function readDB(): Promise<DB> {
     memos: (db.memos || []).map(normalize),
     events: db.events || [],
     orders: db.orders || [],
+    // A document written before quotations existed has none, which is an empty
+    // book and not a missing one.
+    quotations: db.quotations || [],
     parties: db.parties || [],
   };
 }
@@ -1145,6 +1174,138 @@ export async function deleteOrder(id: string): Promise<boolean> {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Quotations
+//
+// A price asked for, worked out before the piece exists. The same two stores
+// and the same numbering an order has, for the same reasons: against the
+// document the counter is read, raised and written back in one pass, and
+// against D1 the number is taken by the database inside the transaction that
+// writes the row, so two quotations saved in the very same moment cannot share
+// one number and none is skipped.
+//
+// Nothing in here prices anything. A quotation's figures are worked out on the
+// way out, from today's price list, so changing a rate moves every quotation —
+// which is how the stock book behaves and what the owner asked for.
+// ---------------------------------------------------------------------------
+
+export async function listQuotations(): Promise<Quotation[]> {
+  const quotations = (await useSql())
+    ? await sqlListQuotations()
+    : (await readDB()).quotations;
+  return quotations
+    .map((q) => ({ ...q, lines: q.lines || [] }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+export async function getQuotation(id: string): Promise<Quotation | null> {
+  const quotation = (await useSql())
+    ? await sqlGetQuotation(id)
+    : (await readDB()).quotations.find((q) => q.id === id) || null;
+  return quotation ? { ...quotation, lines: quotation.lines || [] } : null;
+}
+
+export async function createQuotation(input: NewQuotation): Promise<Quotation> {
+  const date = input.date || todayInput();
+  const fy = fyFromInput(date);
+  const key = quotationCounterKey(fy);
+  const now = new Date().toISOString();
+
+  // The caller's fields first, then the ones the portal stamps, exactly as an
+  // order is built: so a field added to a quotation next year arrives here
+  // without being listed again, and so nothing a caller passes can set the
+  // number, the moment or the order it became.
+  const build = (seq: number): Quotation => ({
+    ...input,
+    date,
+    id: quotationIdFor(fy, seq),
+    quotationNo: quotationNoFor(fy, seq),
+    fy,
+    seq,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  if (await useSql()) {
+    // Serial 0 as a placeholder; the database takes the real one inside the
+    // transaction that writes the row.
+    return sqlCreateQuotation(build(0), key, {
+      id: numberTemplate((seq) => quotationIdFor(fy, seq)),
+      no: numberTemplate((seq) => quotationNoFor(fy, seq)),
+    });
+  }
+
+  const db = await readDB();
+  const seq = (db.counters[key] || 0) + 1;
+  db.counters[key] = seq;
+  const quotation = build(seq);
+  db.quotations.push(quotation);
+  await writeDB(db);
+  return quotation;
+}
+
+// Next serial for a given date's financial year — for the live form preview
+// only. Nothing is taken: the save takes its own number, and if somebody saves
+// first the preview was a guess and the saved quotation is right.
+export async function peekNextQuotationNo(dateInput: string): Promise<string> {
+  const fy = fyFromInput(dateInput || todayInput());
+  const key = quotationCounterKey(fy);
+  if (await useSql()) return quotationNoFor(fy, (await sqlCounter(key)) + 1);
+
+  const db = await readDB();
+  return quotationNoFor(fy, (db.counters[key] || 0) + 1);
+}
+
+// The only two things that ever change about a saved quotation: the picture,
+// which can be added after the price was given, and the order it became. The
+// price itself is never edited — a different price is a different quotation,
+// with its own number, which is what makes the book worth keeping.
+function quotationWith(quotation: Quotation, patch: QuotationPatch): Quotation {
+  return {
+    ...quotation,
+    ...patch,
+    // The number, the moment and who wrote it are put back after the patch.
+    id: quotation.id,
+    quotationNo: quotation.quotationNo,
+    fy: quotation.fy,
+    seq: quotation.seq,
+    createdAt: quotation.createdAt,
+    enteredBy: quotation.enteredBy,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function updateQuotation(
+  id: string,
+  patch: QuotationPatch
+): Promise<Quotation | null> {
+  if (await useSql()) {
+    const quotation = await sqlGetQuotation(id);
+    if (!quotation) return null;
+    const updated = quotationWith(quotation, patch);
+    await sqlPutQuotation(updated);
+    return updated;
+  }
+
+  const db = await readDB();
+  const i = db.quotations.findIndex((q) => q.id === id);
+  if (i === -1) return null;
+  db.quotations[i] = quotationWith(db.quotations[i], patch);
+  await writeDB(db);
+  return db.quotations[i];
+}
+
+export async function deleteQuotation(id: string): Promise<boolean> {
+  if (await useSql()) return sqlDeleteQuotation(id);
+
+  const db = await readDB();
+  const before = db.quotations.length;
+  db.quotations = db.quotations.filter((q) => q.id !== id);
+  if (db.quotations.length === before) return false;
+  await writeDB(db);
+  return true;
+}
+
 export async function listEvents(): Promise<StockEvent[]> {
   if (await useSql()) return sqlListEvents();
   return (await readDB()).events;
@@ -1433,14 +1594,17 @@ export async function deleteMemo(id: string): Promise<boolean> {
 // restore preserves the serial-number sequence.
 export async function exportDb(): Promise<DB> {
   if (await useSql()) {
-    const [counters, memos, events, orders, parties] = await Promise.all([
+    const [counters, memos, events, orders, quotations, parties] = await Promise.all([
       sqlCounters(),
       sqlListMemos(),
       sqlListEvents(),
       sqlListOrders(),
+      // Same reasoning as the orders: a backup that left the quotation book out
+      // would be a backup a restore could not put the quotation book back from.
+      sqlListQuotations(),
       sqlAllParties(),
     ]);
-    return { counters, memos: memos.map(normalize), events, orders, parties };
+    return { counters, memos: memos.map(normalize), events, orders, quotations, parties };
   }
   return readDB();
 }
@@ -1473,6 +1637,9 @@ export async function importDb(db: DB): Promise<void> {
     // Same reasoning as events: a restore that dropped this would erase the
     // whole order book.
     orders: Array.isArray(db?.orders) ? db.orders : [],
+    // And the same again for the quotation book. A backup taken before
+    // quotations existed has none, which restores as an empty book.
+    quotations: Array.isArray(db?.quotations) ? db.quotations : [],
     parties: Array.isArray(db?.parties) ? db.parties : [],
   };
   await writeDB(safe);

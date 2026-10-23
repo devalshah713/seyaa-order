@@ -7,6 +7,7 @@
 // Pure on purpose — no store, no session, no "server-only". It is handed an
 // order and gives back the boxes, so it can be exercised on its own and so the
 // form has no say in what maps across.
+import { diaCertificationLabel } from "./memoFormat";
 import type { Order } from "./memoStore";
 import { BLANK_DIA_LINE, parseShapes, type DiaLine } from "./pdConfig";
 
@@ -78,10 +79,25 @@ function diaLinesOf(o: Pick<Order, "diaShape" | "sieveSize" | "stonePcs">): DiaL
 export function pdPrefillFromOrder(o: Order): PdPrefill {
   const gold = goldApart(o.goldColor || "");
   const category = (o.category || "").trim();
-  // What is being made, and then anything special about it. The sheet has one
-  // free-text block, so the two go in it as two lines rather than being run
-  // together into one sentence nobody wrote.
-  const remarks = [(o.productName || "").trim(), (o.instructions || "").trim()]
+  // What is being made, whether the stones are certified, and then anything
+  // special about it. The sheet has one free-text block, so they go in it as
+  // separate lines rather than being run together into one sentence nobody
+  // wrote.
+  //
+  // Why the remarks and not the sheet's own diamond-quality box: that box holds
+  // VVS/VS-EF, which is the clarity and the colour Seyaa buys, prefilled and
+  // not typed over. Certified or not is a different fact about the same stones,
+  // and writing it there would overwrite the quality with something that is not
+  // one. The remarks block is where this prefill already puts what the sheet
+  // has no box of its own for.
+  const certified = o.diaCertification
+    ? `Diamonds: ${diaCertificationLabel(o.diaCertification)}`
+    : "";
+  const remarks = [
+    (o.productName || "").trim(),
+    certified,
+    (o.instructions || "").trim(),
+  ]
     .filter(Boolean)
     .join("\n");
 
