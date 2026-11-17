@@ -1,31 +1,41 @@
-// Live stock position, read straight from the two Google stock sheets.
+// Live stock position, read straight from the Google stock sheets.
 //
 // Only two columns matter: "Sr. No." (our stock number) and "LOCATION". The
 // sheets are read by header name, not column position — LOCATION sits in a
-// different column in each of the two files.
+// different column in each file, and the new book renamed most of the others.
 //
 // A piece may only go out on a memo if it is in INDIA. Everything else is
 // refused, with a reason the person filling the memo can act on.
 import "server-only";
 import { stockKey } from "./memoFormat";
 
+// Each sheet carries its own tab id, and that is the point of this shape.
+//
+// The first two share one only because the second was copied from the first,
+// and for a long time the id was written down once for both. The book opened
+// for 26-27 was built fresh, so its stock tab has an id of its own. Renaming a
+// tab does not change it: Google fixes it when the tab is made.
+//
+// Getting one wrong does not go quiet. fetchSheet reads the tab, finds no
+// "Sr. No." or "LOCATION" column, and says so by name.
 const SHEETS = [
-  { name: "Sheet A", id: "1hXt65tYxq39Mh-LVHkKIc89FRWTAq5xG5fDIT8J7KzU" },
-  { name: "Sheet B", id: "1sWcfksBvp42a91q4LIkbx6qYZpi3AHv4DESshysvM-Y" },
+  { name: "Stock Sheet New For India", id: "1hXt65tYxq39Mh-LVHkKIc89FRWTAq5xG5fDIT8J7KzU", gid: "92413194" },
+  { name: "Stock Sheet of Seyaa Factory for India", id: "1sWcfksBvp42a91q4LIkbx6qYZpi3AHv4DESshysvM-Y", gid: "92413194" },
+  // The new year's book. The old two stay because the stock in them is still
+  // real stock: a piece made in March does not stop existing in April.
+  { name: "Stock Sheet India New FY 26-27", id: "19ah737er6WlDzyv_YFXvdOGksh0ZpfjFIZQBN4H9L3E", gid: "537349134" },
 ];
 
-// The STOCK tab. Both files carry the same internal tab id because the second
-// was copied from the first.
-//
-// This must be the /export endpoint, NOT /gviz/tq. gviz infers a type per
-// column from the first rows it sees: column A opens with ~2,500 plain numbers,
-// so it typed the column numeric and returned *empty* for every alphanumeric
-// code below — silently hiding 2,464 pieces, including everything from A1000
-// onwards. /export returns the displayed text and does no such inference.
-const STOCK_GID = "92413194";
+// The tab must be fetched through the /export endpoint, NOT /gviz/tq. gviz
+// infers a type per column from the first rows it sees: column A opens with
+// ~2,500 plain numbers, so it typed the column numeric and returned *empty*
+// for every alphanumeric code below — silently hiding 2,464 pieces, including
+// everything from A1000 onwards. /export returns the displayed text and does
+// no such inference.
 
-// The sheets are ~1.6 MB together, so re-fetching on every keystroke would be
-// unusable. A short window keeps it effectively live while staying responsive.
+// The sheets are a couple of megabytes together, so re-fetching on every
+// keystroke would be unusable. A short window keeps it effectively live while
+// staying responsive.
 const CACHE_MS = 60_000;
 
 export type StockState = "available" | "reserved" | "unusable" | "foreign" | "unknown";
@@ -97,10 +107,13 @@ function columnIndex(header: string[], wanted: string[]): number {
   return -1;
 }
 
-async function fetchSheet(id: string): Promise<StockRow[]> {
-  const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${STOCK_GID}`;
+async function fetchSheet(sheet: { name: string; id: string; gid: string }): Promise<StockRow[]> {
+  const { id, gid } = sheet;
+  const url = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Stock sheet ${id} returned ${res.status}`);
+  // Named as well as numbered, because a person reading this message has to
+  // know which of three sheets to go and look at.
+  if (!res.ok) throw new Error(`${sheet.name} (${id}) returned ${res.status}`);
 
   const rows = parseCsv(await res.text());
   if (!rows.length) return [];
@@ -112,7 +125,7 @@ async function fetchSheet(id: string): Promise<StockRow[]> {
   // rather than quietly returning nothing and blocking every memo.
   if (srCol === -1 || locCol === -1) {
     throw new Error(
-      `Stock sheet ${id}: the STOCK tab (gid ${STOCK_GID}) has no "Sr. No." / "LOCATION" column — the tab may have moved.`
+      `${sheet.name}: the stock tab (gid ${gid}) has no "Sr. No." or "LOCATION" column, so this is not the tab it should be.`
     );
   }
 
@@ -132,7 +145,7 @@ let cache: { at: number; map: Map<string, StockRow> } | null = null;
 export async function loadStock(force = false): Promise<Map<string, StockRow>> {
   if (!force && cache && Date.now() - cache.at < CACHE_MS) return cache.map;
 
-  const results = await Promise.all(SHEETS.map((s) => fetchSheet(s.id)));
+  const results = await Promise.all(SHEETS.map((s) => fetchSheet(s)));
   const map = new Map<string, StockRow>();
   for (const rows of results) {
     // Later sheets win on a duplicate Sr. No.; in practice the two do not overlap.
