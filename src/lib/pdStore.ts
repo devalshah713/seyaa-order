@@ -60,6 +60,7 @@ import {
   sqlPdSku,
   sqlPdStockedByNos,
   sqlPutPdSheet,
+  sqlRaisePdCounter,
   sqlSetPdPhoto,
   sqlSetPdPieces,
   type PdStockHit,
@@ -67,9 +68,14 @@ import {
 import type { DiaLine } from "./pdConfig";
 import {
   isPieceStatus, matchDesign, parseDesignNo, pieceTotal, piecesInStock,
-  reconcilePieces, stockedPieces,
+  reconcilePieces, stockedPieces, MAX_PIECES,
   type DesignHit, type PdPiece,
 } from "./designNo";
+import {
+  DESIGN_FIRST, designCounterFloor, designCounterFor, designCounterKey,
+  designNumber, designTemplate, isDesignCategoryCode,
+  type DesignColour,
+} from "./designCode";
 
 const DB_PATH = "pd/db.json";
 
@@ -248,13 +254,103 @@ async function writeDB(db: PdDB): Promise<void> {
   await writeDoc(DB_PATH, db);
 }
 
+// --- The design number ---------------------------------------------------
+//
+// A new sheet takes the next number for its category — SN-RG-WG-297 — and a run
+// of five takes five of them. The counters sit in this module's own counter
+// table, beside the per-year PD numbers and under keys of their own, and the
+// number is raised and used inside the one transaction that writes the sheet.
+// See sqlCreatePdSheet() and designCode.ts.
+//
+// A number typed by hand always wins. That is how the other colour of a design
+// reuses its number: the PD man makes one sheet per colour, and for the second
+// he types the number the first was given. Nothing is consumed, and nothing
+// moves unless what he typed has gone further than the counter.
+
+// What the save is to take: the category's code, the gold colour, and how many
+// pieces the run covers. Worked out by the server before the save, because the
+// code comes off the Lists screen and the form is not to be trusted with it.
+export type DesignTake = { code: string; colour: DesignColour; pieces: number };
+
+// A run of four hundred is the most the piece list tracks, so it is also the
+// most a save may consume.
+function runLength(pieces: number): number {
+  if (!isFinite(pieces)) return 1;
+  return Math.min(Math.max(Math.round(pieces), 1), MAX_PIECES);
+}
+
+function firstFor(code: string): number {
+  if (!isDesignCategoryCode(code)) {
+    throw new Error(
+      "That category has no design code of its own, so a number cannot be " +
+        "built for it. Type the design number by hand."
+    );
+  }
+  return DESIGN_FIRST[code] || 1;
+}
+
+// What the next number for a category would be, for the preview on the form.
+//
+// Nothing is taken: the next save takes its own number inside its own
+// transaction, so if somebody else saves first this was a guess and the number
+// on the saved sheet is the right one.
+export async function peekDesignNo(
+  code: string,
+  colour: DesignColour,
+  pieces: number
+): Promise<{ from: number; to: number; sku: string }> {
+  const first = firstFor(code);
+  const key = designCounterKey(code);
+  const run = runLength(pieces);
+  const standing = (await useSql())
+    ? await sqlPdCounter(key)
+    : (await readDB()).counters[key] || 0;
+  const from = standing > 0 ? standing + 1 : first;
+  const to = from + run - 1;
+  return { from, to, sku: designNumber(code, colour, from, to) };
+}
+
+// A hand-typed number that has gone further than its category's counter takes
+// the counter with it, so the same number is never handed out twice. A number
+// in any of the older formats belongs to no counter and moves nothing.
+//
+// Done before the sheet is written rather than after: a save that then fails
+// leaves the counter standing past a number nobody used, which is the same
+// place it would stand if the save had worked, and that is the safe side to err
+// on. The other order could hand the typed number out a second time.
+//
+// The document path does this inside its own read and write instead — see
+// createInDoc() — because a second whole-document write is the cost that path
+// was built to avoid.
+async function raiseForTyped(sku: string): Promise<void> {
+  const typed = designCounterFor(sku);
+  if (!typed) return;
+  await sqlRaisePdCounter(
+    designCounterKey(typed.code),
+    designCounterFloor(typed.code, typed.to)
+  );
+}
+
+// The same rule against the counters map the document path holds in hand, so
+// that path raises the counter in the write it was already making.
+function raiseForTypedInDoc(counters: Record<string, number>, sku: string): void {
+  const typed = designCounterFor(sku);
+  if (!typed) return;
+  const key = designCounterKey(typed.code);
+  counters[key] = Math.max(counters[key] || 0, designCounterFloor(typed.code, typed.to));
+}
+
 // `fromOrder` is the order the sheet was started from, when there is one. It is
 // given here rather than in the patch because it is written once and never
 // edited; see the comment on PdSheet.fromOrderId.
+//
+// `design` is the category counter the sheet's number is to come off. It is
+// ignored when a design number was typed, because a typed number always wins.
 export async function createPdSheet(
   input: NewPdSheet,
   by = "",
-  fromOrder?: { id: string; orderNo: string }
+  fromOrder?: { id: string; orderNo: string },
+  design?: DesignTake
 ): Promise<PdSheet> {
   const date = input.assignedDate || todayInput();
   const fy = fyFromInput(date);
@@ -278,27 +374,88 @@ export async function createPdSheet(
     updatedAt: now,
   };
 
-  // In the database the number is raised and used inside one transaction, so
-  // two sheets saved in the same moment take 012 and 013 and never both 012.
-  // Against the document it still is what it always was: the whole book read
-  // in, the counter raised, the whole book written back.
+  // A number typed by hand wins, whether it is a new-format number for the
+  // other colour of a design, an old design being remade or a correction. Only
+  // a sheet that has none takes one.
+  const take = draft.sku.trim() ? undefined : design;
+
+  // In the database both numbers are raised and used inside one transaction, so
+  // two sheets saved in the same moment take 012 and 013, and 297 and 298, and
+  // never both of either. Against the document it still is what it always was:
+  // the whole book read in, the counters raised, the whole book written back.
   if (await useSql()) {
-    return sqlCreatePdSheet(draft, fy, {
-      id: numberTemplate((seq) => pdIdFor(fy, seq)),
-      no: numberTemplate((seq) => pdNoFor(fy, seq)),
-    });
+    if (!take) await raiseForTyped(draft.sku);
+    const sheet = await sqlCreatePdSheet(
+      draft,
+      fy,
+      {
+        id: numberTemplate((seq) => pdIdFor(fy, seq)),
+        no: numberTemplate((seq) => pdNoFor(fy, seq)),
+      },
+      take && {
+        key: designCounterKey(take.code),
+        first: firstFor(take.code),
+        pieces: runLength(take.pieces),
+        template: designTemplate(take.code, take.colour, runLength(take.pieces) > 1),
+        spanned: runLength(take.pieces) > 1,
+      }
+    );
+    // The stored sheet's pieces are cut from its design number on every read,
+    // as they always have been, and the number was not known when the draft was
+    // built. So the sheet is handed back read the way every other reader reads
+    // it rather than as the draft went in.
+    return hydrate(sheet);
   }
-  return createInDoc(draft, fy);
+  return createInDoc(draft, fy, take);
 }
 
 // The sheet into the JSON document, which is what runs until the book has been
-// copied across. Unchanged: the book is read, the next number comes off the
-// document's own counter, and the book is written back.
-async function createInDoc(draft: PdSheet, fy: string): Promise<PdSheet> {
+// copied across. The book is read, the next numbers come off the document's own
+// counters, and the book is written back.
+//
+// The design counter is kept in the same map as the per-year PD numbers, under
+// its own key, exactly as it is in the database — so a backup taken from either
+// store restores into the other with the counters it had.
+//
+// Two sheets saved in the same instant can still share a number here. That is
+// how this path has always worked, it is why the books moved into the database,
+// and it is documented at the head of memoStore.ts. It is not made worse by
+// this: the design number is taken by the same read-and-write as the PD number.
+async function createInDoc(
+  draft: PdSheet,
+  fy: string,
+  design?: DesignTake
+): Promise<PdSheet> {
   const db = await readDB();
   const seq = (db.counters[fy] || 0) + 1;
   db.counters[fy] = seq;
-  const sheet: PdSheet = { ...draft, id: pdIdFor(fy, seq), pdNo: pdNoFor(fy, seq), seq };
+
+  let sku = draft.sku;
+  if (design) {
+    const key = designCounterKey(design.code);
+    const first = firstFor(design.code);
+    const run = runLength(design.pieces);
+    const standing = db.counters[key] || 0;
+    const from = standing > 0 ? standing + 1 : first;
+    const to = from + run - 1;
+    db.counters[key] = to;
+    sku = designNumber(design.code, design.colour, from, to);
+  } else {
+    // Typed by hand: it stands as it is, and the counter follows it only when
+    // it has gone further.
+    raiseForTypedInDoc(db.counters, sku);
+  }
+
+  const sheet: PdSheet = {
+    ...draft,
+    id: pdIdFor(fy, seq),
+    pdNo: pdNoFor(fy, seq),
+    seq,
+    sku,
+    // Cut from the number it has just been given, rather than from the blank
+    // the draft was built with.
+    pieces: reconcilePieces(sku, draft.pieces),
+  };
   db.sheets.push(sheet);
   await writeDB(db);
   return sheet;
@@ -461,6 +618,9 @@ export async function updatePdSheet(
     const current = await sqlGetPdSheet(id);
     if (!current) return null;
     const updated = merged(current, patch, by);
+    // A correction that writes a higher number than the counter has reached
+    // takes the counter with it, exactly as a new sheet's typed number does.
+    await raiseForTyped(updated.sku);
     await sqlPutPdSheet(updated);
     return updated;
   }
@@ -470,6 +630,8 @@ export async function updatePdSheet(
   if (idx === -1) return null;
   const updated = merged(db.sheets[idx], patch, by);
   db.sheets[idx] = updated;
+  // The same, folded into the one write this path makes.
+  raiseForTypedInDoc(db.counters, updated.sku);
   await writeDB(db);
   return updated;
 }

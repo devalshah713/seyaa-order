@@ -194,6 +194,36 @@ export type NumberFields = {
   seq: { column: string; path: string };
 };
 
+// A second number taken by the same save, out of a counter that moves by a
+// whole run rather than by one.
+//
+// The PD sheet's design number is the only one of these. A sheet covering five
+// pieces is SN-RG-WG-297-301 and leaves its category's counter at 301, so the
+// counter is raised by the length of the run and the number is read back out of
+// it: the last number of the run is what the counter now stands at, and the
+// first is that less the rest of the run.
+//
+// Why it is here rather than worked out and then written: for the same reason
+// the serial above is. Two sheets saved in the same moment must not be able to
+// read the same 297, and the only way to be sure of that is never to read it.
+export type SpanTake = {
+  counters: {
+    table: string;
+    key: string;
+    // What the counter hands out first when there is no row for it yet, so a
+    // category's first sheet seeds its own counter as it takes its number.
+    first: number;
+    // How many numbers this save consumes. One for a single piece.
+    pieces: number;
+  };
+  // The one field built from that counter: its column, and where it sits inside
+  // the stored record.
+  field: { column: string; path: string };
+  // How it is printed, with one %0Nd for a single piece and two for a run.
+  template: string;
+  spanned: boolean;
+};
+
 // The insert half of the transaction, built from the table's own column list so
 // there is no second list of columns to keep in step.
 function insertWithNumberCall<T>(
@@ -203,10 +233,21 @@ function insertWithNumberCall<T>(
   templates: { id: string; no: string },
   fields: NumberFields,
   counterTable: string,
-  counterKey: string
+  counterKey: string,
+  span?: SpanTake
 ) {
   const names = columnNames(columns);
   const params: unknown[] = [];
+
+  // The run, read out of the counter the statement before this one has just
+  // raised: `d.value` is the last number of it.
+  const spanPick = (): string => {
+    params.push(span!.template);
+    if (!span!.spanned) return "printf(?, d.value)";
+    params.push(span!.counters.pieces - 1);
+    return "printf(?, d.value - ?, d.value)";
+  };
+
   const picks: string[] = columns.map((column) => {
     // The three fields that are the number itself come from the counter, not
     // from the record: the record was built before the number was known.
@@ -219,22 +260,38 @@ function insertWithNumberCall<T>(
       return "printf(?, c.value)";
     }
     if (column.name === fields.seq.column) return "c.value";
+    if (span && column.name === span.field.column) return spanPick();
     params.push(column.get(record));
     return "?";
   });
 
-  // And the same three fields inside the stored record, so the row and the
-  // record it holds can never disagree about the number it was issued under.
-  params.push(JSON.stringify(record), templates.id, templates.no);
-  picks.push(
-    `json_set(json_set(json_set(?, '${fields.seq.path}', c.value), '${fields.id.path}', printf(?, c.value)), '${fields.no.path}', printf(?, c.value))`
-  );
+  // And the same fields inside the stored record, so the row and the record it
+  // holds can never disagree about the number it was issued under. Built
+  // outwards, which is also the order the values bind in: each wrapper's own
+  // placeholder is written after everything it wraps.
+  let doc = "?";
+  params.push(JSON.stringify(record));
+  doc = `json_set(${doc}, '${fields.seq.path}', c.value)`;
+  doc = `json_set(${doc}, '${fields.id.path}', printf(?, c.value))`;
+  params.push(templates.id);
+  doc = `json_set(${doc}, '${fields.no.path}', printf(?, c.value))`;
+  params.push(templates.no);
+  if (span) doc = `json_set(${doc}, '${span.field.path}', ${spanPick()})`;
+  picks.push(doc);
+
+  // One row from each counter, which is one row in all: both keys name a single
+  // row, and the statements before this one made sure each exists.
+  const from = span
+    ? `FROM ${counterTable} c, ${span.counters.table} d
+WHERE c.counter_key = ? AND d.counter_key = ?`
+    : `FROM ${counterTable} c WHERE c.counter_key = ?`;
   params.push(counterKey);
+  if (span) params.push(span.counters.key);
 
   return {
     query: `INSERT INTO ${table} (${names.join(", ")})
 SELECT ${picks.join(", ")}
-FROM ${counterTable} c WHERE c.counter_key = ?
+${from}
 RETURNING doc`,
     params,
   };
@@ -246,20 +303,43 @@ export async function takeNextNumber<T>(
   record: T,
   counters: { table: string; key: string },
   templates: { id: string; no: string },
-  fields: NumberFields
+  fields: NumberFields,
+  // A second number, taken out of a second counter by the same transaction.
+  // Only the PD sheet's design number uses it; see SpanTake above.
+  span?: SpanTake
 ): Promise<T> {
-  const results = await sqlBatch<{ doc: string }>([
+  const statements = [
     {
       query: `INSERT INTO ${counters.table} (counter_key, value) VALUES (?, 1)
 ON CONFLICT(counter_key) DO UPDATE SET value = value + 1`,
-      params: [counters.key],
+      params: [counters.key] as unknown[],
     },
+  ];
+  if (span) {
+    // Seeded or raised in one statement: with no row yet the category starts at
+    // its own first number, and with a row it moves on by the length of the run.
+    statements.push({
+      query: `INSERT INTO ${span.counters.table} (counter_key, value) VALUES (?, ?)
+ON CONFLICT(counter_key) DO UPDATE SET value = value + ?`,
+      params: [
+        span.counters.key,
+        span.counters.first + span.counters.pieces - 1,
+        span.counters.pieces,
+      ],
+    });
+  }
+  statements.push(
     insertWithNumberCall(
-      table, columns, record, templates, fields, counters.table, counters.key
-    ),
-  ]);
+      table, columns, record, templates, fields, counters.table, counters.key, span
+    )
+  );
 
-  const doc = results[1]?.results?.[0]?.doc;
+  const results = await sqlBatch<{ doc: string }>(statements);
+  // The insert is always the last statement of the batch, whether or not a
+  // second number was taken with it.
+  const written = results[results.length - 1];
+
+  const doc = written?.results?.[0]?.doc;
   if (!doc) {
     // The transaction either wrote the row or it did not. Nothing half-done is
     // possible here, so this is a failure to report rather than a state to
@@ -310,6 +390,25 @@ SELECT json_extract(r.value, '$[0]'), json_extract(r.value, '$[1]')
 FROM json_each(?) AS r WHERE true
 ON CONFLICT(counter_key) DO UPDATE SET value = MAX(${counterTable}.value, excluded.value)`,
     [JSON.stringify(entries)]
+  );
+}
+
+// One counter moved up, never down.
+//
+// A hand-typed design number has to be allowed to win — an old design being
+// remade, a correction, a number from before the portal — and when it is higher
+// than the counter the counter follows it, so the same number is never handed
+// out twice. MAX in the database rather than a reading and a write here: two
+// sheets typed at once both raise it and neither can lower what the other set.
+export async function sqlRaiseCounterValue(
+  counterTable: string,
+  counterKey: string,
+  value: number
+): Promise<void> {
+  await sqlRun(
+    `INSERT INTO ${counterTable} (counter_key, value) VALUES (?, ?)
+ON CONFLICT(counter_key) DO UPDATE SET value = MAX(${counterTable}.value, excluded.value)`,
+    [counterKey, value]
   );
 }
 

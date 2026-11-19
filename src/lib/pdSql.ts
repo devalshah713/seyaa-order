@@ -31,6 +31,7 @@ import {
   putRow,
   sqlAllCounters,
   sqlCounterValue,
+  sqlRaiseCounterValue,
   sqlSetCounterValues,
   sqlSetFlagValue,
   sqlTableCount,
@@ -261,12 +262,34 @@ ORDER BY created_at DESC`,
 
 // --- Writing ------------------------------------------------------------------
 
-// The sheet written under the next number in its year's book. See
-// takeNextNumber() in sqlRecords.ts.
+// What a sheet's design number is to be taken from: its category's counter,
+// what that counter hands out first, and how many pieces the run covers.
+// Absent when the number was typed by hand, which is most of the sheets ever
+// written and all of the old ones.
+export type PdDesignTake = {
+  key: string;
+  first: number;
+  pieces: number;
+  template: string;
+  spanned: boolean;
+};
+
+// The sheet written under the next number in its year's book, and under the
+// next design number for its category when it is taking one. See
+// takeNextNumber() in sqlRecords.ts: both numbers are raised and used inside
+// the one transaction that writes the row, so two sheets saved in the same
+// moment take 297 and 298 and never both 297.
+//
+// The design counters live in this module's own counter table, under keys of
+// their own ("design:RG" beside the year "26-27"). A second table would be a
+// table nothing creates: a table is made by the migration that fills its
+// module, and the PD sheets moved across weeks ago, so the live database would
+// never learn about it and the first sheet saved would fail.
 export async function sqlCreatePdSheet(
   sheet: PdSheet,
   fy: string,
-  templates: { id: string; no: string }
+  templates: { id: string; no: string },
+  design?: PdDesignTake
 ): Promise<PdSheet> {
   return takeNextNumber(
     PD_TABLE,
@@ -278,6 +301,17 @@ export async function sqlCreatePdSheet(
       id: { column: "id", path: "$.id" },
       no: { column: "pd_no", path: "$.pdNo" },
       seq: { column: "seq", path: "$.seq" },
+    },
+    design && {
+      counters: {
+        table: PD_COUNTER_TABLE,
+        key: design.key,
+        first: design.first,
+        pieces: design.pieces,
+      },
+      field: { column: "sku", path: "$.sku" },
+      template: design.template,
+      spanned: design.spanned,
     }
   );
 }
@@ -363,6 +397,12 @@ export async function sqlPdCounters(): Promise<Record<string, number>> {
 // that has gone further belongs to sheets written here since.
 export async function sqlSetPdCounters(counters: Record<string, number>): Promise<void> {
   await sqlSetCounterValues(PD_COUNTER_TABLE, counters);
+}
+
+// A category's design counter moved up to at least this number, because a
+// sheet was saved under a hand-typed number that had gone further. Never down.
+export async function sqlRaisePdCounter(key: string, value: number): Promise<void> {
+  await sqlRaiseCounterValue(PD_COUNTER_TABLE, key, value);
 }
 
 export async function sqlSetPdFlag(flag: string, value = 1): Promise<void> {

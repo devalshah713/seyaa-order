@@ -16,6 +16,7 @@ import {
   parseDesignNo, pieceCount, pieceNumbers, joinDesignNo, splitDesignNo, splitPiece,
   MAX_PIECES,
 } from "@/lib/designNo";
+import { designColourCode, isDesignCategoryCode, whyNoDesignNo } from "@/lib/designCode";
 import { photoSrc, uploadToCloudinary } from "@/lib/cloudinary";
 import { readReply } from "@/lib/readReply";
 
@@ -81,8 +82,29 @@ export default function PdForm({
   // stored and printed.
   const [sku, setSku] = useState(() => splitDesignNo(initial?.sku || prefill?.sku || ""));
   const setSkuPart = (k: keyof typeof sku, v: string) => setSku((s) => ({ ...s, [k]: v }));
-  // Set below, once the lists are in and the codes are known.
-  let designNo = joinDesignNo(sku.base, sku.from, sku.to);
+
+  // Where the design number comes from.
+  //
+  // A new sheet takes the next number for its category, which is what the
+  // office changed to: SN-RG-WG-297, the ring counter, both gold colours
+  // sharing it. A number typed by hand still wins, and that is how the yellow
+  // version of a white design reuses its number, how an old design is remade
+  // and how a correction is written — so the two are a choice on the form, not
+  // a setting.
+  //
+  // An existing sheet is never renumbered, and a sheet started from an order
+  // the owner already gave a number to keeps that number, so both open on the
+  // typed boxes.
+  const [auto, setAuto] = useState(!initial && !(prefill?.sku || "").trim());
+  // How many pieces the run covers, which is how many numbers the save takes.
+  // From the order's quantity when there is one, because that is the run.
+  const [runPieces, setRunPieces] = useState(() => {
+    const q = parseInt((prefill?.quantity || "").trim(), 10);
+    return q > 0 ? String(q) : "1";
+  });
+  // What the server says the next number for this category would be. A preview
+  // and not a reservation: see the note where it is fetched.
+  const [nextDesign, setNextDesign] = useState({ code: "", colour: "", sku: "", why: "" });
 
   const [pdNo, setPdNo] = useState(initial?.pdNo || "PD/…");
   const [diaLines, setDiaLines] = useState<DiaLine[]>(
@@ -102,16 +124,45 @@ export default function PdForm({
 
   const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }));
 
-  // Predicted PD number (create mode only).
+  // Predicted PD number and predicted design number (create mode only).
+  //
+  // Both are what the books stand at this instant and neither is held for this
+  // sheet. Two people on this form at once both read 297; the one who saves
+  // first gets it and the other's sheet is saved as 298, because the save takes
+  // its own number inside the transaction that writes the row. Nothing he has
+  // typed is lost by that, because none of it depends on the number.
+  // Asked a moment after the typing stops rather than on every letter: the gold
+  // colour is a box somebody types into, and a request per letter is a request
+  // per letter the Worker has to pay for.
   const latest = useRef(0);
   useEffect(() => {
     if (editing) return;
     const n = ++latest.current;
-    fetch(`/api/pd?next=${encodeURIComponent(f.assignedDate)}`)
-      .then((r) => r.json())
-      .then((d) => { if (n === latest.current && d.pdNo) setPdNo(d.pdNo); })
-      .catch(() => {});
-  }, [f.assignedDate, editing]);
+    const q = new URLSearchParams({
+      next: f.assignedDate,
+      category: f.category,
+      gold: f.goldColor,
+      pieces: runPieces,
+    });
+    const timer = setTimeout(() => {
+      fetch(`/api/pd?${q.toString()}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (n !== latest.current) return;
+          if (d.pdNo) setPdNo(d.pdNo);
+          if (d.design) setNextDesign(d.design);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [f.assignedDate, f.category, f.goldColor, runPieces, editing]);
+
+  // The number on the sheet: the one the counter is offering, or the one being
+  // typed. Everything downstream reads this one field, as it always has.
+  // An existing sheet keeps the number it was saved under, always.
+  const takingNumber = auto && !editing;
+  const typedNo = joinDesignNo(sku.base, sku.from, sku.to);
+  const designNo = takingNumber ? nextDesign.sku : typedNo;
 
   // A bulk design carries its pieces in its number: "SN-BR-AMF-41-49" is nine
   // pieces, 41 to 49, each searchable on its own once this is saved.
@@ -148,11 +199,22 @@ export default function PdForm({
   const subCats = under("subCategory", f.category);
   const subSubCats = under("subSubCategory", f.subCategory);
 
-  // The design number is typed by hand, in full — nothing here builds or
-  // suggests one from the category, sub-category or carats. Auto-generation
-  // was tried and turned off: the office wanted the number to be whatever they
-  // write on the packet, not a code the portal composes for them.
   const skuBase = sku.base;
+
+  // The code the number is built from, shown so a wrong one is seen before the
+  // sheet is saved rather than after. The server reads it off the Lists screen
+  // and is the one that decides; this is the same answer worked out from the
+  // lists the form already has, which fills the line in before the preview
+  // arrives and keeps it filled while the next one is on its way.
+  const listedCode = (
+    (lists.category || []).find((e) => e.name === f.category)?.code || ""
+  ).toUpperCase();
+  const code = nextDesign.code || listedCode;
+  const colour = nextDesign.colour || designColourCode(f.goldColor);
+  const canAuto = isDesignCategoryCode(code) && !!colour;
+  // Why not, when not. Said by the same function the server answers with, so
+  // the sentence on screen is the sentence the save would give.
+  const noAutoWhy = canAuto ? "" : whyNoDesignNo(f.category, code, f.goldColor);
 
   // Changing a level empties the ones below it: a sub-category from the old
   // category is not under the new one, and leaving it there is a sheet that
@@ -161,8 +223,6 @@ export default function PdForm({
     setF((prev) => ({ ...prev, category: v, product: v, subCategory: "", subSubCategory: "" }));
   const setSubCategory = (v: string) =>
     setF((prev) => ({ ...prev, subCategory: v, subSubCategory: "" }));
-
-  designNo = joinDesignNo(skuBase, sku.from, sku.to);
 
   // Said once, wherever a dropdown has nothing in it yet.
   const emptyNote = (kind: string, what: string) =>
@@ -219,11 +279,18 @@ export default function PdForm({
 
   async function save() {
     setError("");
-    if (!designNo && !f.product) {
+    // In the automatic mode there is nothing to check about the number itself,
+    // but there has to be a code to build it from, and that is said here rather
+    // than left to come back from the server.
+    if (takingNumber && !canAuto) {
+      setError(noAutoWhy);
+      return;
+    }
+    if (!takingNumber && !typedNo && !f.product) {
       setError("Add at least a Product or SKU before saving.");
       return;
     }
-    if (backwards) {
+    if (!takingNumber && backwards) {
       setError("The design number runs backwards — put the smaller number in From.");
       return;
     }
@@ -233,7 +300,14 @@ export default function PdForm({
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...f, sku: designNo, diaShape, diaWeightPointers: diaText, diaLines,
+          ...f,
+          // Blank when the save is to give it a number. The preview above is
+          // only what the counter stands at, and sending it would be this
+          // browser deciding a number it cannot hold.
+          sku: takingNumber ? "" : typedNo,
+          designAuto: takingNumber,
+          designPieces: Math.max(1, parseInt(runPieces, 10) || 1),
+          diaShape, diaWeightPointers: diaText, diaLines,
           // Only on a new sheet started from an order. An edit never carries
           // it: the order it came from is written once and does not change.
           fromOrderId: editing ? undefined : fromOrder?.id,
@@ -312,14 +386,80 @@ export default function PdForm({
 
         <fieldset className="group">
           <legend>Design Number</legend>
+
+          {/* Which way this sheet gets its number. Not offered on a sheet that
+              already has one: an existing sheet is never renumbered. */}
+          {!editing && (
+            <div className="sku-mode">
+              <button
+                type="button"
+                className={`btn${auto ? " btn-primary" : ""}`}
+                onClick={() => setAuto(true)}
+              >
+                Next number
+              </button>
+              <button
+                type="button"
+                className={`btn${auto ? "" : " btn-primary"}`}
+                onClick={() => setAuto(false)}
+              >
+                Type the number
+              </button>
+            </div>
+          )}
+
+          {takingNumber ? (
+            <div className="pd-skubox">
+              <div className="cap">Design Number</div>
+              <p className="sku-next">
+                {nextDesign.sku ? <code>{nextDesign.sku}</code> : <span>…</span>}
+              </p>
+              <p className="sku-built">
+                {code ? (
+                  <>
+                    Category code <b>{code}</b>
+                    {colour ? (
+                      <>
+                        , gold <b>{colour}</b>
+                      </>
+                    ) : null}
+                    .
+                  </>
+                ) : (
+                  <>No category chosen yet.</>
+                )}
+              </p>
+              <label className="field">
+                <span>Pieces in this run</span>
+                <input
+                  value={runPieces}
+                  inputMode="numeric"
+                  placeholder="1"
+                  onChange={(e) => setRunPieces(e.target.value.replace(/[^0-9]/g, ""))}
+                />
+              </label>
+              <p className="hint">
+                One number per piece. Five pieces take five numbers in a row.
+              </p>
+              <p className="hint">
+                This is what the book stands at now. The number is yours when you
+                press Save, not before, so if somebody else saves first you get
+                the next one.
+              </p>
+              {noAutoWhy && <p className="hint warn">{noAutoWhy}</p>}
+            </div>
+          ) : (
           <div className="pd-skubox">
             <div className="cap">SKU No.</div>
             <input
               value={skuBase}
               onChange={(e) => setSkuPart("base", e.target.value)}
-              placeholder="SN-BR-AMF"
+              placeholder="SN-RG-WG"
             />
-            <p className="sku-built">Typed by hand.</p>
+            <p className="sku-built">
+              Typed by hand.
+              {code ? <> Category code <b>{code}</b>.</> : null}
+            </p>
             <div className="sku-run">
               <label className="field">
                 <span>From</span>
@@ -341,6 +481,13 @@ export default function PdForm({
               The design on top, then the numbers it is being developed in.
               Leave <b>To</b> empty for a single piece.
             </p>
+            {!editing && (
+              <p className="hint">
+                Use this for the other colour of a design that already exists —
+                type its number and nothing is counted again — and for an old
+                design, a correction, or a number from before the portal.
+              </p>
+            )}
             {designNo && (
               <p className="sku-full">
                 Prints as <code>{designNo}</code>
@@ -352,6 +499,7 @@ export default function PdForm({
               </p>
             )}
           </div>
+          )}
 
           {count > 1 && (
             <div className="run-box">
@@ -374,7 +522,7 @@ export default function PdForm({
               )}
             </div>
           )}
-          {count === 1 && run.at !== -1 && (
+          {count === 1 && run.at !== -1 && !takingNumber && (
             <p className="hint">
               One piece, number {run.from}. For a bulk run put the last number in{" "}
               <b>To</b> — {run.from + 4} would make it five.
