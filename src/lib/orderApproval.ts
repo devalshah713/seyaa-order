@@ -34,9 +34,25 @@ export type ApprovalStart = {
 
 // `by` is the signed-in account that is writing or correcting the order, never
 // anything read off the request.
+// A seller trusted to approve their own orders for a fixed window, and when it
+// ends. The owner allowed Piyush for 20 November 2026 only, while he enters the
+// day's orders. It closes by itself at midnight India time, so nobody has to
+// remember to take it away; after that his orders wait like everybody else's.
+const SELF_APPROVE: { username: string; until: string }[] = [
+  { username: "piyush", until: "2026-11-21T00:00:00+05:30" },
+];
+
+export function selfApproves(username: string, now = Date.now()): boolean {
+  const name = (username || "").trim().toLowerCase();
+  return SELF_APPROVE.some(
+    (s) => s.username === name && now < Date.parse(s.until)
+  );
+}
+
 export async function approvalStartFor(by: {
   uid: string;
   role: string;
+  username?: string;
 }): Promise<ApprovalStart> {
   const approved: ApprovalStart = {
     approval: "approved",
@@ -52,6 +68,9 @@ export async function approvalStartFor(by: {
   };
 
   if (by.role === "admin") return approved;
+  if (selfApproves(by.username || "")) {
+    return { ...approved, approverName: by.username || "" };
+  }
 
   const manager = await managerOf(by.uid);
   if (!manager || manager.role === "admin") return owner;
@@ -70,7 +89,9 @@ export function approvalStartNote(start: ApprovalStart, corrected: boolean): str
   const opening = corrected ? "Corrected and sent in again." : "";
   const waiting =
     start.approval === "approved"
-      ? "Entered by the owner, so it goes ahead."
+      ? start.approverName
+        ? `Approved by ${start.approverName} on the owner's say-so for today.`
+        : "Entered by the owner, so it goes ahead."
       : start.stage === "manager"
       ? `Waiting for approval from ${start.approverName}.`
       : "Waiting for the owner's approval.";
