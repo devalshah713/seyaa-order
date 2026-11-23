@@ -26,6 +26,7 @@ import { isMissingTable, sqlFirst, sqlRun } from "./sql";
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, Order } from "./memoStore";
 import type { Quotation } from "./quotationConfig";
+import type { CadRequest } from "./cadConfig";
 import type { JangadRow } from "./jangadConfig";
 import type { PdSheet } from "./pdStore";
 import type { Demand } from "./demandStore";
@@ -181,6 +182,40 @@ export const QUOTATION_COLUMNS: SqlColumn<Quotation>[] = [
   { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (q) => text(q.updatedAt), blank: "" },
 ];
 
+// --- CAD requests --------------------------------------------------------------
+//
+// A factory asked to draw a piece before it is ordered. Born after the memo
+// book moved, like quotations, so it lives beside them in the memo tables and
+// mends its own table the same way (see withCadTable in memoSql.ts).
+//
+// More real columns than a quotation has, on purpose: the list page reads
+// these and never `doc`, because a request carries photo links and a trail
+// that the list has no use for. Every column here is one the list shows or
+// searches.
+export const CAD_COLUMNS: SqlColumn<CadRequest>[] = [
+  { name: "id", type: "TEXT", path: "$.id", get: (r) => r.id, blank: "", primaryKey: true },
+  { name: "cad_no", type: "TEXT", path: "$.cadNo", get: (r) => text(r.cadNo), blank: "" },
+  { name: "fy", type: "TEXT", path: "$.fy", get: (r) => text(r.fy), blank: "" },
+  { name: "seq", type: "INTEGER", path: "$.seq", get: (r) => num(r.seq), blank: 0 },
+  { name: "cad_date", type: "TEXT", path: "$.date", get: (r) => text(r.date), blank: "" },
+  { name: "status", type: "TEXT", path: "$.status", get: (r) => text(r.status) || "sent", blank: "sent" },
+  { name: "factory", type: "TEXT", path: "$.factory", get: (r) => text(r.factory), blank: "" },
+  { name: "category", type: "TEXT", path: "$.category", get: (r) => text(r.category), blank: "" },
+  { name: "gold", type: "TEXT", path: "$.goldDetails", get: (r) => text(r.goldDetails), blank: "" },
+  { name: "shape", type: "TEXT", path: "$.stone.shape", get: (r) => text(r.stone?.shape), blank: "" },
+  { name: "carats", type: "TEXT", path: "$.stone.carats", get: (r) => text(r.stone?.carats), blank: "" },
+  { name: "lab", type: "TEXT", path: "$.stone.lab", get: (r) => text(r.stone?.lab), blank: "" },
+  { name: "cert_no", type: "TEXT", path: "$.stone.certNo", get: (r) => text(r.stone?.certNo), blank: "" },
+  { name: "entered_by", type: "TEXT", path: "$.enteredBy", get: (r) => text(r.enteredBy), blank: "" },
+  // The first reference photo's link, so a row can show which piece it is
+  // without the list reading every request whole.
+  { name: "thumb", type: "TEXT", path: "$.refPhotos[0].url", get: (r) => text(r.refPhotos?.[0]?.url), blank: "" },
+  { name: "order_id", type: "TEXT", path: "$.orderId", get: (r) => text(r.orderId), blank: "" },
+  { name: "order_no", type: "TEXT", path: "$.orderNo", get: (r) => text(r.orderNo), blank: "" },
+  { name: "created_at", type: "TEXT", path: "$.createdAt", get: (r) => text(r.createdAt), blank: "" },
+  { name: "updated_at", type: "TEXT", path: "$.updatedAt", get: (r) => text(r.updatedAt), blank: "" },
+];
+
 // --- Parties -----------------------------------------------------------------
 //
 // The controlled lists: memo parties, manufacturers, categories and the rest.
@@ -292,6 +327,7 @@ export const MEMO_TABLE = "memos";
 export const EVENT_TABLE = "memo_events";
 export const ORDER_TABLE = "memo_orders";
 export const QUOTATION_TABLE = "memo_quotations";
+export const CAD_TABLE = "memo_cad_requests";
 export const PARTY_TABLE = "memo_parties";
 export const COUNTER_TABLE = "memo_counters";
 export const FLAG_TABLE = "memo_flags";
@@ -314,6 +350,9 @@ export const MEMO_SCHEMA: string[] = [
   // short, so the whole list runs again, and every statement in it is
   // IF NOT EXISTS.
   createTable(QUOTATION_TABLE, QUOTATION_COLUMNS),
+  // Added after quotations, for the same reason and in the same way: there is
+  // nothing in R2 to copy, and the count below brings it in on the next run.
+  createTable(CAD_TABLE, CAD_COLUMNS),
   createTable(PARTY_TABLE, PARTY_COLUMNS),
 
   // The running numbers, one row per book: "26-27" for jewellery memos,
@@ -355,6 +394,8 @@ export const MEMO_SCHEMA: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_orders_created_at ON ${ORDER_TABLE} (created_at DESC)`,
   // The quotation list, the same way.
   `CREATE INDEX IF NOT EXISTS idx_quotations_created_at ON ${QUOTATION_TABLE} (created_at DESC)`,
+  // The CAD request list, the same way.
+  `CREATE INDEX IF NOT EXISTS idx_cad_created_at ON ${CAD_TABLE} (created_at DESC)`,
   // One controlled list at a time, alphabetically, which is how every dropdown
   // in the portal asks for it.
   `CREATE INDEX IF NOT EXISTS idx_parties_kind_name ON ${PARTY_TABLE} (kind, name)`,
@@ -363,11 +404,12 @@ export const MEMO_SCHEMA: string[] = [
 // Everything the statements above create, by name, so whether they have all
 // been run can be asked in one query instead of fourteen.
 const MEMO_OBJECTS = [
-  MEMO_TABLE, EVENT_TABLE, ORDER_TABLE, QUOTATION_TABLE, PARTY_TABLE,
+  MEMO_TABLE, EVENT_TABLE, ORDER_TABLE, QUOTATION_TABLE, CAD_TABLE, PARTY_TABLE,
   COUNTER_TABLE, FLAG_TABLE,
   "idx_memos_created_at", "idx_memos_memo_date", "idx_memos_kind_purpose",
   "idx_memos_to_party", "idx_events_memo_id", "idx_events_stock_no",
-  "idx_orders_created_at", "idx_quotations_created_at", "idx_parties_kind_name",
+  "idx_orders_created_at", "idx_quotations_created_at", "idx_cad_created_at",
+  "idx_parties_kind_name",
 ];
 
 // Create what is missing. Safe to run as often as anyone presses the button.

@@ -39,6 +39,8 @@ import {
   takeNextNumber,
 } from "./sqlRecords";
 import {
+  CAD_COLUMNS,
+  CAD_TABLE,
   COUNTER_TABLE,
   EVENT_COLUMNS,
   EVENT_TABLE,
@@ -56,6 +58,7 @@ import {
 import type { Party, StockEvent } from "./memoFormat";
 import type { Memo, MemoItem, GoldItem, Order } from "./memoStore";
 import type { Quotation } from "./quotationConfig";
+import { isCadStatus, type CadRequest, type CadRow } from "./cadConfig";
 
 // Where the memo book's counters live, said once and handed to the shared
 // numbering. The memo tables keep their own counter table, so a restore of
@@ -545,6 +548,101 @@ export async function sqlPutQuotation(quotation: Quotation): Promise<void> {
 export async function sqlDeleteQuotation(id: string): Promise<boolean> {
   const { changes } = await withQuotationTable(() =>
     sqlRun(`DELETE FROM ${QUOTATION_TABLE} WHERE id = ?`, [id])
+  );
+  return changes > 0;
+}
+
+// --- CAD requests ------------------------------------------------------------
+//
+// The same statements a quotation has, against the CAD book's own table and its
+// own counter key ("C:26-27").
+//
+// The table is younger than every database that is already live, so it mends
+// itself exactly as the quotation table does: a missing table is caught, the
+// memo schema is applied, and the statement is tried once more. Its own flag
+// rather than the quotation one, so a Worker that mended quotations first still
+// mends this if it is somehow missing, and the other way round.
+let cadSchemaMended = false;
+
+async function withCadTable<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (err) {
+    if (cadSchemaMended || !isMissingTable(err)) throw err;
+    await applyMemoSchema();
+    cadSchemaMended = true;
+    return work();
+  }
+}
+
+// The list's own columns and never `doc`. See CAD_COLUMNS for why each is one.
+export async function sqlListCadRows(): Promise<CadRow[]> {
+  const rows = await withCadTable(() =>
+    sqlAll<Record<string, unknown>>(
+      `SELECT id, cad_no, cad_date, status, factory, category, gold, shape, carats,
+       lab, cert_no, entered_by, thumb, order_id, order_no, created_at
+FROM ${CAD_TABLE} ORDER BY created_at DESC`
+    )
+  );
+  return rows.map((row) => ({
+    id: str(row.id),
+    cadNo: str(row.cad_no),
+    date: str(row.cad_date),
+    status: isCadStatus(row.status) ? row.status : "sent",
+    factory: str(row.factory),
+    category: str(row.category),
+    goldDetails: str(row.gold),
+    shape: str(row.shape),
+    carats: str(row.carats),
+    lab: str(row.lab),
+    certNo: str(row.cert_no),
+    enteredBy: str(row.entered_by),
+    thumb: str(row.thumb),
+    orderId: str(row.order_id),
+    orderNo: str(row.order_no),
+    createdAt: str(row.created_at),
+  }));
+}
+
+// Every request whole, for the backup and nothing else.
+export async function sqlListCadRequests(): Promise<CadRequest[]> {
+  const rows = await withCadTable(() =>
+    sqlAll<{ doc: string }>(`SELECT doc FROM ${CAD_TABLE} ORDER BY created_at DESC`)
+  );
+  return rows.map(parseDoc<CadRequest>);
+}
+
+export async function sqlGetCadRequest(id: string): Promise<CadRequest | null> {
+  const row = await withCadTable(() =>
+    sqlFirst<{ doc: string }>(`SELECT doc FROM ${CAD_TABLE} WHERE id = ?`, [id])
+  );
+  return row ? parseDoc<CadRequest>(row) : null;
+}
+
+// Written under the next number in its book, taken inside the transaction that
+// writes the row. See takeNextNumber().
+export async function sqlCreateCadRequest(
+  request: CadRequest,
+  counterKey: string,
+  templates: { id: string; no: string }
+): Promise<CadRequest> {
+  return withCadTable(() => takeNextNumber(
+    CAD_TABLE, CAD_COLUMNS, request, MEMO_COUNTERS(counterKey), templates,
+    {
+      id: { column: "id", path: "$.id" },
+      no: { column: "cad_no", path: "$.cadNo" },
+      seq: { column: "seq", path: "$.seq" },
+    }
+  ));
+}
+
+export async function sqlPutCadRequest(request: CadRequest): Promise<void> {
+  await withCadTable(() => putRow(CAD_TABLE, CAD_COLUMNS, request));
+}
+
+export async function sqlDeleteCadRequest(id: string): Promise<boolean> {
+  const { changes } = await withCadTable(() =>
+    sqlRun(`DELETE FROM ${CAD_TABLE} WHERE id = ?`, [id])
   );
   return changes > 0;
 }

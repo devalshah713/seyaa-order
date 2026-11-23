@@ -120,6 +120,19 @@ export default async function OrderPage(props: { params: Promise<{ id: string }>
             </div>
           )}
 
+          {/* And the CAD request it came from, when the factory drew it first
+              and the owner approved the drawing. */}
+          {order.fromCadId && (
+            <div className="ord-row">
+              <span>From CAD request</span>
+              <strong>
+                <Link href={`/orders/cad/${order.fromCadId}`}>
+                  {order.fromCadNo || order.fromCadId}
+                </Link>
+              </strong>
+            </div>
+          )}
+
           {/* The stamp. Shown here because knowing who took an order and when
               is the first question asked about it, and nothing on this page
               can change any of the three. */}

@@ -2671,3 +2671,138 @@ table.ch-table tbody tr { cursor: default; }
   .qt-sizes table.sb-table td { font-size: 10.5px; }
   @page { size: A4; margin: 12mm; }
 }
+
+/* ============================================================================
+   CAD requests
+   ----------------------------------------------------------------------------
+   A factory asked to draw a piece before it is ordered. Built from the order
+   screens' own panels, so it reads as part of the order section, and laid out
+   for a phone first: sellers raise these standing in front of a customer.
+   ========================================================================== */
+
+/* Where a request is, said in the colours the order screens already use:
+   amber for somebody else has it, green for done, red for sent back. */
+.cad-state { font-weight: 600; font-size: 12.5px; }
+.cad-state.cad-sent { color: #8A5B06; }
+.cad-state.cad-received { color: #8A5B06; }
+.cad-state.cad-changes { color: #B23A3A; }
+.cad-state.cad-approved { color: #3C8A52; }
+.cad-state.cad-ordered { color: var(--panel-muted); }
+
+/* Photos picked on the form, each with its own Remove under it. */
+.cad-thumbs {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px; margin: 0 0 10px;
+}
+.cad-thumb { display: flex; flex-direction: column; gap: 6px; }
+.cad-thumb img {
+  width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 9px;
+  border: 1px solid var(--panel-line); background: var(--field-bg);
+}
+.cad-wide { width: 100%; }
+
+/* The request's own page. */
+.cad-block, .cad-note {
+  margin-top: 18px; padding: 16px 18px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+}
+.cad-block h2, .cad-note h2, .cad-facts h2 {
+  margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--gold);
+}
+.cad-note-changes { border-left: 4px solid #B23A3A; }
+.cad-note-changes h2 { color: #B23A3A; }
+.cad-note p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cad-facts {
+  margin-top: 18px; padding: 16px 18px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--panel-line);
+}
+.cad-facts .btn { margin-top: 4px; }
+.cad-facts .cad-sub { margin-top: 18px; }
+.cad-facts .ord-row strong { overflow-wrap: anywhere; }
+.cad-gallery {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;
+}
+.cad-gallery img {
+  display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 9px;
+  border: 1px solid var(--panel-line); background: var(--field-bg);
+}
+.cad-gallery-big { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.cad-gallery-big img { aspect-ratio: auto; object-fit: contain; max-height: 420px; }
+.cad-block .hint { margin: 8px 0 0; }
+.cad-earlier { margin-top: 12px; }
+.cad-earlier summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+
+/* Send on WhatsApp leads; the other three sit beside it. */
+.cad-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.cad-send .rc-copy { margin: 0 0 8px; }
+.cad-send pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cad-said {
+  margin: 0 0 10px; font-size: 13px; padding: 8px 10px; border-radius: 8px;
+  background: color-mix(in srgb, #3C8A52 10%, transparent); color: var(--panel-ink);
+}
+.cad-decide .cad-changes { margin-top: 16px; }
+.cad-decide textarea { width: 100%; min-height: 80px; margin-bottom: 8px; }
+.cad-log .ord-row strong { overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .cad-block, .cad-note, .cad-facts { padding: 14px 15px; }
+  .cad-facts .btn { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; }
+  .cad-gallery { grid-template-columns: 1fr 1fr; }
+  .cad-gallery-big { grid-template-columns: 1fr; }
+  /* One under the other at phone width, each a full thumb's width. */
+  .cad-btns { flex-direction: column; }
+  .cad-btns .btn, .cad-act .btn, .cad-decide .btn {
+    width: 100%; min-height: 48px; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cad-thumbs { grid-template-columns: 1fr 1fr; }
+  .cad-thumb .btn, .cad-wide { min-height: 48px; }
+  .cad-decide textarea { font-size: 16px; }
+  .cad-form .two { grid-template-columns: 1fr; }
+}
+
+/* The sheet for the factory, on A4. On screen it is a page on the desk, the way
+   the memo and the slip are. */
+.cad-sheet {
+  width: 210mm; max-width: 100%; box-sizing: border-box; padding: 12mm;
+  background: #fff; color: #111; box-shadow: 0 2px 14px rgba(0, 0, 0, .12);
+}
+.cad-sheet-head {
+  display: flex; justify-content: space-between; gap: 16px; align-items: flex-start;
+  border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 12px;
+}
+.cad-sheet-head h2 { font-family: var(--serif); font-size: 20px; margin: 0; }
+.cad-sheet-head p { margin: 0; font-size: 11px; }
+.cad-sheet-no { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; }
+.cad-sheet-no b { font-size: 14px; }
+.cad-sheet-changes {
+  border: 1px solid #B23A3A; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px;
+}
+.cad-sheet-changes p { margin: 4px 0 0; white-space: pre-wrap; }
+.cad-sheet-photos {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;
+  margin-bottom: 12px;
+}
+.cad-sheet-photos img {
+  width: 100%; max-height: 90mm; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;
+}
+.cad-sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cad-sheet-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cad-sheet-table caption {
+  text-align: left; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+  font-size: 11px; padding-bottom: 4px;
+}
+.cad-sheet-table th { text-align: left; font-weight: 600; width: 38%; padding: 3px 6px 3px 0; vertical-align: top; }
+.cad-sheet-table td { padding: 3px 0; border-bottom: 1px solid #eee; overflow-wrap: anywhere; }
+.cad-sheet-cert { margin-top: 12px; font-size: 12px; }
+.cad-sheet-cert img { display: block; margin-top: 4px; max-width: 100%; max-height: 90mm; object-fit: contain; }
+.cad-sheet-foot { margin: 14px 0 0; font-size: 10.5px; color: #666; }
+@media (max-width: 860px) {
+  .cad-sheet { width: 100%; padding: 14px; }
+  .cad-sheet-grid { grid-template-columns: 1fr; }
+}
+@media print {
+  .cad-sheet { width: auto; box-shadow: none; padding: 0; }
+  .cad-sheet-photos img, .cad-sheet-table tr { break-inside: avoid; }
+}

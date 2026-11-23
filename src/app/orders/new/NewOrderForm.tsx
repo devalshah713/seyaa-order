@@ -36,9 +36,19 @@ const BLANK = {
 
 type Field = keyof typeof BLANK;
 
-export default function NewOrderForm() {
+export default function NewOrderForm({
+  prefill,
+  fromCad,
+}: {
+  // Boxes filled in from an approved CAD request. Everything is still the
+  // seller's to check and change before saving.
+  prefill?: Partial<typeof BLANK>;
+  // The request it came from, sent with the order so the order route can mark
+  // the request with the order it became.
+  fromCad?: { id: string; no: string };
+} = {}) {
   const router = useRouter();
-  const [f, setF] = useState(BLANK);
+  const [f, setF] = useState(() => ({ ...BLANK, ...(prefill || {}) }));
   const [categories, setCategories] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -137,7 +147,7 @@ export default function NewOrderForm() {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(f),
+        body: JSON.stringify(fromCad ? { ...f, fromCadId: fromCad.id } : f),
       });
       const data = await readReply(res, "Could not save the order.");
       const order = data.order as { id?: string } | undefined;
@@ -162,6 +172,16 @@ export default function NewOrderForm() {
         <h1>New Order</h1>
         <Link href="/orders" className="btn">← All orders</Link>
       </div>
+
+      {fromCad && (
+        <p className="pd-from-order">
+          Filled in from CAD request <b>{fromCad.no}</b>, with its approved CAD as
+          the picture.
+          <br />
+          Check every box and fill in what is missing. When you save, {fromCad.no}{" "}
+          is marked with this order.
+        </p>
+      )}
 
       <form className="ord-form" onSubmit={save}>
         <fieldset className="group">

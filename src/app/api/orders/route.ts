@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  createOrder, getQuotation, listOrders, listPartyNames, updateQuotation,
+  changeCadRequest, createOrder, getCadRequest, getQuotation, listOrders,
+  listPartyNames, updateQuotation,
 } from "@/lib/memoStore";
 import {
   GOLD_DETAILS, ORDER_STATUSES, isDiaCertification,
@@ -11,6 +12,7 @@ import { currentSession } from "@/lib/currentUser";
 import { approvalStartFor, approvalStartNote } from "@/lib/orderApproval";
 import { orderFromQuotation } from "@/lib/quotationToOrder";
 import type { Quotation } from "@/lib/quotationConfig";
+import { canMakeOrder, cadStatusLabel, type CadRequest } from "@/lib/cadConfig";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -95,6 +97,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!made.ok) return NextResponse.json({ error: made.error }, { status: 400 });
     src = made.body as unknown as Record<string, unknown>;
     madeFrom = `Made from quotation ${quotation.quotationNo}.`;
+  }
+
+  // An order opened from an approved CAD request. Unlike a quotation, the
+  // boxes are the form's: a CAD request does not hold everything an order
+  // needs, so the seller fills in the rest and every box is checked below like
+  // any other order. The request is read only to make sure it is approved and
+  // not already an order, and to be marked once the order is saved.
+  const fromCadId = str(body.fromCadId, 40);
+  let cad: CadRequest | null = null;
+  if (fromCadId) {
+    if (quotation) {
+      return NextResponse.json(
+        { error: "An order comes from a quotation or a CAD request, not both." },
+        { status: 400 }
+      );
+    }
+    try {
+      cad = await getCadRequest(fromCadId);
+    } catch (err) {
+      return NextResponse.json({ error: msg(err) }, { status: 503 });
+    }
+    if (!cad) {
+      return NextResponse.json({ error: "That CAD request could not be found." }, { status: 404 });
+    }
+    if (!canMakeOrder(cad)) {
+      return NextResponse.json(
+        {
+          error: cad.orderId
+            ? `CAD request ${cad.cadNo} already became order ${cad.orderNo || cad.orderId}. ` +
+              "Open that order instead of writing a second one."
+            : `CAD request ${cad.cadNo} is ${cadStatusLabel(cad.status).toLowerCase()}. ` +
+              "Only an approved CAD can become an order.",
+        },
+        { status: 409 }
+      );
+    }
+    madeFrom = `Made from CAD request ${cad.cadNo}.`;
   }
 
   // Every one of these is checked here and not only in the page. The page can
@@ -254,6 +293,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // Where it came from, when it came from a price somebody was given.
         fromQuotationId: quotation?.id || "",
         fromQuotationNo: quotation?.quotationNo || "",
+        // And when it came from a CAD the owner approved.
+        fromCadId: cad?.id || "",
+        fromCadNo: cad?.cadNo || "",
       },
       // The opening note says where it has gone, and where it came from, so the
       // trail starts with both.
@@ -280,6 +322,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             error:
               `Order ${order.orderNo} was saved, but quotation ` +
               `${quotation.quotationNo} could not be marked with it: ${msg(err)}`,
+          },
+          { status: 207 }
+        );
+      }
+    }
+    // The CAD request is marked with the order it became, the same way and
+    // with the same 207 if it cannot be: the order is saved and carries the
+    // request's number either way. Checked again inside the save, so two orders
+    // made from one request in the same moment cannot both mark it.
+    if (cad) {
+      const cadNo = cad.cadNo;
+      try {
+        const done = await changeCadRequest(
+          cad.id,
+          () => ({ status: "ordered", orderId: order.id, orderNo: order.orderNo }),
+          { action: "ordered", by: session.username, note: order.orderNo },
+          (r) => (canMakeOrder(r) ? "" : `it is already ${cadStatusLabel(r.status).toLowerCase()}`)
+        );
+        if (!done || "refused" in done) {
+          throw new Error(done ? done.refused : "it could not be found");
+        }
+      } catch (err) {
+        return NextResponse.json(
+          {
+            order,
+            error:
+              `Order ${order.orderNo} was saved, but CAD request ${cadNo} ` +
+              `could not be marked with it: ${msg(err)}`,
           },
           { status: 207 }
         );

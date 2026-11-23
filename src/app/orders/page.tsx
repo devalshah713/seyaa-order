@@ -42,6 +42,10 @@ export default async function OrdersPage() {
             new one, and the head of this page is already four links wide on a
             phone. */}
         <Link href="/orders/quotations" className="btn">Quotations</Link>
+        {/* CAD requests are the step before an order for a customer's own
+            design or stone: the factory draws it, the owner approves the
+            drawing, and then it becomes an order. */}
+        <Link href="/orders/cad" className="btn">CAD requests</Link>
         {/* The portal used to photograph the board with a browser on the
             server and hand back a PNG to forward. That browser is a paid
             add-on on Cloudflare and this was the only thing using it, so the

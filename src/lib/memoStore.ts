@@ -53,6 +53,12 @@ import {
   sqlCreateMemo,
   sqlCreateOrder,
   sqlCreateQuotation,
+  sqlCreateCadRequest,
+  sqlDeleteCadRequest,
+  sqlGetCadRequest,
+  sqlListCadRequests,
+  sqlListCadRows,
+  sqlPutCadRequest,
   sqlDeleteMemo,
   sqlDeleteOrder,
   sqlDeleteParties,
@@ -115,6 +121,10 @@ import {
   type PartyKind,
 } from "./memoFormat";
 import type { NewQuotation, Quotation, QuotationPatch } from "./quotationConfig";
+import {
+  cadCounterKey, cadIdFor, cadNoFor, cadRowOf,
+  type CadAction, type CadPatch, type CadRequest, type CadRow, type NewCadRequest,
+} from "./cadConfig";
 
 const DB_PATH = "memos/db.json";
 
@@ -252,6 +262,13 @@ export type Order = {
   // the order form, which is most of them.
   fromQuotationId?: string;
   fromQuotationNo?: string;
+
+  // --- The CAD request this order came from --------------------------------
+  //
+  // Written once, by the save that creates the order, when it was opened from
+  // an approved CAD request. Only the way back to it.
+  fromCadId?: string;
+  fromCadNo?: string;
 };
 
 export type NewOrder = Omit<Order, "id" | "orderNo" | "fy" | "seq" | "createdAt" | "comments">;
@@ -265,6 +282,9 @@ export type DB = {
   // numbers, in this document because a quotation becoming an order is the one
   // thing the two do together.
   quotations: Quotation[];
+  // CADs asked of a factory before an order. Here for the same reason: a
+  // request becoming an order is the one thing the two do together.
+  cadRequests: CadRequest[];
   parties: Party[];
   // Set once a list's built-in names have been written in, so removing one does
   // not bring it back on the next read. `mfgSeeded` is the first version of
@@ -299,6 +319,8 @@ async function readDB(): Promise<DB> {
     // A document written before quotations existed has none, which is an empty
     // book and not a missing one.
     quotations: db.quotations || [],
+    // The same again for CAD requests, which are younger still.
+    cadRequests: db.cadRequests || [],
     parties: db.parties || [],
   };
 }
@@ -1306,6 +1328,162 @@ export async function deleteQuotation(id: string): Promise<boolean> {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// CAD requests
+//
+// A factory asked to draw a piece before it is ordered. The same two stores and
+// the same numbering a quotation has: against D1 the number is taken inside
+// the transaction that writes the row, against the document the counter is
+// read, raised and written back in one pass.
+// ---------------------------------------------------------------------------
+
+// The list, as the list page needs it and no more. Against D1 the request
+// itself is never read; against the document it already has been, because that
+// is what reading the document costs, so only the rows are handed on.
+export async function listCadRows(): Promise<CadRow[]> {
+  if (await useSql()) return sqlListCadRows();
+  return (await readDB()).cadRequests
+    .map(cadRowOf)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+function cadNormal(r: CadRequest): CadRequest {
+  return {
+    ...r,
+    refPhotos: r.refPhotos || [],
+    cadImages: r.cadImages || [],
+    log: r.log || [],
+  };
+}
+
+export async function getCadRequest(id: string): Promise<CadRequest | null> {
+  const found = (await useSql())
+    ? await sqlGetCadRequest(id)
+    : (await readDB()).cadRequests.find((r) => r.id === id) || null;
+  return found ? cadNormal(found) : null;
+}
+
+export async function peekNextCadNo(dateInput: string): Promise<string> {
+  const fy = fyFromInput(dateInput || todayInput());
+  const key = cadCounterKey(fy);
+  if (await useSql()) return cadNoFor(fy, (await sqlCounter(key)) + 1);
+  const db = await readDB();
+  return cadNoFor(fy, (db.counters[key] || 0) + 1);
+}
+
+function cadLog(action: CadAction, by: string, note?: string) {
+  return {
+    id: randomUUID(),
+    at: new Date().toISOString(),
+    by,
+    action,
+    ...(note ? { note } : {}),
+  };
+}
+
+export async function createCadRequest(input: NewCadRequest): Promise<CadRequest> {
+  const date = todayInput();
+  const fy = fyFromInput(date);
+  const key = cadCounterKey(fy);
+  const now = new Date().toISOString();
+
+  // The caller's fields first, then the portal's: the number, the moment, the
+  // state it starts in and the first line of its trail cannot be sent.
+  const build = (seq: number): CadRequest => ({
+    ...input,
+    id: cadIdFor(fy, seq),
+    cadNo: cadNoFor(fy, seq),
+    fy,
+    seq,
+    date,
+    status: "sent",
+    cadImages: [],
+    log: [cadLog("raised", input.enteredBy)],
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  if (await useSql()) {
+    return sqlCreateCadRequest(build(0), key, {
+      id: numberTemplate((seq) => cadIdFor(fy, seq)),
+      no: numberTemplate((seq) => cadNoFor(fy, seq)),
+    });
+  }
+
+  const db = await readDB();
+  const seq = (db.counters[key] || 0) + 1;
+  db.counters[key] = seq;
+  const request = build(seq);
+  db.cadRequests.push(request);
+  await writeDB(db);
+  return request;
+}
+
+// A change, with the line of the trail that says who made it. The number, the
+// moment, who raised it and the trail so far are put back after the patch, so
+// no caller can rewrite them however it is called.
+function cadWith(
+  r: CadRequest,
+  patch: CadPatch,
+  entry: { action: CadAction; by: string; note?: string }
+): CadRequest {
+  return {
+    ...r,
+    ...patch,
+    id: r.id,
+    cadNo: r.cadNo,
+    fy: r.fy,
+    seq: r.seq,
+    date: r.date,
+    createdAt: r.createdAt,
+    enteredBy: r.enteredBy,
+    log: [...(r.log || []), cadLog(entry.action, entry.by, entry.note)],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// `check` is asked of the request as it is read inside this save, not as the
+// caller last saw it, so a decision is taken on the record and not on a page
+// that has gone stale. It answers with a refusal, or nothing to go ahead.
+export async function changeCadRequest(
+  id: string,
+  change: (r: CadRequest) => CadPatch,
+  entry: { action: CadAction; by: string; note?: string },
+  check?: (r: CadRequest) => string
+): Promise<{ request: CadRequest } | { refused: string } | null> {
+  if (await useSql()) {
+    const found = await sqlGetCadRequest(id);
+    if (!found) return null;
+    const r = cadNormal(found);
+    const refused = check ? check(r) : "";
+    if (refused) return { refused };
+    const updated = cadWith(r, change(r), entry);
+    await sqlPutCadRequest(updated);
+    return { request: updated };
+  }
+
+  const db = await readDB();
+  const i = db.cadRequests.findIndex((x) => x.id === id);
+  if (i === -1) return null;
+  const r = cadNormal(db.cadRequests[i]);
+  const refused = check ? check(r) : "";
+  if (refused) return { refused };
+  db.cadRequests[i] = cadWith(r, change(r), entry);
+  await writeDB(db);
+  return { request: db.cadRequests[i] };
+}
+
+export async function deleteCadRequest(id: string): Promise<boolean> {
+  if (await useSql()) return sqlDeleteCadRequest(id);
+
+  const db = await readDB();
+  const before = db.cadRequests.length;
+  db.cadRequests = db.cadRequests.filter((r) => r.id !== id);
+  if (db.cadRequests.length === before) return false;
+  await writeDB(db);
+  return true;
+}
+
 export async function listEvents(): Promise<StockEvent[]> {
   if (await useSql()) return sqlListEvents();
   return (await readDB()).events;
@@ -1594,7 +1772,7 @@ export async function deleteMemo(id: string): Promise<boolean> {
 // restore preserves the serial-number sequence.
 export async function exportDb(): Promise<DB> {
   if (await useSql()) {
-    const [counters, memos, events, orders, quotations, parties] = await Promise.all([
+    const [counters, memos, events, orders, quotations, cadRequests, parties] = await Promise.all([
       sqlCounters(),
       sqlListMemos(),
       sqlListEvents(),
@@ -1602,9 +1780,13 @@ export async function exportDb(): Promise<DB> {
       // Same reasoning as the orders: a backup that left the quotation book out
       // would be a backup a restore could not put the quotation book back from.
       sqlListQuotations(),
+      // And the CAD book, for the same reason.
+      sqlListCadRequests(),
       sqlAllParties(),
     ]);
-    return { counters, memos: memos.map(normalize), events, orders, quotations, parties };
+    return {
+      counters, memos: memos.map(normalize), events, orders, quotations, cadRequests, parties,
+    };
   }
   return readDB();
 }
@@ -1640,6 +1822,8 @@ export async function importDb(db: DB): Promise<void> {
     // And the same again for the quotation book. A backup taken before
     // quotations existed has none, which restores as an empty book.
     quotations: Array.isArray(db?.quotations) ? db.quotations : [],
+    // The CAD book likewise; a backup from before it existed has none.
+    cadRequests: Array.isArray(db?.cadRequests) ? db.cadRequests : [],
     parties: Array.isArray(db?.parties) ? db.parties : [],
   };
   await writeDB(safe);
