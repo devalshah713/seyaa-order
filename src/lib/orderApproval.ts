@@ -34,18 +34,22 @@ export type ApprovalStart = {
 
 // `by` is the signed-in account that is writing or correcting the order, never
 // anything read off the request.
-// A seller trusted to approve their own orders for a fixed window, and when it
-// ends. The owner allowed Piyush for 20 November 2026 only, while he enters the
-// day's orders. It closes by itself at midnight India time, so nobody has to
-// remember to take it away; after that his orders wait like everybody else's.
-const SELF_APPROVE: { username: string; until: string }[] = [
-  { username: "piyush", until: "2026-11-21T00:00:00+05:30" },
+// Accounts whose own orders are approved as they are entered, by the owner's
+// word. Grok is the agent that types in orders the owner has already approved
+// on the sellers' sheets, so asking him again for each one would only mean
+// pressing Approve once per row. An entry may carry an end; one without an end
+// stays until it is removed from this list.
+//
+// This only covers orders the account enters itself. It cannot approve, edit
+// or delete anybody else's.
+const SELF_APPROVE: { username: string; until?: string }[] = [
+  { username: "grok" },
 ];
 
 export function selfApproves(username: string, now = Date.now()): boolean {
   const name = (username || "").trim().toLowerCase();
   return SELF_APPROVE.some(
-    (s) => s.username === name && now < Date.parse(s.until)
+    (s) => s.username === name && (!s.until || now < Date.parse(s.until))
   );
 }
 
@@ -90,7 +94,7 @@ export function approvalStartNote(start: ApprovalStart, corrected: boolean): str
   const waiting =
     start.approval === "approved"
       ? start.approverName
-        ? `Approved by ${start.approverName} on the owner's say-so for today.`
+        ? `Approved by ${start.approverName} on the owner's say-so.`
         : "Entered by the owner, so it goes ahead."
       : start.stage === "manager"
       ? `Waiting for approval from ${start.approverName}.`
