@@ -2193,7 +2193,7 @@ table.ch-table tbody tr { cursor: default; }
   .audit-rule, .audit-form, .audit-actions { display: none !important; }
   .audit-table { font-size: 10.5px; }
   .audit-facts { font-size: 10.5px; }
-  @page { size: A4; margin: 10mm; }
+  @page { size: A4; margin: 8mm; } /* one margin for every printout: see the end of this file */
 }
 
 /* ---------- The order form, the order's own page, and approvals ---------- */
@@ -2669,7 +2669,7 @@ table.ch-table tbody tr { cursor: default; }
   .qt-price table.sb-money { max-width: none; }
   .qt-sizes .jg-scroll { border: 0; background: none; overflow: visible; }
   .qt-sizes table.sb-table td { font-size: 10.5px; }
-  @page { size: A4; margin: 12mm; }
+  @page { size: A4; margin: 8mm; } /* one margin for every printout: see the end of this file */
 }
 
 /* ============================================================================
@@ -2805,4 +2805,27 @@ table.ch-table tbody tr { cursor: default; }
 @media print {
   .cad-sheet { width: auto; box-shadow: none; padding: 0; }
   .cad-sheet-photos img, .cad-sheet-table tr { break-inside: avoid; }
+}
+
+/* ============================================================================
+   Paper, the last word.
+
+   @page cannot be scoped to one kind of sheet: whichever @page rule comes last
+   in this file sets the margin for every printout in the portal. When the
+   quotation and audit pages brought 10mm and 12mm margins, every memo, demand
+   and jangad slip built to fill an 8mm-margin page grew taller than the paper
+   and printed its signatures on a second page, and the demand's table, sized
+   for the wider page, was cut off at the right edge. So every printout uses
+   8mm, and these rules sit last so the phone layout's padding and shadow
+   (which also match on a narrow screen while printing) cannot reach paper.
+   ========================================================================= */
+@media print {
+  .stage { padding: 0 !important; }
+  .memo, .pd-sheet, .dd-sheet, .jg-slip { box-shadow: none !important; }
+  /* A demand is as long as its rows and no longer: the signatures follow the
+     table instead of being pushed to the foot of the page, so there is no
+     empty half page and it can never spill onto a second one. */
+  .dd-sheet { min-height: 0 !important; }
+  .dd-signs { margin-top: 0; padding-top: 10mm; }
+  .dd-signs .line { margin-top: 14mm; }
 }
